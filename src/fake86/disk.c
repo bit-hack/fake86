@@ -21,8 +21,10 @@
 
 #include <stdint.h>
 #include <stdio.h>
+
 #include "disk.h"
-#include "cpu.h"
+
+#include "../80x86/cpu.h"
 
 extern uint8_t RAM[0x100000], cf, hdcount;
 extern uint16_t segregs[4];

@@ -1,4 +1,6 @@
-#include "config.h"
+#pragma once
+
+#include "../fake86/config.h"
 
 #ifdef CPU_ADDR_MODE_CACHE
 struct addrmodecache_s addrcache[0x100000];

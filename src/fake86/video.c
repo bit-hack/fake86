@@ -21,13 +21,15 @@
    a lot of this code is inefficient, and just plain ugly. i plan to rework
    large sections of it soon. */
 
-#include <SDL/SDL.h>
 #include <stdint.h>
 #include <stdio.h>
 
+#include <SDL/SDL.h>
+
 #include "config.h"
 #include "mutex.h"
-#include "cpu.h"
+
+#include "../80x86/cpu.h"
 
 extern void set_port_write_redirector (uint16_t startport, uint16_t endport, void *callback);
 extern void set_port_read_redirector (uint16_t startport, uint16_t endport, void *callback);

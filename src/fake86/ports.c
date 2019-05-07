@@ -23,7 +23,9 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include "cpu.h"
+
+#include "../80x86/cpu.h"
+
 
 extern uint8_t portram[0x10000];
 extern uint8_t speakerenabled;
