@@ -1,6 +1,10 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
+#ifndef PATH_DATAFILES
+#define PATH_DATAFILES
+#endif
+
 #define BUILD_STRING "Fake86 v0.13.9.16"
 
 //be sure to only define ONE of the CPU_* options at any given time, or

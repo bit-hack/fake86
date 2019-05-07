@@ -153,8 +153,8 @@ void *VideoThread (void *dummy) {
 }
 
 #ifdef _WIN32
-void ShowMenu();
-void HideMenu();
+//void ShowMenu();
+//void HideMenu();
 #endif
 
 void doscrmodechange() {
@@ -162,7 +162,7 @@ void doscrmodechange() {
 	if (scrmodechange) {
 			if (screen != NULL) SDL_FreeSurface (screen);
 #ifdef _WIN32
-			if (usefullscreen) HideMenu(); else ShowMenu();
+//			if (usefullscreen) HideMenu(); else ShowMenu();
 #endif
 			if (constantw && constanth) screen = SDL_SetVideoMode (constantw, constanth, 32, SDL_HWSURFACE | usefullscreen);
 			else if (noscale) screen = SDL_SetVideoMode (nw, nh, 32, SDL_HWSURFACE | usefullscreen);

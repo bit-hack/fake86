@@ -24,6 +24,8 @@
 #include <SDL/SDL.h>
 #include <stdint.h>
 #include <stdio.h>
+
+#include "config.h"
 #include "mutex.h"
 #include "cpu.h"
 

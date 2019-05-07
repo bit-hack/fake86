@@ -21,6 +21,7 @@
    load ROM binaries, and kickstart the CPU emulator. */
 
 #include "config.h"
+
 #ifdef __APPLE__      /* Memory leaks occur in OS X when the SDL window gets */
 #include <SDL/SDL.h>  /* resized if SDL.h not included in file with main() */
 #endif
@@ -28,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
+
 #include "mutex.h"
 #ifdef _WIN32
 CRITICAL_SECTION screenmutex;
@@ -203,7 +205,8 @@ uint8_t dohardreset = 0;
 uint8_t audiobufferfilled();
 
 #ifdef _WIN32
-void initmenus();
+//void initmenus();
+
 void EmuThread (void *dummy) {
 #else
 pthread_t emuthread;
@@ -268,7 +271,7 @@ int main (int argc, char *argv[]) {
 	inithardware();
 
 #ifdef _WIN32
-	initmenus();
+//	initmenus();
 	InitializeCriticalSection (&screenmutex);
 #endif
 	if (useconsole) {
