@@ -25,6 +25,7 @@
 #include <stdio.h>
 
 #include "../fake86/config.h"
+#include "../fake86/memory.h"
 
 #include "cpu.h"
 #include "modregrm.h"
@@ -50,17 +51,15 @@ static const uint8_t parity[0x100] = {
 	0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1
 };
 
-uint8_t	RAM[0x100000], readonly[0x100000];
 uint8_t	opcode, segoverride, reptype, bootdrive = 0, hdcount = 0, hltstate = 0;
 uint16_t segregs[4], savecs, saveip, ip, useseg, oldsp;
 uint8_t	tempcf, oldcf, cf, pf, af, zf, sf, tf, ifl, df, of, mode, reg, rm;
 uint16_t oper1, oper2, res16, disp16, temp16, dummy, stacksize, frametemp;
 uint8_t	oper1b, oper2b, res8, disp8, temp8, nestlev, addrbyte;
-uint32_t temp1, temp2, temp3, temp4, temp5, temp32, tempaddr32, ea;
+uint32_t temp1, temp2, temp3, temp4, temp5, temp32, ea;
 int32_t	result;
 uint64_t totalexec;
 
-extern uint16_t	VGA_SC[0x100], VGA_CRTC[0x100], VGA_ATTR[0x100], VGA_GC[0x100];
 extern uint8_t updatedscreen;
 union _bytewordregs_ regs;
 
@@ -68,14 +67,14 @@ uint8_t	portram[0x10000];
 uint8_t	running = 0, debugmode, showcsip, verbose, mouseemu, didbootstrap = 0;
 uint8_t	ethif;
 
-extern uint8_t	vidmode;
+extern uint8_t vidmode;
 extern uint8_t verbose;
 
 extern void vidinterrupt();
 
-extern uint8_t readVGA (uint32_t addr32);
+extern uint8_t readVGA(uint32_t addr32);
 
-void intcall86 (uint8_t intnum);
+void intcall86(uint8_t intnum);
 
 #define makeflagsword() \
 	( \
@@ -101,63 +100,6 @@ extern void	portout (uint16_t portnum, uint8_t value);
 extern void	portout16 (uint16_t portnum, uint16_t value);
 extern uint8_t	portin (uint16_t portnum);
 extern uint16_t portin16 (uint16_t portnum);
-
-void write86 (uint32_t addr32, uint8_t value) {
-	tempaddr32 = addr32 & 0xFFFFF;
-#ifdef CPU_ADDR_MODE_CACHE
-	if (!readonly[tempaddr32]) addrcachevalid[tempaddr32] = 0;
-#endif
-	if (readonly[tempaddr32] || (tempaddr32 >= 0xC0000) ) {
-			return;
-		}
-
-	if ( (tempaddr32 >= 0xA0000) && (tempaddr32 <= 0xBFFFF) ) {
-			if ( (vidmode != 0x13) && (vidmode != 0x12) && (vidmode != 0xD) && (vidmode != 0x10) ) {
-					RAM[tempaddr32] = value;
-					updatedscreen = 1;
-				}
-			else if ( ( (VGA_SC[4] & 6) == 0) && (vidmode != 0xD) && (vidmode != 0x10) && (vidmode != 0x12) ) {
-					RAM[tempaddr32] = value;
-					updatedscreen = 1;
-				}
-			else {
-					writeVGA (tempaddr32 - 0xA0000, value);
-				}
-
-			updatedscreen = 1;
-		}
-	else {
-			RAM[tempaddr32] = value;
-		}
-}
-
-void writew86 (uint32_t addr32, uint16_t value) {
-	write86 (addr32, (uint8_t) value);
-	write86 (addr32 + 1, (uint8_t) (value >> 8) );
-}
-
-uint8_t read86 (uint32_t addr32) {
-	addr32 &= 0xFFFFF;
-	if ( (addr32 >= 0xA0000) && (addr32 <= 0xBFFFF) ) {
-			if ( (vidmode == 0xD) || (vidmode == 0xE) || (vidmode == 0x10) || (vidmode == 0x12) ) return (readVGA (addr32 - 0xA0000) );
-			if ( (vidmode != 0x13) && (vidmode != 0x12) && (vidmode != 0xD) ) return (RAM[addr32]);
-			if ( (VGA_SC[4] & 6) == 0)
-				return (RAM[addr32]);
-			else
-				return (readVGA (addr32 - 0xA0000) );
-		}
-
-	if (!didbootstrap) {
-			RAM[0x410] = 0x41; //ugly hack to make BIOS always believe we have an EGA/VGA card installed
-			RAM[0x475] = hdcount; //the BIOS doesn't have any concept of hard drives, so here's another hack
-		}
-
-	return (RAM[addr32]);
-}
-
-uint16_t readw86 (uint32_t addr32) {
-	return ( (uint16_t) read86 (addr32) | (uint16_t) (read86 (addr32 + 1) << 8) );
-}
 
 void flag_szp8 (uint8_t value) {
 	if (!value) {

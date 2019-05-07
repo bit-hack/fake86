@@ -3,6 +3,8 @@ project(fake86)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
+add_definitions("-D_CRT_SECURE_NO_WARNINGS")
+
 file(GLOB SOURCE_CPU src/80x86/*.h src/80x86/*.c)
 add_library(lib_80x86 ${SOURCE_CPU})
 

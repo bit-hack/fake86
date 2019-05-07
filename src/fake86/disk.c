@@ -23,10 +23,12 @@
 #include <stdio.h>
 
 #include "disk.h"
+#include "memory.h"
 
 #include "../80x86/cpu.h"
 
-extern uint8_t RAM[0x100000], cf, hdcount;
+//extern uint8_t RAM[0x100000];
+extern uint8_t cf, hdcount;
 extern uint16_t segregs[4];
 extern union _bytewordregs_ regs;
 
@@ -180,5 +182,8 @@ void diskhandler() {
 		}
 	lastdiskah[regs.byteregs[regdl]] = regs.byteregs[regah];
 	lastdiskcf[regs.byteregs[regdl]] = cf;
-	if (regs.byteregs[regdl] & 0x80) RAM[0x474] = regs.byteregs[regah];
+  if (regs.byteregs[regdl] & 0x80) {
+//    RAM[0x474] = regs.byteregs[regah];
+    write86(0x474, regs.byteregs[regah]);
+  }
 }
