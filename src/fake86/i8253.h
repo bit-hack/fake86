@@ -14,20 +14,21 @@
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+  USA.
 */
 
-#define PIT_MODE_LATCHCOUNT	0
-#define PIT_MODE_LOBYTE	1
-#define PIT_MODE_HIBYTE	2
-#define PIT_MODE_TOGGLE	3
+#define PIT_MODE_LATCHCOUNT 0
+#define PIT_MODE_LOBYTE 1
+#define PIT_MODE_HIBYTE 2
+#define PIT_MODE_TOGGLE 3
 
 struct i8253_s {
-	uint16_t chandata[3];
-	uint8_t accessmode[3];
-	uint8_t bytetoggle[3];
-	uint32_t effectivedata[3];
-	float chanfreq[3];
-	uint8_t active[3];
-	uint16_t counter[3];
+  uint16_t chandata[3];
+  uint8_t accessmode[3];
+  uint8_t bytetoggle[3];
+  uint32_t effectivedata[3];
+  float chanfreq[3];
+  uint8_t active[3];
+  uint16_t counter[3];
 };

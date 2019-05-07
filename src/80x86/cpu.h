@@ -14,7 +14,8 @@
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+  USA.
 */
 
 #ifdef _WIN32
@@ -57,54 +58,58 @@
 #endif
 
 union _bytewordregs_ {
-	uint16_t wordregs[8];
-	uint8_t byteregs[8];
+  uint16_t wordregs[8];
+  uint8_t byteregs[8];
 };
 
 #ifdef CPU_ADDR_MODE_CACHE
 struct addrmodecache_s {
-	uint16_t exitcs;
-	uint16_t exitip;
-	uint16_t disp16;
-	uint32_t len;
-	uint8_t mode;
-	uint8_t reg;
-	uint8_t rm;
-	uint8_t forcess;
-	uint8_t valid;
+  uint16_t exitcs;
+  uint16_t exitip;
+  uint16_t disp16;
+  uint32_t len;
+  uint8_t mode;
+  uint8_t reg;
+  uint8_t rm;
+  uint8_t forcess;
+  uint8_t valid;
 };
 #endif
 
-#define StepIP(x)	ip += x
-#define getmem8(x, y)	read86(segbase(x) + y)
-#define getmem16(x, y)	readw86(segbase(x) + y)
-#define putmem8(x, y, z)	write86(segbase(x) + y, z)
-#define putmem16(x, y, z)	writew86(segbase(x) + y, z)
-#define signext(value)	(int16_t)(int8_t)(value)
-#define signext32(value)	(int32_t)(int16_t)(value)
-#define getreg16(regid)	regs.wordregs[regid]
-#define getreg8(regid)	regs.byteregs[byteregtable[regid]]
-#define putreg16(regid, writeval)	regs.wordregs[regid] = writeval
-#define putreg8(regid, writeval)	regs.byteregs[byteregtable[regid]] = writeval
-#define getsegreg(regid)	segregs[regid]
-#define putsegreg(regid, writeval)	segregs[regid] = writeval
-#define segbase(x)	((uint32_t) x << 4)
+#define StepIP(x) ip += x
+#define getmem8(x, y) read86(segbase(x) + y)
+#define getmem16(x, y) readw86(segbase(x) + y)
+#define putmem8(x, y, z) write86(segbase(x) + y, z)
+#define putmem16(x, y, z) writew86(segbase(x) + y, z)
+#define signext(value) (int16_t)(int8_t)(value)
+#define signext32(value) (int32_t)(int16_t)(value)
+#define getreg16(regid) regs.wordregs[regid]
+#define getreg8(regid) regs.byteregs[byteregtable[regid]]
+#define putreg16(regid, writeval) regs.wordregs[regid] = writeval
+#define putreg8(regid, writeval) regs.byteregs[byteregtable[regid]] = writeval
+#define getsegreg(regid) segregs[regid]
+#define putsegreg(regid, writeval) segregs[regid] = writeval
+#define segbase(x) ((uint32_t)x << 4)
 
-#define makeflagsword() \
-	( \
-	2 | (uint16_t) cf | ((uint16_t) pf << 2) | ((uint16_t) af << 4) | ((uint16_t) zf << 6) | ((uint16_t) sf << 7) | \
-	((uint16_t) tf << 8) | ((uint16_t) ifl << 9) | ((uint16_t) df << 10) | ((uint16_t) of << 11) \
-	)
+#define makeflagsword()                                                        \
+  (2 | (uint16_t)cf | ((uint16_t)pf << 2) | ((uint16_t)af << 4) |              \
+   ((uint16_t)zf << 6) | ((uint16_t)sf << 7) | ((uint16_t)tf << 8) |           \
+   ((uint16_t)ifl << 9) | ((uint16_t)df << 10) | ((uint16_t)of << 11))
 
-#define decodeflagsword(x) { \
-	temp16 = x; \
-	cf = temp16 & 1; \
-	pf = (temp16 >> 2) & 1; \
-	af = (temp16 >> 4) & 1; \
-	zf = (temp16 >> 6) & 1; \
-	sf = (temp16 >> 7) & 1; \
-	tf = (temp16 >> 8) & 1; \
-	ifl = (temp16 >> 9) & 1; \
-	df = (temp16 >> 10) & 1; \
-	of = (temp16 >> 11) & 1; \
-	}
+#define decodeflagsword(x)                                                     \
+  {                                                                            \
+    temp16 = x;                                                                \
+    cf = temp16 & 1;                                                           \
+    pf = (temp16 >> 2) & 1;                                                    \
+    af = (temp16 >> 4) & 1;                                                    \
+    zf = (temp16 >> 6) & 1;                                                    \
+    sf = (temp16 >> 7) & 1;                                                    \
+    tf = (temp16 >> 8) & 1;                                                    \
+    ifl = (temp16 >> 9) & 1;                                                   \
+    df = (temp16 >> 10) & 1;                                                   \
+    of = (temp16 >> 11) & 1;                                                   \
+  }
+
+void cpu_push(uint16_t pushval);
+uint16_t cpu_pop();
+void cpu_reset();
