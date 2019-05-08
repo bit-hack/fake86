@@ -20,13 +20,8 @@
 
 /* parsecl.c: Fake86 command line parsing for runtime options. */
 
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include "common.h"
 
-#include <SDL/SDL.h>
-
-#include "config.h"
 #include "disk.h"
 #include "memory.h"
 
@@ -176,22 +171,22 @@ void parsecl(int argc, char *argv[]) {
       showhelp();
     else if (strcmpi(argv[i], "-fd0") == 0) {
       i++;
-      if (insertdisk(0, argv[i])) {
+      if (disk_insert(0, argv[i])) {
         printf("ERROR: Unable to open image file %s\n", argv[i]);
       }
     } else if (strcmpi(argv[i], "-fd1") == 0) {
       i++;
-      if (insertdisk(1, argv[i])) {
+      if (disk_insert(1, argv[i])) {
         printf("ERROR: Unable to open image file %s\n", argv[i]);
       }
     } else if (strcmpi(argv[i], "-hd0") == 0) {
       i++;
-      if (insertdisk(0x80, argv[i])) {
+      if (disk_insert(0x80, argv[i])) {
         printf("ERROR: Unable to open image file %s\n", argv[i]);
       }
     } else if (strcmpi(argv[i], "-hd1") == 0) {
       i++;
-      if (insertdisk(0x81, argv[i])) {
+      if (disk_insert(0x81, argv[i])) {
         printf("ERROR: Unable to open image file %s\n", argv[i]);
       }
     } else if (strcmpi(argv[i], "-net") == 0) {

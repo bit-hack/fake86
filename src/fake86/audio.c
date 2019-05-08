@@ -21,21 +21,18 @@
 /* audio.c: functions to mix the audio channels, and handle SDL's audio
  * interface. */
 
-#include "config.h"
-#include <SDL/SDL.h>
+#include "common.h"
+
 #ifdef _WIN32
 #include <Windows.h>
 #include <process.h>
 #else
 #include <pthread.h>
 #endif
-#include <stdint.h>
-#include <stdio.h>
-#include <memory.h>
+
 #include "blaster.h"
 #include "audio.h"
 
-extern SDL_Surface *screen;
 struct wav_hdr_s wav_hdr;
 FILE *wav_file = NULL;
 
@@ -79,9 +76,6 @@ void create_output_wav(uint8_t *filename) {
 }
 
 uint64_t doublesamplecount, cursampnum = 0, sampcount = 0, framecount = 0;
-uint8_t bmpfilename[256];
-
-void savepic() { SDL_SaveBMP(screen, &bmpfilename[0]); }
 
 int8_t samps[2400];
 

@@ -21,52 +21,50 @@
 /* disk.c: disk emulation routines for Fake86. works at the BIOS interrupt 13h
  * level. */
 
-#include <stdint.h>
-#include <stdio.h>
-
-#include "disk.h"
-#include "memory.h"
+#include "common.h"
 
 #include "../80x86/cpu.h"
 
-// extern uint8_t RAM[0x100000];
-extern uint8_t cf, hdcount;
-extern uint16_t segregs[4];
-extern union _bytewordregs_ regs;
 
-extern uint8_t read86(uint32_t addr32);
-extern void write86(uint32_t addr32, uint8_t value);
+uint8_t bootdrive = 0, hdcount = 0;
 
 struct struct_drive disk[256];
-uint8_t sectorbuffer[512];
 
-uint8_t insertdisk(uint8_t drivenum, char *filename) {
-  if (disk[drivenum].inserted)
+static uint8_t sectorbuffer[512];
+
+uint8_t disk_insert(uint8_t drivenum, char *filename) {
+  if (disk[drivenum].inserted) {
     fclose(disk[drivenum].diskfile);
-  else
+  }
+  else {
     disk[drivenum].inserted = 1;
+  }
   disk[drivenum].diskfile = fopen(filename, "r+b");
   if (disk[drivenum].diskfile == NULL) {
     disk[drivenum].inserted = 0;
-    return (1);
+    return 1;
   }
   fseek(disk[drivenum].diskfile, 0L, SEEK_END);
   disk[drivenum].filesize = ftell(disk[drivenum].diskfile);
   fseek(disk[drivenum].diskfile, 0L, SEEK_SET);
-  if (drivenum >= 0x80) { // it's a hard disk image
+  // it's a hard disk image
+  if (drivenum >= 0x80) {
     disk[drivenum].sects = 63;
     disk[drivenum].heads = 16;
     disk[drivenum].cyls = disk[drivenum].filesize /
                           (disk[drivenum].sects * disk[drivenum].heads * 512);
     hdcount++;
-  } else { // it's a floppy image
+  // it's a floppy image
+  } else {
     disk[drivenum].cyls = 80;
     disk[drivenum].sects = 18;
     disk[drivenum].heads = 2;
-    if (disk[drivenum].filesize <= 1228800)
+    if (disk[drivenum].filesize <= 1228800) {
       disk[drivenum].sects = 15;
-    if (disk[drivenum].filesize <= 737280)
+    }
+    if (disk[drivenum].filesize <= 737280) {
       disk[drivenum].sects = 9;
+    }
     if (disk[drivenum].filesize <= 368640) {
       disk[drivenum].cyls = 40;
       disk[drivenum].sects = 9;
@@ -77,37 +75,46 @@ uint8_t insertdisk(uint8_t drivenum, char *filename) {
       disk[drivenum].heads = 1;
     }
   }
-  return (0);
+  return 0;
 }
 
-void ejectdisk(uint8_t drivenum) {
+void disk_eject(uint8_t drivenum) {
   disk[drivenum].inserted = 0;
-  if (disk[drivenum].diskfile != NULL)
+  if (disk[drivenum].diskfile != NULL) {
+    assert(disk[drivenum].diskfile);
     fclose(disk[drivenum].diskfile);
+  }
+#if 1
+  if (drivenum >= 0x80) {
+    --hdcount;
+  }
+#endif
 }
 
-void readdisk(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
+void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
               uint16_t sect, uint16_t head, uint16_t sectcount) {
-  uint32_t memdest, lba, fileoffset, cursect, sectoffset;
-  if (!sect || !disk[drivenum].inserted)
+  if (!sect || !disk[drivenum].inserted) {
     return;
-  lba = ((uint32_t)cyl * (uint32_t)disk[drivenum].heads + (uint32_t)head) *
+  }
+  const uint32_t lba = ((uint32_t)cyl * (uint32_t)disk[drivenum].heads + (uint32_t)head) *
             (uint32_t)disk[drivenum].sects +
         (uint32_t)sect - 1;
-  fileoffset = lba * 512;
-  if (fileoffset > disk[drivenum].filesize)
+  const uint32_t fileoffset = lba * 512;
+  if (fileoffset > disk[drivenum].filesize) {
     return;
+  }
   fseek(disk[drivenum].diskfile, fileoffset, SEEK_SET);
-  memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
+  uint32_t memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
   // for the readdisk function, we need to use write86 instead of directly
   // fread'ing into
   // the RAM array, so that read-only flags are honored. otherwise, a program
   // could load
   // data from a disk over BIOS or other ROM code that it shouldn't be able to.
-  for (cursect = 0; cursect < sectcount; cursect++) {
+  uint32_t cursect = 0;
+  for (; cursect < sectcount; cursect++) {
     if (fread(sectorbuffer, 1, 512, disk[drivenum].diskfile) < 512)
       break;
-    for (sectoffset = 0; sectoffset < 512; sectoffset++) {
+    for (uint32_t sectoffset = 0; sectoffset < 512; sectoffset++) {
       write86(memdest++, sectorbuffer[sectoffset]);
     }
   }
@@ -116,7 +123,7 @@ void readdisk(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
   regs.byteregs[regah] = 0;
 }
 
-void writedisk(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
+void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
                uint16_t sect, uint16_t head, uint16_t sectcount) {
   uint32_t memdest, lba, fileoffset, cursect, sectoffset;
   if (!sect || !disk[drivenum].inserted)
@@ -140,7 +147,7 @@ void writedisk(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
   regs.byteregs[regah] = 0;
 }
 
-void diskhandler() {
+void disk_int_handler(int intnum) {
   static uint8_t lastdiskah[256], lastdiskcf[256];
   switch (regs.byteregs[regah]) {
   case 0: // reset disk system
@@ -153,10 +160,10 @@ void diskhandler() {
     return;
   case 2: // read sector(s) into memory
     if (disk[regs.byteregs[regdl]].inserted) {
-      readdisk(regs.byteregs[regdl], segregs[reges], getreg16(regbx),
-               regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
-               regs.byteregs[regcl] & 63, regs.byteregs[regdh],
-               regs.byteregs[regal]);
+      disk_read(regs.byteregs[regdl], segregs[reges], getreg16(regbx),
+                regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
+                regs.byteregs[regcl] & 63, regs.byteregs[regdh],
+                regs.byteregs[regal]);
       cf = 0;
       regs.byteregs[regah] = 0;
     } else {
@@ -166,10 +173,10 @@ void diskhandler() {
     break;
   case 3: // write sector(s) from memory
     if (disk[regs.byteregs[regdl]].inserted) {
-      writedisk(regs.byteregs[regdl], segregs[reges], getreg16(regbx),
-                regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
-                regs.byteregs[regcl] & 63, regs.byteregs[regdh],
-                regs.byteregs[regal]);
+      disk_write(regs.byteregs[regdl], segregs[reges], getreg16(regbx),
+                 regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
+                 regs.byteregs[regcl] & 63, regs.byteregs[regdh],
+                 regs.byteregs[regal]);
       cf = 0;
       regs.byteregs[regah] = 0;
     } else {
@@ -209,5 +216,22 @@ void diskhandler() {
   if (regs.byteregs[regdl] & 0x80) {
     //    RAM[0x474] = regs.byteregs[regah];
     write86(0x474, regs.byteregs[regah]);
+  }
+}
+
+void disk_bootstrap(int intnum) {
+  didbootstrap = 1;
+#ifdef BENCHMARK_BIOS
+  running = 0;
+#endif
+  // read first sector of boot drive into 07C0:0000 and execute it
+  if (bootdrive < 255) { 
+    regs.byteregs[regdl] = bootdrive;
+    disk_read(regs.byteregs[regdl], 0x07C0, 0x0000, 0, 1, 0, 1);
+    segregs[regcs] = 0x0000;
+    ip = 0x7C00;
+  } else {
+    segregs[regcs] = 0xF600; // start ROM BASIC at bootstrap if requested
+    ip = 0x0000;
   }
 }

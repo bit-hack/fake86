@@ -22,11 +22,7 @@
    these are required for the timer interrupt and PC speaker to be
    properly emulated! */
 
-#include <stdint.h>
-#include <stdio.h>
-#include <memory.h>
-
-#include "i8253.h"
+#include "common.h"
 
 
 extern void set_port_write_redirector(uint16_t startport, uint16_t endport,

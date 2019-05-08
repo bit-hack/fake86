@@ -1,5 +1,4 @@
-#ifndef __CONFIG_H__
-#define __CONFIG_H__
+#pragma once
 
 #ifndef PATH_DATAFILES
 #define PATH_DATAFILES
@@ -63,4 +62,3 @@
 //#define DEBUG_DMA
 
 //#define BENCHMARK_BIOS
-#endif

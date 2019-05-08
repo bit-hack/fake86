@@ -21,7 +21,8 @@
 /* packet.c: functions to interface with libpcap/winpcap for ethernet emulation.
  */
 
-#include "config.h"
+#include "common.h"
+
 
 #ifdef NETWORKING_ENABLED
 #define HAVE_REMOTE
@@ -166,8 +167,6 @@ extern struct netstruct {
   uint8_t canrecv;
   uint16_t pktlen;
 } net;
-
-extern void doirq(uint8_t irqnum);
 
 void dispatch() {
   if (pcap_next_ex(adhandle, &hdr, &pktdata) <= 0)

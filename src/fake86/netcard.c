@@ -24,7 +24,9 @@
    is included with this source code, in the data/ directory. the filename is
    pd.com - inject this file into any floppy or hard disk image if needed! */
 
-#include "config.h"
+#include "common.h"
+
+
 #ifdef NETWORKING_ENABLED
 #ifdef NETWORKING_OLDCARD
 #include <stdio.h>

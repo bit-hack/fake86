@@ -24,37 +24,43 @@
 #include <time.h>
 #endif
 
-#define regax 0
-#define regcx 1
-#define regdx 2
-#define regbx 3
-#define regsp 4
-#define regbp 5
-#define regsi 6
-#define regdi 7
-#define reges 0
-#define regcs 1
-#define regss 2
-#define regds 3
+enum {
+  regax = 0,
+  regcx = 1,
+  regdx = 2,
+  regbx = 3,
+  regsp = 4,
+  regbp = 5,
+  regsi = 6,
+  regdi = 7,
+  reges = 0,
+  regcs = 1,
+  regss = 2,
+  regds = 3,
+};
 
 #ifdef __BIG_ENDIAN__
-#define regal 1
-#define regah 0
-#define regcl 3
-#define regch 2
-#define regdl 5
-#define regdh 4
-#define regbl 7
-#define regbh 6
+enum {
+  regal = 1,
+  regah = 0,
+  regcl = 3,
+  regch = 2,
+  regdl = 5,
+  regdh = 4,
+  regbl = 7,
+  regbh = 6,
+};
 #else
-#define regal 0
-#define regah 1
-#define regcl 2
-#define regch 3
-#define regdl 4
-#define regdh 5
-#define regbl 6
-#define regbh 7
+enum {
+  regal = 0,
+  regah = 1,
+  regcl = 2,
+  regch = 3,
+  regdl = 4,
+  regdh = 5,
+  regbl = 6,
+  regbh = 7,
+};
 #endif
 
 union _bytewordregs_ {
@@ -113,3 +119,14 @@ struct addrmodecache_s {
 void cpu_push(uint16_t pushval);
 uint16_t cpu_pop();
 void cpu_reset();
+
+extern uint16_t segregs[4];
+extern union _bytewordregs_ regs;
+
+extern uint8_t didbootstrap;
+
+// cpu instruction pointer
+extern uint16_t ip;
+
+// cpu flags
+extern uint8_t cf, pf, af, zf, sf, tf, ifl, df, of;

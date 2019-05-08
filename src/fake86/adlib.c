@@ -21,10 +21,7 @@
 /* adlib.c: very ugly Adlib OPL2 emulation for Fake86. very much a work in
  * progress. :) */
 
-#include "config.h"
-#include <SDL/SDL.h>
-#include <stdint.h>
-#include <stdio.h>
+#include "common.h"
 
 extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
                                       void *callback);

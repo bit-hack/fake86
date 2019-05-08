@@ -20,10 +20,8 @@
 
 /* speaker.c: function to generate output samples for PC speaker emulation. */
 
-#include "config.h"
-#include <stdint.h>
+#include "common.h"
 
-#include "i8253.h"
 
 extern struct i8253_s i8253;
 

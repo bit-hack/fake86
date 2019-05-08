@@ -21,8 +21,8 @@
 /* ssource.c: functions to emulate the Disney Sound Source's 16-byte FIFO
  * buffer. */
 
-#include "config.h"
-#include <stdint.h>
+#include "common.h"
+
 
 extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
                                       void *callback);

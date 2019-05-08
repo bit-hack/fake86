@@ -23,9 +23,8 @@
    note: this is not a very complete 8259 implementation, but for the purposes
    of a PC, it's all we need. */
 
-#include <stdint.h>
-#include <string.h>
-#include "i8259.h"
+#include "common.h"
+
 
 struct structpic i8259;
 
@@ -35,6 +34,8 @@ extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
                                       void *callback);
 extern void set_port_read_redirector(uint16_t startport, uint16_t endport,
                                      void *callback);
+
+extern uint32_t makeupticks;
 
 uint8_t in8259(uint16_t portnum) {
   switch (portnum & 1) {
@@ -49,7 +50,6 @@ uint8_t in8259(uint16_t portnum) {
   return (0);
 }
 
-extern uint32_t makeupticks;
 void out8259(uint16_t portnum, uint8_t value) {
   uint8_t i;
   switch (portnum & 1) {
@@ -100,8 +100,9 @@ uint8_t nextintr() {
       i8259.isr |= (1 << i);
       return (i8259.icw[2] + i);
     }
-  return (
-      0); // this won't be reached, but without it the compiler gives a warning
+
+  // this won't be reached, but without it the compiler gives a warning
+  return 0; 
 }
 
 void doirq(uint8_t irqnum) {

@@ -22,14 +22,10 @@
    a lot of this code is inefficient, and just plain ugly. i plan to rework
    large sections of it soon. */
 
-#include <stdint.h>
-#include <stdio.h>
-
-#include <SDL/SDL.h>
-
-#include "config.h"
+#include "common.h"
 
 #include "../80x86/cpu.h"
+
 
 extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
                                       void *callback);
@@ -38,15 +34,12 @@ extern void set_port_read_redirector(uint16_t startport, uint16_t endport,
 
 extern SDL_Surface *screen;
 extern uint8_t verbose;
-extern union _bytewordregs_ regs;
-extern uint8_t RAM[0x100000], readonly[0x100000];
 extern uint8_t portram[0x10000];
-extern uint16_t segregs[4];
 
-extern uint8_t read86(uint32_t addr32);
-extern uint8_t write86(uint32_t addr32, uint8_t value);
-extern uint8_t scrmodechange;
+extern volatile bool scrmodechange;
 
+static uint16_t lastint10ax;
+uint16_t vtotal = 0;
 uint8_t VRAM[262144], vidmode, cgabg, blankattr, vidgfxmode, vidcolor;
 uint16_t cursx, cursy, cols = 80, rows = 25, vgapage, cursorposition,
                        cursorvisible;
@@ -71,7 +64,8 @@ uint32_t rgb(uint32_t r, uint32_t g, uint32_t b) {
 }
 
 extern uint32_t nw, nh;
-void vidinterrupt() {
+
+static void vidinterrupt() {
   uint32_t tempcalc, memloc, n;
   updatedscreen = 1;
   switch (regs.byteregs[regah]) { // what video interrupt function?
@@ -221,24 +215,24 @@ void vidinterrupt() {
     case 127: // hercules
       nw = oldw = 720;
       nh = oldh = 348;
-      scrmodechange = 1;
+      scrmodechange = true;
       break;
     case 0x12:
       nw = oldw = 640;
       nh = oldh = 480;
-      scrmodechange = 1;
+      scrmodechange = true;
       break;
     case 0x13:
       oldw = 640;
       oldh = 400;
       nw = 320;
       nh = 200;
-      scrmodechange = 1;
+      scrmodechange = true;
       break;
     default:
       nw = oldw = 640;
       nh = oldh = 400;
-      scrmodechange = 1;
+      scrmodechange = true;
       break;
     }
     break;
@@ -292,6 +286,7 @@ void initcga() {
   palettecga[13] = rgb(0xFF, 0x55, 0xFF);
   palettecga[14] = rgb(0xFF, 0xFF, 0x55);
   palettecga[15] = rgb(0xFF, 0xFF, 0xFF);
+
   palettevga[0] = rgb(0, 0, 0);
   palettevga[1] = rgb(0, 0, 169);
   palettevga[2] = rgb(0, 169, 0);
@@ -550,7 +545,6 @@ void initcga() {
   palettevga[255] = rgb(0, 0, 0);
 }
 
-uint16_t vtotal = 0;
 void outVGA(uint16_t portnum, uint8_t value) {
   static uint8_t oldah, oldal;
   uint8_t flip3c0 = 0;
@@ -909,4 +903,42 @@ uint8_t readVGA(uint32_t addr32) {
 void initVideoPorts() {
   set_port_write_redirector(0x3B0, 0x3DA, &outVGA);
   set_port_read_redirector(0x3B0, 0x3DA, &inVGA);
+}
+
+bool video_int_handler(int intnum) {
+  switch (intnum) {
+  case 0x10:
+    updatedscreen = 1;
+    if ((regs.byteregs[regah] == 0x00) || (regs.byteregs[regah] == 0x10)) {
+      const uint16_t oldregax = regs.wordregs[regax];
+      vidinterrupt();
+      regs.wordregs[regax] = oldregax;
+      if (regs.byteregs[regah] == 0x10) {
+        return true;
+      }
+      if (vidmode == 9) {
+        return true;
+      }
+    }
+    if ((regs.byteregs[regah] == 0x1A) &&
+        (lastint10ax != 0x0100)) { // the 0x0100 is a cheap hack to make it not
+                                   // do this if DOS EDIT/QBASIC
+      regs.byteregs[regal] = 0x1A;
+      regs.byteregs[regbl] = 0x8;
+      return true;
+    }
+    lastint10ax = regs.wordregs[regax];
+    if (regs.byteregs[regah] == 0x1B) {
+      regs.byteregs[regal] = 0x1B;
+      segregs[reges] = 0xC800;
+      regs.wordregs[regdi] = 0x0000;
+      writew86(0xC8000, 0x0000);
+      writew86(0xC8002, 0xC900);
+      write86(0xC9000, 0x00);
+      write86(0xC9001, 0x00);
+      write86(0xC9002, 0x01);
+      return true;
+    }
+  }
+  return false;
 }

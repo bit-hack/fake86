@@ -21,17 +21,10 @@
 /* main.c: functions to initialize the different components of Fake86,
    load ROM binaries, and kickstart the CPU emulator. */
 
-#include <assert.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <memory.h>
+#include "../fake86/common.h"
 
-#include <SDL/SDL.h>
-
-#include "../fake86/config.h"
-#include "../fake86/memory.h"
 #include "../80x86/cpu.h"
+
 
 SDL_Thread *thread_console = NULL;
 SDL_Thread *thread_emu = NULL;
@@ -40,17 +33,18 @@ const uint8_t *build = BUILD_STRING;
 
 extern uint8_t running, renderbenchmark;
 
-extern void exec86(uint32_t execloops);
-extern uint8_t initscreen(uint8_t *ver);
-extern void VideoThread();
-extern doscrmodechange();
-extern void handleinput();
+void exec86(uint32_t execloops);
+bool initscreen(uint8_t *ver);
+
+void handleinput();
+void handlevideo();
 
 #ifdef CPU_ADDR_MODE_CACHE
 extern uint64_t cached_access_count, uncached_access_count;
 #endif
 
-extern uint8_t scrmodechange, doaudio;
+extern volatile bool scrmodechange;
+extern uint8_t doaudio;
 extern uint64_t totalexec, totalframes;
 uint64_t starttick, endtick, lasttick;
 
@@ -61,7 +55,6 @@ extern uint8_t insertdisk(uint8_t drivenum, char *filename);
 extern void ejectdisk(uint8_t drivenum);
 extern uint8_t bootdrive, ethif, net_enabled;
 extern void doirq(uint8_t irqnum);
-// extern void isa_ne2000_init(int baseport, uint8_t irq);
 extern void parsecl(int argc, char *argv[]);
 void timing();
 void tickaudio();
@@ -82,23 +75,29 @@ extern void initsoundsource();
 extern void isa_ne2000_init(uint16_t baseport, uint8_t irq);
 extern void initBlaster(uint16_t baseport, uint8_t irq);
 
+uint8_t dohardreset = 0;
+uint8_t audiobufferfilled();
+uint8_t usessource = 0;
+
 #ifdef NETWORKING_ENABLED
 extern void initpcap();
 extern void dispatch();
 #endif
 
-static void printbinary(uint8_t value) {
-  int8_t curbit;
+// console.c
+// Console handler thread
+extern int ConsoleThread(void *);
 
-  for (curbit = 7; curbit >= 0; curbit--) {
+extern void bufsermousedata(uint8_t value);
+
+static void printbinary(uint8_t value) {
+  for (int8_t curbit = 7; curbit >= 0; curbit--) {
     if ((value >> curbit) & 1)
       printf("1");
     else
       printf("0");
   }
 }
-
-uint8_t usessource = 0;
 
 static void inithardware() {
 #ifdef NETWORKING_ENABLED
@@ -145,9 +144,6 @@ static void inithardware() {
   initscreen((uint8_t *)build);
 }
 
-uint8_t dohardreset = 0;
-uint8_t audiobufferfilled();
-
 // Emulation therad
 static int EmuThread(void *dummy) {
   while (running) {
@@ -159,14 +155,8 @@ static int EmuThread(void *dummy) {
         timing();
         tickaudio();
       }
-#ifdef _WIN32
-      Sleep(10);
-#else
-      usleep(10000);
-#endif
+      SDL_Delay(10);
     }
-    if (scrmodechange)
-      doscrmodechange();
     if (dohardreset) {
       cpu_reset();
       dohardreset = 0;
@@ -174,12 +164,6 @@ static int EmuThread(void *dummy) {
   }
   return 0;
 }
-
-// console.c
-// Console handler thread
-extern int ConsoleThread(void *);
-
-extern void bufsermousedata(uint8_t value);
 
 int main(int argc, char *argv[]) {
   uint32_t biossize;
@@ -229,15 +213,12 @@ int main(int argc, char *argv[]) {
   lasttick = starttick = SDL_GetTicks();
   while (running) {
     handleinput();
+    handlevideo();
 #ifdef NETWORKING_ENABLED
     if (ethif < 254)
       dispatch();
 #endif
-#ifdef _WIN32
-    Sleep(1);
-#else
-    usleep(1000);
-#endif
+    SDL_Delay(1);
   }
 
   endtick = (SDL_GetTicks() - starttick) / 1000;

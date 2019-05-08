@@ -22,10 +22,10 @@
    as functions for emulated hardware components to register their
    read/write callback functions across the port address range. */
 
-#include <stdint.h>
-#include <stdio.h>
+#include "common.h"
 
 #include "../80x86/cpu.h"
+
 
 extern uint8_t portram[0x10000];
 extern uint8_t speakerenabled;

@@ -20,17 +20,14 @@
 
 /* blaster.c: functions to emulate a Creative Labs Sound Blaster Pro. */
 
-#include "config.h"
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
+#include "common.h"
+
 #include "blaster.h"
 
 extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
                                       void *callback);
 extern void set_port_read_redirector(uint16_t startport, uint16_t endport,
                                      void *callback);
-extern void doirq(uint8_t irqnum);
 extern uint8_t read8237(uint8_t channel);
 
 extern void outadlib(uint16_t portnum, uint8_t value); // on the Sound Blaster

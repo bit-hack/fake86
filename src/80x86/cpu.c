@@ -23,20 +23,13 @@
 
 #ifndef CPU_INSTRUCTION_FLOW_CACHE
 
-#include <stdint.h>
-#include <stdio.h>
-
-#include "../fake86/config.h"
-#include "../fake86/memory.h"
+#include "../fake86/common.h"
 
 #include "cpu.h"
 #include "modregrm.h"
 
-#include "../fake86/i8259.h"
-#include "../fake86/i8253.h"
 
 extern struct i8253_s i8253;
-
 extern struct structpic i8259;
 uint64_t curtimer, lasttimer, timerfreq;
 
@@ -56,7 +49,7 @@ static const uint8_t parity[0x100] = {
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1};
 
-uint8_t opcode, segoverride, reptype, bootdrive = 0, hdcount = 0, hltstate = 0;
+uint8_t opcode, segoverride, reptype, hltstate = 0;
 uint16_t segregs[4], savecs, saveip, ip, useseg, oldsp;
 uint8_t tempcf, oldcf, cf, pf, af, zf, sf, tf, ifl, df, of, mode, reg, rm;
 uint16_t oper1, oper2, res16, disp16, temp16, dummy, stacksize, frametemp;

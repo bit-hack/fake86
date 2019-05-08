@@ -18,12 +18,9 @@
   USA.
 */
 
-#include "config.h"
+#include "common.h"
+
 #ifdef DISK_CONTROLLER_ATA
-#include <stdint.h>
-#include <stdio.h>
-#include <memory.h>
-#include <string.h>
 
 uint8_t idATA[512];
 

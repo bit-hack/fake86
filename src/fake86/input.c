@@ -21,18 +21,17 @@
 /* input.c: functions for translation of SDL scancodes to BIOS scancodes,
    and handling of SDL events in general. */
 
-#include <SDL/SDL.h>
-#include <stdint.h>
-#include "sermouse.h"
+#include "common.h"
 
-uint8_t keydown[0x100], keyboardwaitack = 0;
+
+uint8_t keydown[0x100];
+uint8_t keyboardwaitack = 0;
+
 extern uint32_t usegrabmode;
-
-extern void doirq(uint8_t irqnum);
 extern uint8_t running, portram[0x10000];
 extern SDL_Surface *screen;
 
-uint8_t translatescancode(uint16_t keyval) {
+static uint8_t translatescancode(uint16_t keyval) {
   switch (keyval) {
   case 0x1B:
     return (1);
@@ -288,11 +287,10 @@ void mousegrabtoggle() {
 
 extern uint8_t scrmodechange;
 extern uint32_t usefullscreen;
+
 void handleinput() {
   SDL_Event event;
-  int mx = 0, my = 0;
-  uint8_t tempbuttons;
-  if (SDL_PollEvent(&event)) {
+  while (SDL_PollEvent(&event)) {
     switch (event.type) {
     case SDL_KEYDOWN:
       portram[0x60] = translatescancode(event.key.keysym.sym);
@@ -329,7 +327,7 @@ void handleinput() {
         mousegrabtoggle();
         break;
       }
-      tempbuttons = SDL_GetMouseState(NULL, NULL);
+      uint8_t tempbuttons = SDL_GetMouseState(NULL, NULL);
       if (tempbuttons & 1)
         buttons = 2;
       else
@@ -351,17 +349,22 @@ void handleinput() {
       sermouseevent(buttons, 0, 0);
       break;
     case SDL_MOUSEMOTION:
+    {
       if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF)
         break;
+      int mx = 0, my = 0;
       SDL_GetRelativeMouseState(&mx, &my);
       sermouseevent(buttons, (int8_t)mx, (int8_t)my);
       SDL_WarpMouse(screen->w / 2, screen->h / 2);
+#if 0
       while (1) {
         SDL_PollEvent(&event);
         SDL_GetRelativeMouseState(&mx, &my);
         if ((mx == 0) && (my == 0))
           break;
       }
+#endif
+    }
       break;
     case SDL_QUIT:
       running = 0;

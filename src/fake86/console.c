@@ -20,11 +20,7 @@
 
 /* console.c: functions for a simple interactive console on stdio. */
 
-#include "config.h"
-#include <SDL/SDL.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
+#include "common.h"
 
 #ifdef _WIN32
 #include <conio.h>
@@ -109,18 +105,18 @@ int ConsoleThread(void *dummy) {
       printf("Path to new image file: ");
       waitforcmd(inputline, sizeof(inputline));
       if (strlen(inputline) > 0) {
-        insertdisk(0, (char *)inputline);
+        disk_insert(0, (char *)inputline);
       } else {
-        ejectdisk(0);
+        disk_eject(0);
         printf("Floppy image ejected from first drive.\n");
       }
     } else if (strcmpi((const char *)inputline, "change fd1") == 0) {
       printf("Path to new image file: ");
       waitforcmd(inputline, sizeof(inputline));
       if (strlen(inputline) > 0) {
-        insertdisk(1, (char *)inputline);
+        disk_insert(1, (char *)inputline);
       } else {
-        ejectdisk(1);
+        disk_eject(1);
         printf("Floppy image ejected from second drive.\n");
       }
     } else if (strcmpi((const char *)inputline, "help") == 0) {

@@ -21,10 +21,8 @@
 /* timing.c: critical functions to provide accurate timing for the
    system timer interrupt, and to generate new audio output samples. */
 
-#include "config.h"
-#include <SDL/SDL.h>
-#include <stdint.h>
-#include <stdio.h>
+#include "common.h"
+
 #ifdef _WIN32
 #include <Windows.h>
 LARGE_INTEGER queryperf;
@@ -32,12 +30,12 @@ LARGE_INTEGER queryperf;
 #include <sys/time.h>
 struct timeval tv;
 #endif
-#include "i8253.h"
+
 #include "blaster.h"
+
 
 extern struct blaster_s blaster;
 extern struct i8253_s i8253;
-extern void doirq(uint8_t irqnum);
 extern void tickaudio();
 extern void tickssource();
 extern void tickadlib();
