@@ -20,13 +20,10 @@
 
 /* parsecl.c: Fake86 command line parsing for runtime options. */
 
-#include "common.h"
-
-#include "disk.h"
-#include "memory.h"
+#include "../fake86/common.h"
 
 
-extern struct struct_drive disk[256];
+//extern struct struct_drive disk[256];
 #ifndef _WIN32
 #define strcmpi strcasecmp
 #else
@@ -40,9 +37,8 @@ extern int32_t usesamplerate, latency;
 uint16_t constantw = 0, constanth = 0;
 uint8_t slowsystem = 0;
 
-extern uint8_t insertdisk(uint8_t drivenum, char *filename);
 
-uint32_t hextouint(char *src) {
+static uint32_t hextouint(char *src) {
   uint32_t tempuint = 0, cc;
   uint16_t i;
 
@@ -251,9 +247,9 @@ void parsecl(int argc, char *argv[]) {
   }
 
   if (bootdrive == 254) {
-    if (disk[0x80].inserted)
+    if (disk_is_inserted(0x80))
       bootdrive = 0x80;
-    else if (disk[0x00].inserted)
+    else if (disk_is_inserted(0x00))
       bootdrive = 0;
     else
       bootdrive = 0xFF; // ROM BASIC fallback

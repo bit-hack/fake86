@@ -20,7 +20,8 @@
 
 /* console.c: functions for a simple interactive console on stdio. */
 
-#include "common.h"
+#include "../fake86/common.h"
+
 
 #ifdef _WIN32
 #include <conio.h>
@@ -33,8 +34,6 @@ uint8_t inputline[1024];
 uint16_t inputptr = 0;
 extern uint8_t running;
 
-extern uint8_t insertdisk(uint8_t drivenum, char *filename);
-extern void ejectdisk(uint8_t drivenum);
 
 static void waitforcmd(uint8_t *dst, uint16_t maxlen) {
 #ifdef _WIN32

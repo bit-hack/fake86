@@ -90,16 +90,6 @@ struct i8253_s {
 };
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
-struct struct_drive {
-  FILE *diskfile;
-  uint32_t filesize;
-  uint16_t cyls;
-  uint16_t sects;
-  uint16_t heads;
-  uint8_t inserted;
-  char *filename;
-};
-
 uint8_t disk_insert(uint8_t drivenum, char *filename);
 
 void disk_eject(uint8_t drivenum);
@@ -115,3 +105,5 @@ void disk_int_handler(int intnum);
 void disk_bootstrap(int intnum);
 
 extern uint8_t bootdrive, hdcount;
+
+bool disk_is_inserted(int num);

@@ -21,68 +21,151 @@
 /* disk.c: disk emulation routines for Fake86. works at the BIOS interrupt 13h
  * level. */
 
+// -hd0 \\.\X:
+
 #include "common.h"
+
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <winioctl.h>
 
 #include "../80x86/cpu.h"
 
 
+struct struct_drive {
+  HANDLE *handle;
+  FILE *diskfile;
+  uint32_t filesize;
+  uint32_t cyls;
+  uint32_t sects;
+  uint32_t heads;
+  uint8_t inserted;
+};
+
 uint8_t bootdrive = 0, hdcount = 0;
 
-struct struct_drive disk[256];
+static struct struct_drive disk[256];
 
-static uint8_t sectorbuffer[512];
 
-uint8_t disk_insert(uint8_t drivenum, char *filename) {
-  if (disk[drivenum].inserted) {
-    fclose(disk[drivenum].diskfile);
+bool disk_is_inserted(int num) {
+  return disk[num].inserted != 0;
+}
+
+static uint8_t disk_insert_image(uint8_t drivenum, char *filename) {
+  struct struct_drive* d = &disk[drivenum];
+  if (d->inserted) {
+    fclose(d->diskfile);
   }
   else {
-    disk[drivenum].inserted = 1;
+    d->inserted = 1;
   }
-  disk[drivenum].diskfile = fopen(filename, "r+b");
-  if (disk[drivenum].diskfile == NULL) {
-    disk[drivenum].inserted = 0;
+  d->diskfile = fopen(filename, "r+b");
+  if (d->diskfile == NULL) {
+    d->inserted = 0;
     return 1;
   }
-  fseek(disk[drivenum].diskfile, 0L, SEEK_END);
-  disk[drivenum].filesize = ftell(disk[drivenum].diskfile);
-  fseek(disk[drivenum].diskfile, 0L, SEEK_SET);
+  fseek(d->diskfile, 0L, SEEK_END);
+  d->filesize = ftell(d->diskfile);
+  fseek(d->diskfile, 0L, SEEK_SET);
   // it's a hard disk image
   if (drivenum >= 0x80) {
-    disk[drivenum].sects = 63;
-    disk[drivenum].heads = 16;
-    disk[drivenum].cyls = disk[drivenum].filesize /
-                          (disk[drivenum].sects * disk[drivenum].heads * 512);
+    d->sects = 63;
+    d->heads = 16;
+    d->cyls = d->filesize / (d->sects * d->heads * 512);
     hdcount++;
   // it's a floppy image
   } else {
-    disk[drivenum].cyls = 80;
-    disk[drivenum].sects = 18;
-    disk[drivenum].heads = 2;
-    if (disk[drivenum].filesize <= 1228800) {
-      disk[drivenum].sects = 15;
+    d->cyls = 80;
+    d->sects = 18;
+    d->heads = 2;
+    if (d->filesize <= 1228800) {
+      d->sects = 15;
     }
-    if (disk[drivenum].filesize <= 737280) {
-      disk[drivenum].sects = 9;
+    if (d->filesize <= 737280) {
+      d->sects = 9;
     }
-    if (disk[drivenum].filesize <= 368640) {
-      disk[drivenum].cyls = 40;
-      disk[drivenum].sects = 9;
+    if (d->filesize <= 368640) {
+      d->cyls = 40;
+      d->sects = 9;
     }
-    if (disk[drivenum].filesize <= 163840) {
-      disk[drivenum].cyls = 40;
-      disk[drivenum].sects = 8;
-      disk[drivenum].heads = 1;
+    if (d->filesize <= 163840) {
+      d->cyls = 40;
+      d->sects = 8;
+      d->heads = 1;
     }
   }
   return 0;
 }
 
+static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
+  struct struct_drive* d = &disk[drivenum];
+
+  if (d->handle) {
+    CloseHandle(d->handle);
+    d->inserted = 0;
+  }
+
+  d->handle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ,
+                          NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (INVALID_HANDLE_VALUE == d->handle) {
+    return 1;
+  }
+
+  DISK_GEOMETRY geo;
+  memset(&geo, 0, sizeof(geo));
+  DWORD dwRet = 0;
+  if (FALSE == DeviceIoControl(d->handle, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL, 0, &geo, sizeof(geo), &dwRet, NULL)) {
+    return 1;
+  }
+
+  if (geo.BytesPerSector != 512) {
+    // Sector size unsuitable
+    return 1;
+  }
+
+  d->cyls = geo.Cylinders.LowPart;
+  d->heads = geo.TracksPerCylinder;
+  d->sects = geo.SectorsPerTrack;
+
+  if (geo.Cylinders.HighPart) {
+    // Disk too large
+    return 1;
+  }
+
+  // Calculate drive size
+  d->filesize = geo.BytesPerSector * geo.SectorsPerTrack * geo.TracksPerCylinder * geo.Cylinders.LowPart;
+
+  d->inserted = 1;
+
+  if (drivenum >= 0x80) {
+    ++hdcount;
+  }
+
+  return 0;
+}
+
+uint8_t disk_insert(uint8_t drivenum, char *filename) {
+  if (filename[0] == '\\' && filename[1] == '\\') {
+    return disk_insert_raw(drivenum, filename);
+  }
+  else {
+    return disk_insert_image(drivenum, filename);
+  }
+}
+
 void disk_eject(uint8_t drivenum) {
-  disk[drivenum].inserted = 0;
-  if (disk[drivenum].diskfile != NULL) {
-    assert(disk[drivenum].diskfile);
-    fclose(disk[drivenum].diskfile);
+  struct struct_drive* d = &disk[drivenum];
+  d->inserted = 0;
+  // standard disk image
+  if (d->diskfile) {
+    assert(d->diskfile);
+    fclose(d->diskfile);
+    d->diskfile = NULL;
+  }
+  // raw disk access
+  if (d->handle) {
+    CloseHandle(d->handle);
+    d->handle = NULL;
   }
 #if 1
   if (drivenum >= 0x80) {
@@ -91,19 +174,76 @@ void disk_eject(uint8_t drivenum) {
 #endif
 }
 
-void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
-              uint16_t sect, uint16_t head, uint16_t sectcount) {
-  if (!sect || !disk[drivenum].inserted) {
+static bool _disk_seek(struct struct_drive* d, uint32_t offset) {
+  if (d->diskfile) {
+    if (fseek(d->diskfile, offset, SEEK_SET)) {
+      return false;
+    }
+    return true;
+  }
+  if (d->handle) {
+    return INVALID_SET_FILE_POINTER != SetFilePointer(d->handle, offset, NULL, FILE_BEGIN);
+  }
+  return false;
+}
+
+static bool _disk_read(struct struct_drive* d, uint8_t *dst, uint32_t size) {
+  if (d->diskfile) {
+    if (fread(dst, 1, 512, d->diskfile) < 512) {
+      return false;
+    }
+    return true;
+  }
+  if (d->handle) {
+    DWORD read = 0;
+    if (FALSE == ReadFile(d->handle, dst, size, &read, NULL)) {
+      return false;
+    }
+    return read == size;
+  }
+  return false;
+}
+
+static bool _disk_write(struct struct_drive* d, const uint8_t *src, uint32_t size) {
+  if (d->diskfile) {
+    if (fwrite(src, 1, size, d->diskfile) < size) {
+      return true;
+    }
+  }
+  if (d->handle) {
+    DWORD written = 0;
+    if (FALSE == WriteFile(d->handle, src, size, &written, NULL)) {
+      return false;
+    }
+    return written == size;
+  }
+  return false;
+}
+
+void disk_read(uint8_t drivenum,
+               uint16_t dstseg,
+               uint16_t dstoff,
+               uint16_t cyl,
+               uint16_t sect,
+               uint16_t head,
+               uint16_t sectcount) {
+
+  struct struct_drive* d = &disk[drivenum];
+  uint8_t sectorbuffer[512];
+
+  if (!sect || !d->inserted) {
     return;
   }
-  const uint32_t lba = ((uint32_t)cyl * (uint32_t)disk[drivenum].heads + (uint32_t)head) *
-            (uint32_t)disk[drivenum].sects +
-        (uint32_t)sect - 1;
+  const uint32_t lba = ((uint32_t)cyl * (uint32_t)d->heads +
+                       (uint32_t)head) * (uint32_t)d->sects +
+                       (uint32_t)sect - 1;
   const uint32_t fileoffset = lba * 512;
-  if (fileoffset > disk[drivenum].filesize) {
+  if (fileoffset > d->filesize) {
     return;
   }
-  fseek(disk[drivenum].diskfile, fileoffset, SEEK_SET);
+  if (!_disk_seek(d, fileoffset)) {
+    // ERROR
+  }
   uint32_t memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
   // for the readdisk function, we need to use write86 instead of directly
   // fread'ing into
@@ -112,8 +252,10 @@ void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
   // data from a disk over BIOS or other ROM code that it shouldn't be able to.
   uint32_t cursect = 0;
   for (; cursect < sectcount; cursect++) {
-    if (fread(sectorbuffer, 1, 512, disk[drivenum].diskfile) < 512)
+    if (!_disk_read(d, sectorbuffer, 512)) {
+      // ERROR
       break;
+    }
     for (uint32_t sectoffset = 0; sectoffset < 512; sectoffset++) {
       write86(memdest++, sectorbuffer[sectoffset]);
     }
@@ -124,23 +266,35 @@ void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
 }
 
 void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
-               uint16_t sect, uint16_t head, uint16_t sectcount) {
+                uint16_t sect, uint16_t head, uint16_t sectcount) {
+
+  struct struct_drive* d = &disk[drivenum];
+  uint8_t sectorbuffer[512];
+
   uint32_t memdest, lba, fileoffset, cursect, sectoffset;
-  if (!sect || !disk[drivenum].inserted)
+  if (!sect || !d->inserted)
     return;
-  lba = ((uint32_t)cyl * (uint32_t)disk[drivenum].heads + (uint32_t)head) *
-            (uint32_t)disk[drivenum].sects +
+  lba = ((uint32_t)cyl * (uint32_t)d->heads + (uint32_t)head) *
+            (uint32_t)d->sects +
         (uint32_t)sect - 1;
   fileoffset = lba * 512;
-  if (fileoffset > disk[drivenum].filesize)
+  if (fileoffset > d->filesize) {
+    // ERROR
     return;
-  fseek(disk[drivenum].diskfile, fileoffset, SEEK_SET);
+  }
+  if (!_disk_seek(d, fileoffset)) {
+    // ERROR
+    return;
+  }
   memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
   for (cursect = 0; cursect < sectcount; cursect++) {
     for (sectoffset = 0; sectoffset < 512; sectoffset++) {
       sectorbuffer[sectoffset] = read86(memdest++);
     }
-    fwrite(sectorbuffer, 1, 512, disk[drivenum].diskfile);
+    if (!_disk_write(d, sectorbuffer, 512)) {
+      // ERROR
+      return;
+    }
   }
   regs.byteregs[regal] = (uint8_t)sectcount;
   cf = 0;
@@ -160,9 +314,12 @@ void disk_int_handler(int intnum) {
     return;
   case 2: // read sector(s) into memory
     if (disk[regs.byteregs[regdl]].inserted) {
-      disk_read(regs.byteregs[regdl], segregs[reges], getreg16(regbx),
+      disk_read(regs.byteregs[regdl],
+                segregs[reges],
+                getreg16(regbx),
                 regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
-                regs.byteregs[regcl] & 63, regs.byteregs[regdh],
+                regs.byteregs[regcl] & 63,
+                regs.byteregs[regdh],
                 regs.byteregs[regal]);
       cf = 0;
       regs.byteregs[regah] = 0;
@@ -173,9 +330,11 @@ void disk_int_handler(int intnum) {
     break;
   case 3: // write sector(s) from memory
     if (disk[regs.byteregs[regdl]].inserted) {
-      disk_write(regs.byteregs[regdl], segregs[reges], getreg16(regbx),
+      disk_write(regs.byteregs[regdl],
+                 segregs[reges], getreg16(regbx),
                  regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
-                 regs.byteregs[regcl] & 63, regs.byteregs[regdh],
+                 regs.byteregs[regcl] & 63,
+                 regs.byteregs[regdh],
                  regs.byteregs[regal]);
       cf = 0;
       regs.byteregs[regah] = 0;

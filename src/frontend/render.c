@@ -335,9 +335,85 @@ static void draw_mode_6() {
   }
 }
 
+static void draw_mode_127() {
+  uint32_t color, chary, charx, vidptr, curpixel;
+  nw = 720;
+  nh = 348;
+  for (uint32_t y = 0; y < 348; y++) {
+    for (uint32_t x = 0; x < 720; x++) {
+      charx = x;
+      chary = y >> 1;
+      vidptr = videobase + ((y & 3) << 13) + (y >> 2) * 90 + (x >> 3);
+      curpixel = (RAM[vidptr] >> (7 - (charx & 7))) & 1;
+#ifdef __BIG_ENDIAN__
+      if (curpixel)
+        color = 0xFFFFFF00;
+#else
+      if (curpixel)
+        color = 0x00FFFFFF;
+#endif
+      else
+        color = 0x00000000;
+      prestretch[y][x] = color;
+    }
+  }
+}
+
+static void draw_mode_8() {
+  uint32_t color, vidptr;
+  // 160x200 16-color (PCjr)
+  nw = 640; // fix this
+  nh = 400; // part later
+  for (uint32_t y = 0; y < 400; y++) {
+    for (uint32_t x = 0; x < 640; x++) {
+      vidptr = 0xB8000 + (y >> 2) * 80 + (x >> 3) + ((y >> 1) & 1) * 8192;
+      if (((x >> 1) & 1) == 0)
+        color = palettecga[RAM[vidptr] >> 4];
+      else
+        color = palettecga[RAM[vidptr] & 15];
+      prestretch[y][x] = color;
+    }
+  }
+}
+
+static void draw_mode_9() {
+  uint32_t color, vidptr;
+  nw = 640; // fix this
+  nh = 400; // part later
+  for (uint32_t y = 0; y < 400; y++) {
+    for (uint32_t x = 0; x < 640; x++) {
+      vidptr = 0xB8000 + (y >> 3) * 160 + (x >> 2) + ((y >> 1) & 3) * 8192;
+      if (((x >> 1) & 1) == 0)
+        color = palettecga[RAM[vidptr] >> 4];
+      else
+        color = palettecga[RAM[vidptr] & 15];
+      prestretch[y][x] = color;
+    }
+  }
+}
+
+static void draw_mode_d_e() {
+  uint32_t color, vidptr, divx, divy, x1;
+  nw = 640; // fix this
+  nh = 400; // part later
+  for (uint32_t y = 0; y < 400; y++) {
+    for (uint32_t x = 0; x < 640; x++) {
+      divx = x >> 1;
+      divy = y >> 1;
+      vidptr = divy * 40 + (divx >> 3);
+      x1 = 7 - (divx & 7);
+      color = (VRAM[vidptr] >> x1) & 1;
+      color += (((VRAM[0x10000 + vidptr] >> x1) & 1) << 1);
+      color += (((VRAM[0x20000 + vidptr] >> x1) & 1) << 2);
+      color += (((VRAM[0x30000 + vidptr] >> x1) & 1) << 3);
+      color = palettevga[color];
+      prestretch[y][x] = color;
+    }
+  }
+}
+
 void draw() {
-  uint32_t planemode, vgapage, color, chary, charx, vidptr, divx, divy,
-      curpixel, blockw, curheight, x1, y1;
+  uint32_t planemode, vgapage, color, vidptr, blockw, curheight, x1, y1;
   switch (vidmode) {
   case 0:
   case 1:
@@ -354,71 +430,18 @@ void draw() {
   case 6:
     draw_mode_6();
     break;
-  case 127:
-    nw = 720;
-    nh = 348;
-    for (uint32_t y = 0; y < 348; y++) {
-      for (uint32_t x = 0; x < 720; x++) {
-        charx = x;
-        chary = y >> 1;
-        vidptr = videobase + ((y & 3) << 13) + (y >> 2) * 90 + (x >> 3);
-        curpixel = (RAM[vidptr] >> (7 - (charx & 7))) & 1;
-#ifdef __BIG_ENDIAN__
-        if (curpixel)
-          color = 0xFFFFFF00;
-#else
-        if (curpixel)
-          color = 0x00FFFFFF;
-#endif
-        else
-          color = 0x00000000;
-        prestretch[y][x] = color;
-      }
-    }
+  case 0x7f:
+    draw_mode_127();
     break;
   case 0x8: // 160x200 16-color (PCjr)
-    nw = 640; // fix this
-    nh = 400; // part later
-    for (uint32_t y = 0; y < 400; y++)
-      for (uint32_t x = 0; x < 640; x++) {
-        vidptr = 0xB8000 + (y >> 2) * 80 + (x >> 3) + ((y >> 1) & 1) * 8192;
-        if (((x >> 1) & 1) == 0)
-          color = palettecga[RAM[vidptr] >> 4];
-        else
-          color = palettecga[RAM[vidptr] & 15];
-        prestretch[y][x] = color;
-      }
+    draw_mode_8();
     break;
   case 0x9: // 320x200 16-color (Tandy/PCjr)
-    nw = 640; // fix this
-    nh = 400; // part later
-    for (uint32_t y = 0; y < 400; y++)
-      for (uint32_t x = 0; x < 640; x++) {
-        vidptr = 0xB8000 + (y >> 3) * 160 + (x >> 2) + ((y >> 1) & 3) * 8192;
-        if (((x >> 1) & 1) == 0)
-          color = palettecga[RAM[vidptr] >> 4];
-        else
-          color = palettecga[RAM[vidptr] & 15];
-        prestretch[y][x] = color;
-      }
+    draw_mode_9();
     break;
   case 0xD:
   case 0xE:
-    nw = 640; // fix this
-    nh = 400; // part later
-    for (uint32_t y = 0; y < 400; y++)
-      for (uint32_t x = 0; x < 640; x++) {
-        divx = x >> 1;
-        divy = y >> 1;
-        vidptr = divy * 40 + (divx >> 3);
-        x1 = 7 - (divx & 7);
-        color = (VRAM[vidptr] >> x1) & 1;
-        color += (((VRAM[0x10000 + vidptr] >> x1) & 1) << 1);
-        color += (((VRAM[0x20000 + vidptr] >> x1) & 1) << 2);
-        color += (((VRAM[0x30000 + vidptr] >> x1) & 1) << 3);
-        color = palettevga[color];
-        prestretch[y][x] = color;
-      }
+    draw_mode_d_e();
     break;
   case 0x10:
     nw = 640;

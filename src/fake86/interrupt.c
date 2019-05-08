@@ -20,8 +20,6 @@
 
 #include "common.h"
 
-#include "memory.h"
-#include "disk.h"
 #include "../80x86/cpu.h"
 
 bool video_int_handler(int intnum);
