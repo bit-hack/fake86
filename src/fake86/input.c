@@ -30,11 +30,15 @@ uint8_t keyboardwaitack = 0;
 extern uint32_t usegrabmode;
 extern uint8_t running, portram[0x10000];
 extern SDL_Surface *screen;
+extern uint8_t scrmodechange;
+extern uint32_t usefullscreen;
+
+extern void setwindowtitle(uint8_t *extra);
 
 static uint8_t translatescancode(uint16_t keyval) {
   switch (keyval) {
   case 0x1B:
-    return (1);
+    return 1;
     break; // Esc
   case 0x30:
     return (0xB);
@@ -262,16 +266,11 @@ static uint8_t translatescancode(uint16_t keyval) {
     return (0x53);
     break; // del
   default:
-    return (0);
+    return 0;
   }
 }
 
-uint8_t buttons = 0;
-extern void sermouseevent(uint8_t buttons, int8_t xrel, int8_t yrel);
-extern struct sermouse_s sermouse;
-extern void setwindowtitle(uint8_t *extra);
-
-void mousegrabtoggle() {
+static void mousegrabtoggle() {
   if (usegrabmode == SDL_GRAB_ON) {
     usegrabmode = SDL_GRAB_OFF;
     SDL_WM_GrabInput(SDL_GRAB_OFF);
@@ -285,88 +284,98 @@ void mousegrabtoggle() {
   }
 }
 
-extern uint8_t scrmodechange;
-extern uint32_t usefullscreen;
+static void onKeyDown(const SDL_Event *event) {
+  portram[0x60] = translatescancode(event->key.keysym.sym);
+  portram[0x64] |= 2;
+  doirq(1);
+  keydown[translatescancode(event->key.keysym.sym)] = 1;
+  if (keydown[0x38] && keydown[0x1D] &&
+      (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_ON)) {
+    keydown[0x1D] = 0;
+    keydown[0x32] = 0;
+    mousegrabtoggle();
+    return;
+  }
+  if (keydown[0x38] && keydown[0x1C]) {
+    keydown[0x1D] = 0;
+    keydown[0x38] = 0;
+    if (usefullscreen) {
+      usefullscreen = 0;
+    } else {
+      usefullscreen = SDL_FULLSCREEN;
+    }
+    scrmodechange = 1;
+    return;
+  }
+}
+
+static void onKeyUp(const SDL_Event *event) {
+  portram[0x60] = translatescancode(event->key.keysym.sym) | 0x80;
+  portram[0x64] |= 2;
+  doirq(1);
+  keydown[translatescancode(event->key.keysym.sym)] = 0;
+}
+
+static void onMouseButtonDown(const SDL_Event *event) {
+  if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF) {
+    mousegrabtoggle();
+    return;
+  }
+  const uint8_t buttons = SDL_GetMouseState(NULL, NULL);
+  sermouseevent(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
+                buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
+                0, 0);
+}
+
+static void onMouseButtonUp(const SDL_Event *event) {
+  if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF) {
+    return;
+  }
+  const uint8_t buttons = SDL_GetMouseState(NULL, NULL);
+  sermouseevent(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
+                buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
+                0, 0);
+}
+
+static void onMouseMotion(const SDL_Event *event) {
+  if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF)
+    return;
+  const int midx = screen->w / 2;
+  const int midy = screen->h / 2;
+  int mx = 0, my = 0;
+  const uint8_t buttons = SDL_GetMouseState(&mx, &my);
+  const int dx = mx - midx;
+  const int dy = my - midy;
+  if (dx != 0 || dy != 0) {
+    sermouseevent(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
+                  buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
+                  dx, dy);
+    // can generate a motion event
+    SDL_WarpMouse(midx, midy);
+  }
+}
 
 void handleinput() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     switch (event.type) {
     case SDL_KEYDOWN:
-      portram[0x60] = translatescancode(event.key.keysym.sym);
-      portram[0x64] |= 2;
-      doirq(1);
-      // printf("%02X\n", translatescancode(event.key.keysym.sym));
-      keydown[translatescancode(event.key.keysym.sym)] = 1;
-      if (keydown[0x38] && keydown[0x1D] &&
-          (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_ON)) {
-        keydown[0x1D] = 0;
-        keydown[0x32] = 0;
-        mousegrabtoggle();
-        break;
-      }
-      if (keydown[0x38] && keydown[0x1C]) {
-        keydown[0x1D] = 0;
-        keydown[0x38] = 0;
-        if (usefullscreen)
-          usefullscreen = 0;
-        else
-          usefullscreen = SDL_FULLSCREEN;
-        scrmodechange = 1;
-        break;
-      }
+      onKeyDown(&event);
       break;
     case SDL_KEYUP:
-      portram[0x60] = translatescancode(event.key.keysym.sym) | 0x80;
-      portram[0x64] |= 2;
-      doirq(1);
-      keydown[translatescancode(event.key.keysym.sym)] = 0;
+      onKeyUp(&event);
       break;
     case SDL_MOUSEBUTTONDOWN:
-      if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF) {
-        mousegrabtoggle();
-        break;
-      }
-      uint8_t tempbuttons = SDL_GetMouseState(NULL, NULL);
-      if (tempbuttons & 1)
-        buttons = 2;
-      else
-        buttons = 0;
-      if (tempbuttons & 4)
-        buttons |= 1;
-      sermouseevent(buttons, 0, 0);
+      onMouseButtonDown(&event);
       break;
     case SDL_MOUSEBUTTONUP:
-      if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF)
-        break;
-      tempbuttons = SDL_GetMouseState(NULL, NULL);
-      if (tempbuttons & 1)
-        buttons = 2;
-      else
-        buttons = 0;
-      if (tempbuttons & 4)
-        buttons |= 1;
-      sermouseevent(buttons, 0, 0);
+      onMouseButtonUp(&event);
       break;
     case SDL_MOUSEMOTION:
-    {
-      if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF)
-        break;
-      int mx = 0, my = 0;
-      SDL_GetRelativeMouseState(&mx, &my);
-      sermouseevent(buttons, (int8_t)mx, (int8_t)my);
-      SDL_WarpMouse(screen->w / 2, screen->h / 2);
-#if 0
-      while (1) {
-        SDL_PollEvent(&event);
-        SDL_GetRelativeMouseState(&mx, &my);
-        if ((mx == 0) && (my == 0))
-          break;
-      }
-#endif
-    }
+      onMouseMotion(&event);
       break;
     case SDL_QUIT:
+      log_printf(LOG_CHAN_SDL, "received SDL_QUIT");
       running = 0;
       break;
     default:

@@ -20,7 +20,6 @@
 
 #include "common.h"
 
-#include "memory.h"
 
 // ?.c
 extern uint8_t vidmode;
@@ -37,6 +36,12 @@ uint8_t readVGA(uint32_t addr32);
 
 uint8_t RAM[0x100000];
 uint8_t readonly[0x100000];
+
+void mem_init() {
+  // its static so not required
+  memset(readonly, 0, sizeof(readonly));
+  memset(RAM, 0, sizeof(RAM));
+}
 
 static uint8_t mem_read_8(uint32_t addr) {
   return RAM[addr];
@@ -66,7 +71,6 @@ void write86(uint32_t addr32, uint8_t value) {
   if (readonly[addr32] || (addr32 >= 0xC0000)) {
     return;
   }
-
   if ((addr32 >= 0xA0000) && (addr32 <= 0xBFFFF)) {
     if ((vidmode != 0x13) && (vidmode != 0x12) && (vidmode != 0xD) &&
         (vidmode != 0x10)) {
@@ -89,14 +93,12 @@ void write86(uint32_t addr32, uint8_t value) {
 
 void writew86(uint32_t addr32, uint16_t value) {
   addr32 &= 0xFFFFF;
-
   write86(addr32, (uint8_t)value);
   write86(addr32 + 1, (uint8_t)(value >> 8));
 }
 
 uint8_t read86(uint32_t addr32) {
   addr32 &= 0xFFFFF;
-
   if ((addr32 >= 0xA0000) && (addr32 <= 0xBFFFF)) {
     if ((vidmode == 0xD) || (vidmode == 0xE) || (vidmode == 0x10) ||
         (vidmode == 0x12)) {
@@ -111,39 +113,36 @@ uint8_t read86(uint32_t addr32) {
       return readVGA(addr32 - 0xA0000);
     }
   }
-
   if (!didbootstrap) {
     // ugly hack to make BIOS always believe we have an EGA/VGA card installed
     mem_write_8(0x410, 0x41);
     // the BIOS doesn't have any concept of hard drives, so here's another hack
     mem_write_8(0x475, hdcount);
   }
-
   return mem_read_8(addr32);
 }
 
 uint16_t readw86(uint32_t addr32) {
   addr32 &= 0xFFFFF;
-
   return (uint16_t)(read86(addr32 + 0) << 0) |
          (uint16_t)(read86(addr32 + 1) << 8);
 }
 
 uint32_t mem_loadbinary(uint32_t addr32, uint8_t *filename, uint8_t roflag) {
-  FILE *binfile = NULL;
-  uint32_t readsize;
-
-  binfile = fopen(filename, "rb");
+  FILE *binfile = fopen(filename, "rb");
   if (binfile == NULL) {
-    return (0);
+    log_printf(LOG_CHAN_MEM, "unable to open rom file '%s'", filename);
+    return 0;
   }
-
+  log_printf(LOG_CHAN_MEM, "loading rom '%s' at %08x", filename, addr32);
+  // get filesize
   fseek(binfile, 0, SEEK_END);
-  readsize = ftell(binfile);
+  uint32_t readsize = ftell(binfile);
   fseek(binfile, 0, SEEK_SET);
+  // load into memory
   fread((void *)&RAM[addr32], 1, readsize, binfile);
   fclose(binfile);
-
+  // set read only mask
   memset((void *)&readonly[addr32], roflag, readsize);
   return (readsize);
 }
@@ -152,33 +151,30 @@ uint32_t mem_loadrom(uint32_t addr32, uint8_t *filename, uint8_t failure_fatal) 
   uint32_t readsize;
   readsize = mem_loadbinary(addr32, filename, 1);
   if (!readsize) {
-    if (failure_fatal)
-      printf("FATAL: ");
-    else
-      printf("WARNING: ");
-    printf("Unable to load %s\n", filename);
-    return (0);
+    return 0;
   } else {
-    printf("Loaded %s at 0x%05X (%lu KB)\n", filename, addr32, readsize >> 10);
     return readsize;
   }
 }
 
 uint32_t mem_loadbios(uint8_t *filename) {
-  FILE *binfile = NULL;
-  uint32_t readsize;
-
-  binfile = fopen(filename, "rb");
+  FILE *binfile = fopen(filename, "rb");
   if (binfile == NULL) {
+    log_printf(LOG_CHAN_MEM, "unable to open bios file '%s'", filename);
     return (0);
   }
-
+  // get filesize
   fseek(binfile, 0, SEEK_END);
-  readsize = ftell(binfile);
+  uint32_t readsize = ftell(binfile);
   fseek(binfile, 0, SEEK_SET);
-  fread((void *)&RAM[0x100000 - readsize], 1, readsize, binfile);
+  const uint32_t addr32 = 0x100000 - readsize;
+  // log message
+  log_printf(LOG_CHAN_MEM, "loading bios '%s' at %08x", filename, addr32);
+  // load into memory
+  fread((void *)&RAM[addr32], 1, readsize, binfile);
   fclose(binfile);
+  // set readonly mask
+  memset((void *)&readonly[addr32], 1, readsize);
 
-  memset((void *)&readonly[0x100000 - readsize], 1, readsize);
-  return (readsize);
+  return readsize;
 }

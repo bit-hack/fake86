@@ -21,20 +21,29 @@
 /* disk.c: disk emulation routines for Fake86. works at the BIOS interrupt 13h
  * level. */
 
-// -hd0 \\.\X:
+// Use hard disk pass through as follows:
+//   -fd0 dos-boot.img -hd0 \\.\PhysicalDrive2 -boot 0
+//   -fd0 dos-boot.img -hd0 \\.\X: -boot 0
 
 #include "common.h"
 
+#if DISK_PASS_THROUGH
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <winioctl.h>
+#endif
 
 #include "../80x86/cpu.h"
 
 
 struct struct_drive {
+
+  // one or the other
+#if DISK_PASS_THROUGH
   HANDLE *handle;
+#endif
   FILE *diskfile;
+
   uint32_t filesize;
   uint32_t cyls;
   uint32_t sects;
@@ -61,6 +70,7 @@ static uint8_t disk_insert_image(uint8_t drivenum, char *filename) {
   }
   d->diskfile = fopen(filename, "r+b");
   if (d->diskfile == NULL) {
+    log_printf(LOG_CHAN_DISK, "fopen failed");
     d->inserted = 0;
     return 1;
   }
@@ -98,6 +108,7 @@ static uint8_t disk_insert_image(uint8_t drivenum, char *filename) {
 }
 
 static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
+#if DISK_PASS_THROUGH
   struct struct_drive* d = &disk[drivenum];
 
   if (d->handle) {
@@ -105,21 +116,49 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
     d->inserted = 0;
   }
 
-  d->handle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ,
-                          NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  const DWORD attribs =
+    FILE_FLAG_WRITE_THROUGH |
+    FILE_FLAG_NO_BUFFERING |
+    FILE_ATTRIBUTE_NORMAL |
+    FILE_FLAG_RANDOM_ACCESS;
+
+  const bool read_only = false;
+  const DWORD share_mode = read_only ?
+    FILE_SHARE_READ : FILE_SHARE_READ | FILE_SHARE_WRITE;
+  const DWORD access_mode = read_only ?
+    GENERIC_READ : GENERIC_READ | GENERIC_WRITE;
+
+  d->handle = CreateFileA(filename,
+                          access_mode,
+                          share_mode,
+                          NULL,
+                          OPEN_EXISTING,
+                          attribs,
+                          NULL);
   if (INVALID_HANDLE_VALUE == d->handle) {
+    log_printf(LOG_CHAN_DISK, "CreateFileA failed");
     return 1;
+  }
+
+  DWORD dwRet = 0;
+
+  if (!read_only) {
+    if (FALSE == DeviceIoControl(d->handle, FSCTL_ALLOW_EXTENDED_DASD_IO,
+                                 NULL, 0, NULL, 0, &dwRet, NULL)) {
+      log_printf(LOG_CHAN_DISK, "set FSCTL_ALLOW_EXTENDED_DASD_IO failed");
+    }
   }
 
   DISK_GEOMETRY geo;
   memset(&geo, 0, sizeof(geo));
-  DWORD dwRet = 0;
-  if (FALSE == DeviceIoControl(d->handle, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL, 0, &geo, sizeof(geo), &dwRet, NULL)) {
+  if (FALSE == DeviceIoControl(d->handle, IOCTL_DISK_GET_DRIVE_GEOMETRY,
+                               NULL, 0, &geo, sizeof(geo), &dwRet, NULL)) {
+    log_printf(LOG_CHAN_DISK, "IOCTL_DISK_GET_DRIVE_GEOMETRY failed");
     return 1;
   }
 
   if (geo.BytesPerSector != 512) {
-    // Sector size unsuitable
+    log_printf(LOG_CHAN_DISK, "sector size of %d is unsuitable", geo.BytesPerSector);
     return 1;
   }
 
@@ -128,7 +167,7 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
   d->sects = geo.SectorsPerTrack;
 
   if (geo.Cylinders.HighPart) {
-    // Disk too large
+    log_printf(LOG_CHAN_DISK, "disk too large!");
     return 1;
   }
 
@@ -141,14 +180,23 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
     ++hdcount;
   }
 
+  log_printf(LOG_CHAN_DISK, "disk mapped");
+
+#endif // DISK_PASS_THROUGH
   return 0;
 }
 
 uint8_t disk_insert(uint8_t drivenum, char *filename) {
+#if DISK_PASS_THROUGH
   if (filename[0] == '\\' && filename[1] == '\\') {
+#else
+  if (true) {
+#endif
+    log_printf(LOG_CHAN_DISK, "mapping raw disk '%s'", filename);
     return disk_insert_raw(drivenum, filename);
   }
   else {
+    log_printf(LOG_CHAN_DISK, "inserting disk '%s'", filename);
     return disk_insert_image(drivenum, filename);
   }
 }
@@ -162,11 +210,13 @@ void disk_eject(uint8_t drivenum) {
     fclose(d->diskfile);
     d->diskfile = NULL;
   }
+#if DISK_PASS_THROUGH
   // raw disk access
   if (d->handle) {
     CloseHandle(d->handle);
     d->handle = NULL;
   }
+#endif
 #if 1
   if (drivenum >= 0x80) {
     --hdcount;
@@ -181,9 +231,11 @@ static bool _disk_seek(struct struct_drive* d, uint32_t offset) {
     }
     return true;
   }
+#if DISK_PASS_THROUGH
   if (d->handle) {
     return INVALID_SET_FILE_POINTER != SetFilePointer(d->handle, offset, NULL, FILE_BEGIN);
   }
+#endif
   return false;
 }
 
@@ -194,6 +246,7 @@ static bool _disk_read(struct struct_drive* d, uint8_t *dst, uint32_t size) {
     }
     return true;
   }
+#if DISK_PASS_THROUGH
   if (d->handle) {
     DWORD read = 0;
     if (FALSE == ReadFile(d->handle, dst, size, &read, NULL)) {
@@ -201,6 +254,7 @@ static bool _disk_read(struct struct_drive* d, uint8_t *dst, uint32_t size) {
     }
     return read == size;
   }
+#endif
   return false;
 }
 
@@ -210,13 +264,18 @@ static bool _disk_write(struct struct_drive* d, const uint8_t *src, uint32_t siz
       return true;
     }
   }
+#if DISK_PASS_THROUGH
   if (d->handle) {
     DWORD written = 0;
     if (FALSE == WriteFile(d->handle, src, size, &written, NULL)) {
       return false;
     }
+    if (!FlushFileBuffers(d->handle)) {
+      // error flushing buffers
+    }
     return written == size;
   }
+#endif
   return false;
 }
 

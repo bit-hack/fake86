@@ -200,6 +200,12 @@ static void vidinterrupt() {
       portram[0x3D8] = portram[0x3D8] & 0xFE;
       break;
     }
+
+    const int new_vidmode = regs.byteregs[regal] & 0x7F;
+    if (vidmode != new_vidmode) {
+      log_printf(LOG_CHAN_VIDEO, "change video mode to 0x%x", new_vidmode);
+    }
+
     vidmode = regs.byteregs[regal] & 0x7F;
     RAM[0x449] = vidmode;
     RAM[0x44A] = (uint8_t)cols;

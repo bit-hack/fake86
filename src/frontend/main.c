@@ -29,12 +29,10 @@
 SDL_Thread *thread_console = NULL;
 SDL_Thread *thread_emu = NULL;
 
-const uint8_t *build = BUILD_STRING;
-
 extern uint8_t running, renderbenchmark;
 
 void exec86(uint32_t execloops);
-bool initscreen(uint8_t *ver);
+bool initscreen();
 
 void handleinput();
 void handlevideo();
@@ -90,15 +88,6 @@ extern int ConsoleThread(void *);
 
 extern void bufsermousedata(uint8_t value);
 
-static void printbinary(uint8_t value) {
-  for (int8_t curbit = 7; curbit >= 0; curbit--) {
-    if ((value >> curbit) & 1)
-      printf("1");
-    else
-      printf("0");
-  }
-}
-
 static void inithardware() {
 #ifdef NETWORKING_ENABLED
   if (ethif != 254)
@@ -141,7 +130,7 @@ static void inithardware() {
   if (doaudio)
     initaudio();
   inittiming();
-  initscreen((uint8_t *)build);
+  initscreen();
 }
 
 // Emulation therad
@@ -165,42 +154,44 @@ static int EmuThread(void *dummy) {
   return 0;
 }
 
+static void display_banner() {
+  log_printf(LOG_CHAN_ALL, "(c)2019      Aidan Dodds");
+  log_printf(LOG_CHAN_ALL, "(c)2010-2013 Mike Chambers");
+  log_printf(LOG_CHAN_ALL, "[A portable, open-source 8086 PC emulator]");
+  log_printf(LOG_CHAN_ALL, "build: %s\n", BUILD_STRING);
+}
+
+static void on_exit(void) {
+  log_close();
+}
+
 int main(int argc, char *argv[]) {
-  uint32_t biossize;
-
-  printf("%s (c)2010-2013 Mike Chambers\n", build);
-  printf("[A portable, open-source 8086 PC emulator]\n\n");
-
+  // setup out exit handler
+  atexit(on_exit);
+  // initalize the log file
+  log_init();
+  // parse the input command line
   parsecl(argc, argv);
-
-  memset(readonly, 0, 0x100000);
-  biossize = mem_loadbios(biosfile);
+  // initalize memory
+  mem_init();
+  // load bios
+  const uint32_t biossize = mem_loadbios(biosfile);
   if (!biossize)
-    return (-1);
+    return -1;
 #ifdef DISK_CONTROLLER_ATA
   if (!mem_loadrom(0xD0000UL, PATH_DATAFILES "ide_xt.bin", 1))
     return (-1);
 #endif
+  // load other roms
   if (biossize <= 8192) {
     mem_loadrom(0xF6000UL, PATH_DATAFILES "rombasic.bin", 0);
     if (!mem_loadrom(0xC0000UL, PATH_DATAFILES "videorom.bin", 1))
       return (-1);
   }
-  printf("\nInitializing CPU... ");
   running = 1;
   cpu_reset();
-  printf("OK!\n");
 
-#ifndef _WIN32
-#ifndef __APPLE__
-  XInitThreads();
-#endif
-#endif
   inithardware();
-
-#ifdef _WIN32
-  //	initmenus();
-#endif
 
   if (useconsole) {
     thread_console = SDL_CreateThread(ConsoleThread, NULL);
@@ -244,5 +235,5 @@ int main(int argc, char *argv[]) {
   if (useconsole)
     exit(0); // makes sure console thread quits even if blocking
 
-  return (0);
+  return 0;
 }

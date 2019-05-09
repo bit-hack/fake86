@@ -1,3 +1,23 @@
+/*
+  Fake86: A portable, open-source 8086 PC emulator.
+  Copyright (C)2010-2012 Mike Chambers
+
+  This program is free software; you can redistribute it and/or
+  modify it under the terms of the GNU General Public License
+  as published by the Free Software Foundation; either version 2
+  of the License, or (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+  USA.
+*/
+
 #pragma once
 
 #include <assert.h>
@@ -47,6 +67,9 @@ struct sermouse_s {
   int8_t bufptr;
 };
 
+void initsermouse(uint16_t baseport, uint8_t irq);
+void sermouseevent(uint8_t lmb, uint8_t rmb, int32_t xrel, int32_t yrel);
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- memory.c
 extern uint8_t RAM[0x100000];
 extern uint8_t readonly[0x100000];
@@ -57,6 +80,7 @@ void writew86(uint32_t addr32, uint16_t value);
 uint8_t read86(uint32_t addr32);
 uint16_t readw86(uint32_t addr32);
 
+void mem_init();
 uint32_t mem_loadbinary(uint32_t addr32, uint8_t *filename, uint8_t roflag);
 uint32_t mem_loadrom(uint32_t addr32, uint8_t *filename, uint8_t failure_fatal);
 uint32_t mem_loadbios(uint8_t *filename);
@@ -107,3 +131,19 @@ void disk_bootstrap(int intnum);
 extern uint8_t bootdrive, hdcount;
 
 bool disk_is_inserted(int num);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- log.c
+
+enum {
+  LOG_CHAN_ALL,
+  LOG_CHAN_DISK,
+  LOG_CHAN_FRONTEND,
+  LOG_CHAN_SDL,
+  LOG_CHAN_CPU,
+  LOG_CHAN_MEM,
+  LOG_CHAN_VIDEO,
+};
+
+void log_init();
+void log_close();
+void log_printf(int channel, const char *fmt, ...);

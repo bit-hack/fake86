@@ -23,7 +23,6 @@
 #include "../fake86/common.h"
 
 
-//extern struct struct_drive disk[256];
 #ifndef _WIN32
 #define strcmpi strcasecmp
 #else

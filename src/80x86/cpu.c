@@ -495,6 +495,7 @@ uint16_t cpu_pop() {
 }
 
 void cpu_reset() {
+  log_printf(LOG_CHAN_CPU, "reset");
   segregs[regcs] = 0xFFFF;
   ip = 0x0000;
   hltstate = 0;
@@ -1138,8 +1139,10 @@ void exec86(uint32_t execloops) {
     }
 
     if (!trap_toggle && (ifl && (i8259.irr & (~i8259.imr)))) {
+//      printf("[DEBUG] CPU halt for next interupt request\n");
       hltstate = 0;
-      intcall86(nextintr()); /* get next interrupt from the i8259, if any */
+      const int next_int = nextintr();
+      intcall86(next_int); /* get next interrupt from the i8259, if any */
     }
 
     if (hltstate)
@@ -2989,7 +2992,6 @@ void exec86(uint32_t execloops) {
           regs.wordregs[regbp] = regs.wordregs[regbp] - 2;
           cpu_push(regs.wordregs[regbp]);
         }
-
         cpu_push(regs.wordregs[regsp]);
       }
 
@@ -3301,17 +3303,20 @@ void exec86(uint32_t execloops) {
 
     default:
 #ifdef CPU_ALLOW_ILLEGAL_OP_EXCEPTION
-      intcall86(
-          6); /* trip invalid opcode exception (this occurs on the 80186+,
-                 8086/8088 CPUs treat them as NOPs. */
-/* technically they aren't exactly like NOPs in most cases, but for our
- * pursoses, that's accurate enough. */
+      // trip invalid opcode exception (this occurs on the 80186+,
+      // 8086/8088 CPUs treat them as NOPs.
+      intcall86(6);
+      // technically they aren't exactly like NOPs in most cases,
+      // but for our pursoses, that's accurate enough.
 #endif
-      if (verbose) {
-        printf("Illegal opcode: %02X %02X /%X @ %04X:%04X\n",
-               getmem8(savecs, saveip), getmem8(savecs, saveip + 1),
-               (getmem8(savecs, saveip + 2) >> 3) & 7, savecs, saveip);
-      }
+      log_printf(
+        LOG_CHAN_CPU,
+        "illegal opcode: %02X %02X /%X @ %04X:%04X\n",
+        getmem8(savecs, saveip),
+        getmem8(savecs, saveip + 1),
+        (getmem8(savecs, saveip + 2) >> 3) & 7,
+        savecs,
+        saveip);
       break;
     }
 

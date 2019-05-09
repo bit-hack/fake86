@@ -53,6 +53,10 @@ void intcall86(uint8_t intnum) {
 #endif
   }
 
+  if (intnum == 4) {
+    printf("doing IRQ 4\n");
+  }
+
   // prepare an interupt?
   cpu_push(makeflagsword());
   cpu_push(segregs[regcs]);

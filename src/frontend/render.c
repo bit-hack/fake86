@@ -72,7 +72,7 @@ void setwindowtitle(uint8_t *extra) {
   SDL_WM_SetCaption((const char *)temptext, NULL);
 }
 
-bool initscreen(uint8_t *ver) {
+bool initscreen() {
 
   uint32_t init_flags = SDL_INIT_VIDEO | SDL_INIT_TIMER;
   if (doaudio) {
@@ -82,13 +82,14 @@ bool initscreen(uint8_t *ver) {
   if (SDL_Init(init_flags)) {
     return false;
   }
+  log_printf(LOG_CHAN_SDL, "initalized SDL");
 
   screen = SDL_SetVideoMode(640, 400, 32, window_flags);
   if (!screen) {
     return false;
   }
 
-  sprintf(windowtitle, "%s", ver);
+  sprintf(windowtitle, "%s ", BUILD_STRING);
   setwindowtitle("");
 
   initcga();
@@ -113,6 +114,7 @@ static void CheckForModeChange() {
 
   // free old video surface
   if (screen != NULL) {
+    log_printf(LOG_CHAN_SDL, "released old surface");
     SDL_FreeSurface(screen);
   }
 
@@ -122,12 +124,17 @@ static void CheckForModeChange() {
   } else if (noscale) {
     screen = SDL_SetVideoMode(nw, nh, 32, flags);
   } else {
-    if ((nw >= 640) || (nh >= 400)) {
+    if (nw >= 640 || nh >= 400) {
       screen = SDL_SetVideoMode(nw, nh, 32, flags);
     } else {
       screen = SDL_SetVideoMode(640, 400, 32, flags);
     }
   }
+
+  if (screen) {
+    log_printf(LOG_CHAN_SDL, "new video mode [%d, %d]", screen->w, screen->h);
+  }
+
 #if 0
   if (usefullscreen) {
     SDL_WM_GrabInput(
