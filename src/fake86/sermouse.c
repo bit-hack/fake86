@@ -34,15 +34,17 @@ struct sermouse_s sermouse;
 
 // buffer some serial mouse data
 void bufsermousedata(uint8_t value) {
-  if (sermouse.bufptr == 16)
+  if (sermouse.bufptr == 16) {
     return;
-  if (sermouse.bufptr == 0)
-    doirq(4);
+  }
+  if (sermouse.bufptr == 0) {
+    i8259_doirq(4);
+  }
   sermouse.buf[sermouse.bufptr++] = value;
 }
 
 // port write
-void outsermouse(uint16_t portnum, uint8_t value) {
+void mouse_port_write(uint16_t portnum, uint8_t value) {
   uint8_t oldreg;
   // printf("[DEBUG] Serial mouse, port %X out: %02X\n", portnum, value);
   portnum &= 7;
@@ -64,9 +66,8 @@ void outsermouse(uint16_t portnum, uint8_t value) {
 }
 
 // port read
-uint8_t insermouse(uint16_t portnum) {
+uint8_t mouse_port_read(uint16_t portnum) {
   uint8_t temp;
-  printf("[DEBUG] Serial mouse, port %X in\n", portnum);
   portnum &= 7;
   switch (portnum) {
   case 0: // data receive
@@ -78,7 +79,7 @@ uint8_t insermouse(uint16_t portnum) {
       --sermouse.bufptr;
     }
     if (sermouse.bufptr > 0) {
-      doirq(4);
+      i8259_doirq(4);
     }
     sermouse.reg[4] = ~sermouse.reg[4] & 1;
     return temp;
@@ -95,13 +96,13 @@ uint8_t insermouse(uint16_t portnum) {
   return (sermouse.reg[portnum & 7]);
 }
 
-void initsermouse(uint16_t baseport, uint8_t irq) {
+void mouse_init(uint16_t baseport, uint8_t irq) {
   sermouse.bufptr = 0;
-  set_port_write_redirector(baseport, baseport + 7, &outsermouse);
-  set_port_read_redirector(baseport, baseport + 7, &insermouse);
+  set_port_write_redirector(baseport, baseport + 7, mouse_port_write);
+  set_port_read_redirector(baseport, baseport + 7, mouse_port_read);
 }
 
-void sermouseevent(uint8_t lmb, uint8_t rmb, int32_t xrel, int32_t yrel) {
+void mouse_post_event(uint8_t lmb, uint8_t rmb, int32_t xrel, int32_t yrel) {
   // cast to 8 bit signed
   uint8_t rx = xrel, ry = yrel;
   // high two bits of each relative motion axis

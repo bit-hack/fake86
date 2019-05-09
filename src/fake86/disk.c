@@ -122,7 +122,7 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
     FILE_ATTRIBUTE_NORMAL |
     FILE_FLAG_RANDOM_ACCESS;
 
-  const bool read_only = false;
+  const bool read_only = true;
   const DWORD share_mode = read_only ?
     FILE_SHARE_READ : FILE_SHARE_READ | FILE_SHARE_WRITE;
   const DWORD access_mode = read_only ?
@@ -136,7 +136,8 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
                           attribs,
                           NULL);
   if (INVALID_HANDLE_VALUE == d->handle) {
-    log_printf(LOG_CHAN_DISK, "CreateFileA failed");
+    DWORD error = GetLastError();
+    log_printf(LOG_CHAN_DISK, "CreateFileA failed (%d)", error);
     return 1;
   }
 

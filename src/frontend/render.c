@@ -112,6 +112,8 @@ static void CheckForModeChange() {
     return;
   }
 
+  i8042_reset();
+
   // free old video surface
   if (screen != NULL) {
     log_printf(LOG_CHAN_SDL, "released old surface");
@@ -130,6 +132,8 @@ static void CheckForModeChange() {
       screen = SDL_SetVideoMode(640, 400, 32, flags);
     }
   }
+
+  i8042_reset();
 
   if (screen) {
     log_printf(LOG_CHAN_SDL, "new video mode [%d, %d]", screen->w, screen->h);

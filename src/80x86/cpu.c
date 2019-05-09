@@ -1106,7 +1106,6 @@ uint32_t makeupticks = 0;
 extern float timercomp;
 uint64_t timerticks = 0, realticks = 0;
 uint64_t lastcountertimer = 0, counterticks = 10000;
-extern uint8_t nextintr();
 extern void timing();
 
 #ifdef USE_PREFETCH_QUEUE
@@ -1139,9 +1138,8 @@ void exec86(uint32_t execloops) {
     }
 
     if (!trap_toggle && (ifl && (i8259.irr & (~i8259.imr)))) {
-//      printf("[DEBUG] CPU halt for next interupt request\n");
       hltstate = 0;
-      const int next_int = nextintr();
+      const int next_int = i8259_nextintr();
       intcall86(next_int); /* get next interrupt from the i8259, if any */
     }
 

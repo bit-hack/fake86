@@ -28,17 +28,9 @@
 
 struct structpic i8259;
 
-extern uint8_t keyboardwaitack;
-
-extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
-                                      void *callback);
-extern void set_port_read_redirector(uint16_t startport, uint16_t endport,
-                                     void *callback);
-
 extern uint32_t makeupticks;
 
-// port write
-uint8_t in8259(uint16_t portnum) {
+uint8_t i8259_port_read(uint16_t portnum) {
   switch (portnum & 1) {
   case 0:
     if (i8259.readmode == 0)
@@ -51,8 +43,7 @@ uint8_t in8259(uint16_t portnum) {
   return (0);
 }
 
-// port read
-void out8259(uint16_t portnum, uint8_t value) {
+void i8259_port_write(uint16_t portnum, uint8_t value) {
   uint8_t i;
   switch (portnum & 1) {
   case 0:
@@ -68,7 +59,6 @@ void out8259(uint16_t portnum, uint8_t value) {
       }
     }
     if (value & 0x20) { // EOI command
-      keyboardwaitack = 0;
       for (i = 0; i < 8; i++) {
         if ((i8259.isr >> i) & 1) {
           i8259.isr ^= (1 << i);
@@ -94,7 +84,7 @@ void out8259(uint16_t portnum, uint8_t value) {
   }
 }
 
-uint8_t nextintr() {
+uint8_t i8259_nextintr() {
   // XOR request register with inverted mask register
   uint8_t tmpirr = i8259.irr & (~i8259.imr); 
   for (uint8_t i = 0; i < 8; i++) {
@@ -108,17 +98,10 @@ uint8_t nextintr() {
   return 0; 
 }
 
-void doirq(uint8_t irqnum) {
-  if (irqnum == 8) {
-    __debugbreak();
-  }
+void i8259_doirq(uint8_t irqnum) {
   i8259.irr |= (1 << irqnum);
-  if (irqnum == 1)
-    keyboardwaitack = 1;
 }
 
-void init8259() {
+void i8259_init() {
   memset((void *)&i8259, 0, sizeof(i8259));
-  set_port_write_redirector(0x20, 0x21, &out8259);
-  set_port_read_redirector(0x20, 0x21, &in8259);
 }

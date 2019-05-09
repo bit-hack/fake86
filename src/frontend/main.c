@@ -98,37 +98,52 @@ static void inithardware() {
   memset(port_read_callback, 0, sizeof(port_read_callback));
   memset(port_write_callback16, 0, sizeof(port_write_callback16));
   memset(port_read_callback16, 0, sizeof(port_read_callback16));
+  
+  printf("  - Intel 8042 keyboard controller: ");
+  i8042_init();
+  printf("OK\n");
+
   printf("  - Intel 8253 timer: ");
-  init8253();
+  i8253_init();
   printf("OK\n");
+
   printf("  - Intel 8259 interrupt controller: ");
-  init8259();
+  i8259_init();
   printf("OK\n");
+
   printf("  - Intel 8237 DMA controller: ");
   init8237();
   printf("OK\n");
+
   initVideoPorts();
   if (usessource) {
     printf("  - Disney Sound Source: ");
     initsoundsource();
     printf("OK\n");
   }
+
 #ifndef NETWORKING_OLDCARD
   printf("  - Novell NE2000 ethernet adapter: ");
   isa_ne2000_init(0x300, 6);
   printf("OK\n");
 #endif
+
   printf("  - Adlib FM music card: ");
   initadlib(0x388);
   printf("OK\n");
+
   printf("  - Creative Labs Sound Blaster 2.0: ");
   initBlaster(0x220, 7);
   printf("OK\n");
+
   printf("  - Serial mouse (Microsoft compatible): ");
-  initsermouse(0x3F8, 4);
+  mouse_init(0x3F8, 4);
   printf("OK\n");
-  if (doaudio)
+
+  if (doaudio) {
     initaudio();
+  }
+
   inittiming();
   initscreen();
 }
@@ -152,13 +167,6 @@ static int EmuThread(void *dummy) {
     }
   }
   return 0;
-}
-
-static void display_banner() {
-  log_printf(LOG_CHAN_ALL, "(c)2019      Aidan Dodds");
-  log_printf(LOG_CHAN_ALL, "(c)2010-2013 Mike Chambers");
-  log_printf(LOG_CHAN_ALL, "[A portable, open-source 8086 PC emulator]");
-  log_printf(LOG_CHAN_ALL, "build: %s\n", BUILD_STRING);
 }
 
 static void on_exit(void) {
@@ -203,6 +211,7 @@ int main(int argc, char *argv[]) {
 
   lasttick = starttick = SDL_GetTicks();
   while (running) {
+    i8042_tick();
     handleinput();
     handlevideo();
 #ifdef NETWORKING_ENABLED

@@ -18,14 +18,10 @@
   USA.
 */
 
-/* input.c: functions for translation of SDL scancodes to BIOS scancodes,
+/* events.c: functions for translation of SDL scancodes to BIOS scancodes,
    and handling of SDL events in general. */
 
-#include "common.h"
-
-
-uint8_t keydown[0x100];
-uint8_t keyboardwaitack = 0;
+#include "../fake86/common.h"
 
 extern uint32_t usegrabmode;
 extern uint8_t running, portram[0x10000];
@@ -285,20 +281,20 @@ static void mousegrabtoggle() {
 }
 
 static void onKeyDown(const SDL_Event *event) {
-  portram[0x60] = translatescancode(event->key.keysym.sym);
-  portram[0x64] |= 2;
-  doirq(1);
-  keydown[translatescancode(event->key.keysym.sym)] = 1;
-  if (keydown[0x38] && keydown[0x1D] &&
-      (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_ON)) {
-    keydown[0x1D] = 0;
-    keydown[0x32] = 0;
+  // convert scancode
+  const uint8_t scancode = translatescancode(event->key.keysym.sym);
+  // push to keyboard controller
+  i8042_key_push(scancode);
+
+  const uint8_t *keys = SDL_GetKeyState(NULL);
+  // ctrl + alt to release mouse
+  if (keys[SDLK_LCTRL] && keys[SDLK_LALT]) {
     mousegrabtoggle();
     return;
   }
-  if (keydown[0x38] && keydown[0x1C]) {
-    keydown[0x1D] = 0;
-    keydown[0x38] = 0;
+
+  // alt + enter to toggle full screen
+  if (keys[SDLK_LALT] && keys[SDLK_RETURN]) {
     if (usefullscreen) {
       usefullscreen = 0;
     } else {
@@ -310,10 +306,10 @@ static void onKeyDown(const SDL_Event *event) {
 }
 
 static void onKeyUp(const SDL_Event *event) {
-  portram[0x60] = translatescancode(event->key.keysym.sym) | 0x80;
-  portram[0x64] |= 2;
-  doirq(1);
-  keydown[translatescancode(event->key.keysym.sym)] = 0;
+  // convert scancode
+  const uint8_t scancode = translatescancode(event->key.keysym.sym) | 0x80;
+  // push to keyboard controller
+  i8042_key_push(scancode);
 }
 
 static void onMouseButtonDown(const SDL_Event *event) {
@@ -322,9 +318,9 @@ static void onMouseButtonDown(const SDL_Event *event) {
     return;
   }
   const uint8_t buttons = SDL_GetMouseState(NULL, NULL);
-  sermouseevent(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
-                buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
-                0, 0);
+  mouse_post_event(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
+                   buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
+                   0, 0);
 }
 
 static void onMouseButtonUp(const SDL_Event *event) {
@@ -332,9 +328,9 @@ static void onMouseButtonUp(const SDL_Event *event) {
     return;
   }
   const uint8_t buttons = SDL_GetMouseState(NULL, NULL);
-  sermouseevent(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
-                buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
-                0, 0);
+  mouse_post_event(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
+                   buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
+                   0, 0);
 }
 
 static void onMouseMotion(const SDL_Event *event) {
@@ -347,11 +343,20 @@ static void onMouseMotion(const SDL_Event *event) {
   const int dx = mx - midx;
   const int dy = my - midy;
   if (dx != 0 || dy != 0) {
-    sermouseevent(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
-                  buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
-                  dx, dy);
+    mouse_post_event(buttons & SDL_BUTTON(SDL_BUTTON_LEFT),
+                     buttons & SDL_BUTTON(SDL_BUTTON_RIGHT),
+                     dx, dy);
     // can generate a motion event
     SDL_WarpMouse(midx, midy);
+  }
+}
+
+static void onActiveEvent(const SDL_Event *event) {
+  // lost focus
+  if (event->active.gain == 0) {
+    if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_ON) {
+      mousegrabtoggle();
+    }
   }
 }
 
@@ -359,6 +364,9 @@ void handleinput() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     switch (event.type) {
+    case SDL_ACTIVEEVENT:
+      onActiveEvent(&event);
+      break;
     case SDL_KEYDOWN:
       onKeyDown(&event);
       break;

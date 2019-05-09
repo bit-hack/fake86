@@ -22,6 +22,9 @@
    as functions for emulated hardware components to register their
    read/write callback functions across the port address range. */
 
+// for a good list of ports see:
+// http://bochs.sourceforge.net/techspec/PORTS.LST
+
 #include "common.h"
 
 #include "../80x86/cpu.h"
@@ -31,74 +34,115 @@ extern uint8_t portram[0x10000];
 extern uint8_t speakerenabled;
 extern uint8_t keyboardwaitack;
 
-void (*do_callback_write)(uint16_t portnum, uint8_t value) = NULL;
-uint8_t (*do_callback_read)(uint16_t portnum) = NULL;
-void (*do_callback_write16)(uint16_t portnum, uint16_t value) = NULL;
-uint16_t (*do_callback_read16)(uint16_t portnum) = NULL;
-void *(port_write_callback[0x10000]);
-void *(port_read_callback[0x10000]);
-void *(port_write_callback16[0x10000]);
-void *(port_read_callback16[0x10000]);
+typedef void (*port_write_b_t)(uint16_t portnum, uint8_t value);
+typedef uint8_t (*port_read_b_t)(uint16_t portnum);
+
+typedef void (*port_write_w_t)(uint16_t portnum, uint16_t value);
+typedef uint16_t (*port_read_w_t)(uint16_t portnum);
+
+port_write_b_t port_write_callback[0x10000];
+port_read_b_t port_read_callback[0x10000];
+
+port_write_w_t port_write_callback16[0x10000];
+port_read_w_t port_read_callback16[0x10000];
 
 extern uint8_t verbose;
+
+// 8bit port write
 void portout(uint16_t portnum, uint8_t value) {
+
   portram[portnum] = value;
-  // if (verbose) printf("portout(0x%X, 0x%02X);\n", portnum, value);
+
   switch (portnum) {
+  // (Programmable Interrupt Controller 8259)
+  case 0x20:
+  case 0x21:
+    i8259_port_write(portnum, value);
+    return;
+
+  // 0040-005F ----	PIT  (Programmable Interrupt Timer  8253, 8254)
+  case 0x40:
+  case 0x41:
+  case 0x42:
+  case 0x43:
+    i8253_port_write(portnum, value);
+    return;
+
+  // 0060-006F ----	Keyboard controller 804x (8041, 8042) (or PPI (8255) on PC,XT)
   case 0x61:
-    if ((value & 3) == 3)
-      speakerenabled = 1;
-    else
-      speakerenabled = 0;
+    speakerenabled = 0;
+    // timer 2 gate to speaker enable
+    if (value & 1) {
+      // speaker data enable
+      if (value & 2) {
+        speakerenabled = 1;
+      }
+    }
+    return;
+  case 0x60:
+  case 0x64:
+    i8042_port_write(portnum, value);
     return;
   }
-  do_callback_write =
-      (void (*)(uint16_t portnum, uint8_t value))port_write_callback[portnum];
-  if (do_callback_write != (void *)0)
-    (*do_callback_write)(portnum, value);
+
+  port_write_b_t cb = port_write_callback[portnum];
+  if (cb) {
+    cb(portnum, value);
+  }
 }
 
+// 8bit port read
 uint8_t portin(uint16_t portnum) {
-  // if (verbose) printf("portin(0x%X);\n", portnum);
   switch (portnum) {
+  case 0x20:
+  case 0x21:
+    return i8259_port_read(portnum);
+
+  case 0x40:
+  case 0x41:
+  case 0x42:
+  case 0x43:
+    return i8253_port_read(portnum);
+
   case 0x62:
-    return (0x00);
-  case 0x60:
+    return 0x00;
   case 0x61:
   case 0x63:
+    return portram[portnum];
+
+  case 0x60:
   case 0x64:
-    return (portram[portnum]);
+    return i8042_port_read(portnum);
   }
-  do_callback_read = (uint8_t (*)(uint16_t portnum))port_read_callback[portnum];
-  if (do_callback_read != (void *)0)
-    return ((*do_callback_read)(portnum));
-  return (0xFF);
+
+  port_read_b_t cb = port_read_callback[portnum];
+  return cb ? cb(portnum) : 0xff;
 }
 
+// 16bit port write
 void portout16(uint16_t portnum, uint16_t value) {
-  do_callback_write16 =
-      (void (*)(uint16_t portnum,
-                uint16_t value))port_write_callback16[portnum];
-  if (do_callback_write16 != (void *)0) {
-    (*do_callback_write16)(portnum, value);
-    return;
+  port_write_w_t cb = port_write_callback16[portnum];
+  if (cb) {
+    cb(portnum, value);
   }
-
-  portout(portnum, (uint8_t)value);
-  portout(portnum + 1, (uint8_t)(value >> 8));
+  else {
+    portout(portnum, (uint8_t)value);
+    portout(portnum + 1, (uint8_t)(value >> 8));
+  }
 }
 
+// 16bit port read
 uint16_t portin16(uint16_t portnum) {
-  uint16_t ret;
-
-  do_callback_read16 =
-      (uint16_t (*)(uint16_t portnum))port_read_callback16[portnum];
-  if (do_callback_read16 != (void *)0)
-    return ((*do_callback_read16)(portnum));
-
-  ret = (uint16_t)portin(portnum);
-  ret |= (uint16_t)portin(portnum + 1) << 8;
-  return (ret);
+  port_read_w_t cb = port_read_callback16[portnum];
+  if (cb) {
+    return cb(portnum);
+  }
+  else {
+    // do dual 8bit read
+    const uint16_t lo = (uint16_t)portin(portnum + 0);
+    const uint16_t hi = (uint16_t)portin(portnum + 1);
+    return (hi << 8) | lo;
+  }
 }
 
 void set_port_write_redirector(uint16_t startport, uint16_t endport,

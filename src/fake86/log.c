@@ -37,6 +37,12 @@ static const char *channel_name[] = {
 
 void log_init() {
   log_fd = fopen(LOG_FNAME, "w");
+  if (log_fd) {
+    fprintf(log_fd, "(c)2019      Aidan Dodds\n");
+    fprintf(log_fd, "(c)2010-2013 Mike Chambers\n");
+    fprintf(log_fd, "[A portable, open-source 8086 PC emulator]\n");
+    fprintf(log_fd, "build: %s\n\n", BUILD_STRING);
+  }
 }
 
 void log_close() {

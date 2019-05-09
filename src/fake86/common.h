@@ -34,8 +34,6 @@
 
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8259.c
-void doirq(uint8_t irqnum);
-
 struct structpic {
   // mask register
   uint8_t imr;
@@ -56,6 +54,11 @@ struct structpic {
   uint8_t readmode; 
   uint8_t enabled;
 };
+void i8259_init();
+uint8_t i8259_port_read(uint16_t portnum);
+void i8259_port_write(uint16_t portnum, uint8_t value);
+void i8259_doirq(uint8_t irqnum);
+uint8_t i8259_nextintr();
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video.c
 bool video_int_handler(int intnum);
@@ -67,8 +70,10 @@ struct sermouse_s {
   int8_t bufptr;
 };
 
-void initsermouse(uint16_t baseport, uint8_t irq);
-void sermouseevent(uint8_t lmb, uint8_t rmb, int32_t xrel, int32_t yrel);
+void mouse_port_write(uint16_t portnum, uint8_t value);
+uint8_t mouse_port_read(uint16_t portnum);
+void mouse_init(uint16_t baseport, uint8_t irq);
+void mouse_post_event(uint8_t lmb, uint8_t rmb, int32_t xrel, int32_t yrel);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- memory.c
 extern uint8_t RAM[0x100000];
@@ -112,6 +117,18 @@ struct i8253_s {
   uint8_t active[3];
   uint16_t counter[3];
 };
+
+void i8253_port_write(uint16_t portnum, uint8_t value);
+uint8_t i8253_port_read(uint16_t portnum);
+void i8253_init();
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8042.c
+void i8042_key_push(uint8_t key);
+uint8_t i8042_port_read(uint16_t port);
+void i8042_port_write(uint16_t port, uint8_t value);
+void i8042_tick();
+void i8042_reset();
+void i8042_init();
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
 uint8_t disk_insert(uint8_t drivenum, char *filename);

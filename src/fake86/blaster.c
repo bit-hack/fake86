@@ -179,7 +179,7 @@ void cmdBlaster(uint8_t value) {
     bufNewData(blaster.lasttestval);
     break;
   case 0xF2: // force 8-bit IRQ
-    doirq(blaster.sbirq);
+    i8259_doirq(blaster.sbirq);
     break;
   case 0xF8: // undocumented command, clears in-buffer and inserts a null byte
     blaster.memptr = 0;
@@ -297,7 +297,7 @@ void tickBlaster() {
   // if (sbout != NULL) fwrite(&blaster.sample, 1, 1, sbout);
   blaster.blockstep++;
   if (blaster.blockstep > blaster.blocksize) {
-    doirq(blaster.sbirq);
+    i8259_doirq(blaster.sbirq);
 #ifdef DEBUG_BLASTER
     printf("[NOTICE] Sound Blaster did IRQ\n");
 #endif
