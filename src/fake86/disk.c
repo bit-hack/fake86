@@ -320,9 +320,9 @@ void disk_read(uint8_t drivenum,
       write86(memdest++, sectorbuffer[sectoffset]);
     }
   }
-  regs.byteregs[regal] = cursect;
+  cpu_regs.al = cursect;
   cf = 0;
-  regs.byteregs[regah] = 0;
+  cpu_regs.ah = 0;
 }
 
 void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
@@ -356,85 +356,85 @@ void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl
       return;
     }
   }
-  regs.byteregs[regal] = (uint8_t)sectcount;
+  cpu_regs.al = (uint8_t)sectcount;
   cf = 0;
-  regs.byteregs[regah] = 0;
+  cpu_regs.ah = 0;
 }
 
 void disk_int_handler(int intnum) {
   static uint8_t lastdiskah[256], lastdiskcf[256];
-  switch (regs.byteregs[regah]) {
+  switch (cpu_regs.ah) {
   case 0: // reset disk system
-    regs.byteregs[regah] = 0;
+    cpu_regs.ah = 0;
     cf = 0; // useless function in an emulator. say success and return.
     break;
   case 1: // return last status
-    regs.byteregs[regah] = lastdiskah[regs.byteregs[regdl]];
-    cf = lastdiskcf[regs.byteregs[regdl]];
+    cpu_regs.ah = lastdiskah[cpu_regs.dl];
+    cf = lastdiskcf[cpu_regs.dl];
     return;
   case 2: // read sector(s) into memory
-    if (disk[regs.byteregs[regdl]].inserted) {
-      disk_read(regs.byteregs[regdl],
+    if (disk[cpu_regs.dl].inserted) {
+      disk_read(cpu_regs.dl,
                 segregs[reges],
-                cpu_getreg16(regbx),
-                regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
-                regs.byteregs[regcl] & 63,
-                regs.byteregs[regdh],
-                regs.byteregs[regal]);
+                cpu_regs.bx,
+                cpu_regs.ch + (cpu_regs.cl / 64) * 256,
+                cpu_regs.cl & 63,
+                cpu_regs.dh,
+                cpu_regs.al);
       cf = 0;
-      regs.byteregs[regah] = 0;
+      cpu_regs.ah = 0;
     } else {
       cf = 1;
-      regs.byteregs[regah] = 1;
+      cpu_regs.ah = 1;
     }
     break;
   case 3: // write sector(s) from memory
-    if (disk[regs.byteregs[regdl]].inserted) {
-      disk_write(regs.byteregs[regdl],
-                 segregs[reges], cpu_getreg16(regbx),
-                 regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
-                 regs.byteregs[regcl] & 63,
-                 regs.byteregs[regdh],
-                 regs.byteregs[regal]);
+    if (disk[cpu_regs.dl].inserted) {
+      disk_write(cpu_regs.dl,
+                 segregs[reges], cpu_regs.bx,
+                 cpu_regs.ch + (cpu_regs.cl / 64) * 256,
+                 cpu_regs.cl & 63,
+                 cpu_regs.dh,
+                 cpu_regs.al);
       cf = 0;
-      regs.byteregs[regah] = 0;
+      cpu_regs.ah = 0;
     } else {
       cf = 1;
-      regs.byteregs[regah] = 1;
+      cpu_regs.ah = 1;
     }
     break;
   case 4:
   case 5: // format track
     cf = 0;
-    regs.byteregs[regah] = 0;
+    cpu_regs.ah = 0;
     break;
   case 8: // get drive parameters
-    if (disk[regs.byteregs[regdl]].inserted) {
+    if (disk[cpu_regs.dl].inserted) {
       cf = 0;
-      regs.byteregs[regah] = 0;
-      regs.byteregs[regch] = disk[regs.byteregs[regdl]].cyls - 1;
-      regs.byteregs[regcl] = disk[regs.byteregs[regdl]].sects & 63;
-      regs.byteregs[regcl] =
-          regs.byteregs[regcl] + (disk[regs.byteregs[regdl]].cyls / 256) * 64;
-      regs.byteregs[regdh] = disk[regs.byteregs[regdl]].heads - 1;
-      if (regs.byteregs[regdl] < 0x80) {
-        regs.byteregs[regbl] = 4; // else regs.byteregs[regbl] = 0;
-        regs.byteregs[regdl] = 2;
+      cpu_regs.ah = 0;
+      cpu_regs.ch = disk[cpu_regs.dl].cyls - 1;
+      cpu_regs.cl = disk[cpu_regs.dl].sects & 63;
+      cpu_regs.cl =
+          cpu_regs.cl + (disk[cpu_regs.dl].cyls / 256) * 64;
+      cpu_regs.dh = disk[cpu_regs.dl].heads - 1;
+      if (cpu_regs.dl < 0x80) {
+        cpu_regs.bl = 4; // else cpu_regs.bl] = 0;
+        cpu_regs.dl = 2;
       } else
-        regs.byteregs[regdl] = hdcount;
+        cpu_regs.dl = hdcount;
     } else {
       cf = 1;
-      regs.byteregs[regah] = 0xAA;
+      cpu_regs.ah = 0xAA;
     }
     break;
   default:
     cf = 1;
   }
-  lastdiskah[regs.byteregs[regdl]] = regs.byteregs[regah];
-  lastdiskcf[regs.byteregs[regdl]] = cf;
-  if (regs.byteregs[regdl] & 0x80) {
-    //    RAM[0x474] = regs.byteregs[regah];
-    write86(0x474, regs.byteregs[regah]);
+  lastdiskah[cpu_regs.dl] = cpu_regs.ah;
+  lastdiskcf[cpu_regs.dl] = cf;
+  if (cpu_regs.dl & 0x80) {
+    //    RAM[0x474] = cpu_regs.ah];
+    write86(0x474, cpu_regs.ah);
   }
 }
 
@@ -446,8 +446,8 @@ void disk_bootstrap(int intnum) {
   // read first sector of boot drive into 07C0:0000 and execute it
   if (bootdrive < 255) {
     log_printf(LOG_CHAN_DISK, "booting from disk %d", bootdrive);
-    regs.byteregs[regdl] = bootdrive;
-    disk_read(regs.byteregs[regdl], 0x07C0, 0x0000, 0, 1, 0, 1);
+    cpu_regs.dl = bootdrive;
+    disk_read(cpu_regs.dl, 0x07C0, 0x0000, 0, 1, 0, 1);
     segregs[regcs] = 0x0000;
     ip = 0x7C00;
   } else {
