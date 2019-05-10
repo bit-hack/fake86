@@ -60,8 +60,6 @@
 // emulation, it can be enabled by uncommenting the line below and recompiling.
 //#define USE_PREFETCH_QUEUE
 
-//#define CPU_ADDR_MODE_CACHE
-
 // when compiled with network support, fake86 needs libpcap/winpcap.
 // if it is disabled, the ethernet card is still emulated, but no actual
 // communication is possible -- as if the ethernet cable was unplugged.

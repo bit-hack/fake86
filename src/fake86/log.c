@@ -34,6 +34,7 @@ static const char *channel_name[] = {
   "[MEM  ]  ",
   "[VIDEO]  ",
   "[AUDIO]  ",
+  "[PORT ]  ",
 };
 
 void log_init() {

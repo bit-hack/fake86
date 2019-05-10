@@ -37,10 +37,6 @@ bool initscreen();
 void handleinput();
 void handlevideo();
 
-#ifdef CPU_ADDR_MODE_CACHE
-extern uint64_t cached_access_count, uncached_access_count;
-#endif
-
 extern volatile bool scrmodechange;
 extern uint8_t doaudio;
 extern uint64_t totalexec, totalframes;
@@ -69,10 +65,7 @@ extern void init8237();
 extern void initVideoPorts();
 extern void killaudio();
 extern void initsermouse(uint16_t baseport, uint8_t irq);
-extern void *port_write_callback[0x10000];
-extern void *port_read_callback[0x10000];
-extern void *port_write_callback16[0x10000];
-extern void *port_read_callback16[0x10000];
+
 extern void initadlib(uint16_t baseport);
 extern void initsoundsource();
 extern void isa_ne2000_init(uint16_t baseport, uint8_t irq);
@@ -99,10 +92,6 @@ static void inithardware() {
     initpcap();
 #endif
   printf("Initializing emulated hardware:\n");
-  memset(port_write_callback, 0, sizeof(port_write_callback));
-  memset(port_read_callback, 0, sizeof(port_read_callback));
-  memset(port_write_callback16, 0, sizeof(port_write_callback16));
-  memset(port_read_callback16, 0, sizeof(port_read_callback16));
   
   printf("  - Intel 8042 keyboard controller: ");
   i8042_init();
@@ -153,6 +142,7 @@ static void inithardware() {
   initscreen();
 }
 
+#if 0
 // Emulation therad
 static int EmuThread(void *dummy) {
   while (running) {
@@ -173,6 +163,7 @@ static int EmuThread(void *dummy) {
   }
   return 0;
 }
+#endif
 
 static void on_exit(void) {
   log_close();
@@ -208,23 +199,51 @@ int main(int argc, char *argv[]) {
 
   inithardware();
 
+#if 0
   if (useconsole) {
     thread_console = SDL_CreateThread(ConsoleThread, NULL);
     assert(thread_console);
   }
+#endif
 
+#if 0
   thread_emu = SDL_CreateThread(EmuThread, NULL);
   assert(thread_emu);
+#endif
 
   lasttick = starttick = SDL_GetTicks();
   while (running) {
+
+    // tick the CPU
+    {
+      if (dohardreset) {
+        cpu_reset();
+        dohardreset = 0;
+      }
+
+      // cpu cycles per second
+//    const int32_t cpu_mhz = 4770000; // ibm5160
+      const int32_t cpu_mhz = 6000000; // ibm5162
+      // average cycles per instruction
+//    const int32_t avg_ins = 7; // ~6-8 8086
+      const int32_t avg_ins = 4; // ~4   80286
+      // refresh rate
+      const int32_t refresh = 60;
+
+      cpu_exec86((cpu_mhz / avg_ins) / refresh);
+    }
+
+    // tick keyboard controller
     i8042_tick();
+    // parse events
     handleinput();
+    // handle video updates
     handlevideo();
 #ifdef NETWORKING_ENABLED
     if (ethif < 254)
       dispatch();
 #endif
+    // dont saturate
     SDL_Delay(1);
   }
 
@@ -242,11 +261,6 @@ int main(int argc, char *argv[]) {
 
   printf("\n%llu instructions executed in %llu seconds.\n", totalexec, endtick);
   printf("Average speed: %llu instructions/second.\n", totalexec / endtick);
-
-#ifdef CPU_ADDR_MODE_CACHE
-  printf("\n  Cached modregrm data access count: %llu\n", cached_access_count);
-  printf("Uncached modregrm data access count: %llu\n", uncached_access_count);
-#endif
 
   if (useconsole)
     exit(0); // makes sure console thread quits even if blocking

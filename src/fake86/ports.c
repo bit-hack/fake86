@@ -30,23 +30,29 @@
 #include "../80x86/cpu.h"
 
 
-extern uint8_t portram[0x10000];
+static const bool _notify_unknown_ports = false;
+
+uint8_t portram[0x10000];
+
 extern uint8_t speakerenabled;
 extern uint8_t keyboardwaitack;
 
-typedef void (*port_write_b_t)(uint16_t portnum, uint8_t value);
-typedef uint8_t (*port_read_b_t)(uint16_t portnum);
+static bool _port_ignore[0x10000];
 
-typedef void (*port_write_w_t)(uint16_t portnum, uint16_t value);
-typedef uint16_t (*port_read_w_t)(uint16_t portnum);
+static port_write_b_t port_write_callback[0x10000];
+static port_read_b_t port_read_callback[0x10000];
 
-port_write_b_t port_write_callback[0x10000];
-port_read_b_t port_read_callback[0x10000];
-
-port_write_w_t port_write_callback16[0x10000];
-port_read_w_t port_read_callback16[0x10000];
+static port_write_w_t port_write_callback16[0x10000];
+static port_read_w_t port_read_callback16[0x10000];
 
 extern uint8_t verbose;
+
+
+static void _ignore_range(uint16_t start, uint16_t end) {
+  for (int i = start; i <= end; ++i) {
+    _port_ignore[i] = true;
+  }
+}
 
 // 8bit port write
 void portout(uint16_t portnum, uint8_t value) {
@@ -89,6 +95,13 @@ void portout(uint16_t portnum, uint8_t value) {
   if (cb) {
     cb(portnum, value);
   }
+  else {
+    // notify of unhandled port access
+    if (_notify_unknown_ports && !_port_ignore[portnum]) {
+      log_printf(LOG_CHAN_PORT, "byte write to unknown port %03xh", portnum);
+      _port_ignore[portnum] = true;
+    }
+  }
 }
 
 // 8bit port read
@@ -116,7 +129,18 @@ uint8_t portin(uint16_t portnum) {
   }
 
   port_read_b_t cb = port_read_callback[portnum];
-  return cb ? cb(portnum) : 0xff;
+  if (cb) {
+    return cb(portnum);
+  }
+
+  // notify of unhandled port access
+  if (_notify_unknown_ports && !_port_ignore[portnum]) {
+    log_printf(LOG_CHAN_PORT, "byte read from unknown port %03xh", portnum);
+    _port_ignore[portnum] = true;
+  }
+
+  // send back dummy value
+  return 0xff;
 }
 
 // 16bit port write
@@ -147,32 +171,46 @@ uint16_t portin16(uint16_t portnum) {
 
 void set_port_write_redirector(uint16_t startport, uint16_t endport,
                                void *callback) {
-  uint16_t i;
-  for (i = startport; i <= endport; i++) {
+  for (uint16_t i = startport; i <= endport; i++) {
     port_write_callback[i] = callback;
   }
 }
 
 void set_port_read_redirector(uint16_t startport, uint16_t endport,
                               void *callback) {
-  uint16_t i;
-  for (i = startport; i <= endport; i++) {
+  for (uint16_t i = startport; i <= endport; i++) {
     port_read_callback[i] = callback;
   }
 }
 
 void set_port_write_redirector_16(uint16_t startport, uint16_t endport,
                                   void *callback) {
-  uint16_t i;
-  for (i = startport; i <= endport; i++) {
+  for (uint16_t i = startport; i <= endport; i++) {
     port_write_callback16[i] = callback;
   }
 }
 
 void set_port_read_redirector_16(uint16_t startport, uint16_t endport,
                                  void *callback) {
-  uint16_t i;
-  for (i = startport; i <= endport; i++) {
+  for (uint16_t i = startport; i <= endport; i++) {
     port_read_callback16[i] = callback;
   }
+}
+
+void port_init() {
+
+  // TODO
+  // byte write to unknown port 0a0h        PIC 2	(Programmable Interrupt Controller 8259)
+  // byte write to unknown port 063h        PPI (XT only) command mode register  (read dipswitches)
+  // byte write to unknown port 213h        Expansion unit (XT)
+  // byte write to unknown port 0c0h        SN746496 pcjr
+  // byte write to unknown port 378h        printer
+  // byte write to unknown port 278h        parallel printer
+  // byte write to unknown port 2fbh        async coms
+  // byte read from unknown port 201h       game control
+  // byte read from unknown port 241h       Gravis Ultra Sound by Advanced Gravis
+  // byte read from unknown port 341h       Gravis Ultra Sound by Advanced Gravis
+  // byte write to unknown port 3f2h        diskette controller
+
+  _ignore_range(0x2f0, 0x2f7); // reserved
 }

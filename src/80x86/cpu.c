@@ -39,10 +39,13 @@ static const uint8_t byteregtable[8] = {
 };
 
 #define StepIP(x) ip += x
+
 #define getmem8(x, y) read86(segbase(x) + y)
 #define getmem16(x, y) readw86(segbase(x) + y)
+
 #define putmem8(x, y, z) write86(segbase(x) + y, z)
 #define putmem16(x, y, z) writew86(segbase(x) + y, z)
+
 #define signext(value) (int16_t)(int8_t)(value)
 #define signext32(value) (int32_t)(int16_t)(value)
 #define putreg16(regid, writeval) regs.wordregs[regid] = writeval
@@ -51,12 +54,19 @@ static const uint8_t byteregtable[8] = {
 #define putsegreg(regid, writeval) segregs[regid] = writeval
 #define segbase(x) ((uint32_t)x << 4)
 
-inline uint16_t cpu_getreg16(const int regid) {
-  return regs.wordregs[regid];
+inline void cpu_setreg8(const int regid, const uint8_t val) {
+  regs.byteregs[byteregtable[regid]] = val;
 }
 
+inline void cpu_setreg16(const int regid, const uint16_t val) {
+  regs.wordregs[regid] = val;
+}
 inline uint8_t cpu_getreg8(const int regid)  {
   return regs.byteregs[byteregtable[regid]];
+}
+
+inline uint16_t cpu_getreg16(const int regid) {
+  return regs.wordregs[regid];
 }
 
 static const uint8_t parity[0x100] = {
@@ -83,7 +93,6 @@ uint64_t totalexec;
 
 union _bytewordregs_ regs;
 
-uint8_t portram[0x10000];
 uint8_t running = 0, debugmode, showcsip, verbose, mouseemu, didbootstrap = 0;
 uint8_t ethif;
 
@@ -117,12 +126,6 @@ static inline void decodeflagsword(const uint16_t x) {
   df  = (x >> 10) & 1;
   of  = (x >> 11) & 1;
 }
-
-//extern void writeVGA(uint32_t addr32, uint8_t value);
-extern void portout(uint16_t portnum, uint8_t value);
-extern void portout16(uint16_t portnum, uint16_t value);
-extern uint8_t portin(uint16_t portnum);
-extern uint16_t portin16(uint16_t portnum);
 
 static void flag_szp8(uint8_t value) {
   if (!value) {
@@ -1143,16 +1146,16 @@ uint8_t prefetch[6];
 uint32_t prefetch_base = 0;
 #endif
 
-void exec86(uint32_t execloops) {
+void cpu_exec86(int32_t cycles) {
 
-  uint32_t loopcount;
   uint8_t docontinue;
   static uint16_t firstip;
   static uint16_t trap_toggle = 0;
 
   counterticks = (uint64_t)((double)timerfreq / (double)65536.0);
 
-  for (loopcount = 0; loopcount < execloops; loopcount++) {
+  while (running && cycles > 0) {
+    --cycles;
 
     if ((totalexec & TIMING_INTERVAL) == 0)
       timing();
@@ -1173,17 +1176,13 @@ void exec86(uint32_t execloops) {
       intcall86(next_int); /* get next interrupt from the i8259, if any */
     }
 
-    if (hltstate)
+    if (hltstate) {
+#if 0
       goto skipexecution;
-
-    /*if ((((uint32_t)segregs[regcs] << 4) + (uint32_t)ip) == 0xFEC59) {
-                    //printf("Entered F000:EC59, returning to ");
-                    ip = pop();
-                    segregs[regcs] = pop();
-                    decodeflagsword(pop());
-                    //printf("%04X:%04X\n", segregs[regcs], ip);
-                    diskhandler();
-            }*/
+#else
+      continue;
+#endif
+    }
 
     reptype = 0;
     segoverride = 0;
@@ -1247,7 +1246,7 @@ void exec86(uint32_t execloops) {
         docontinue = 1;
         break;
       }
-    }
+    } // while
 
     totalexec++;
 
@@ -2066,8 +2065,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2093,8 +2092,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2120,8 +2119,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2147,8 +2146,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2576,8 +2575,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2604,8 +2603,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2639,8 +2638,8 @@ void exec86(uint32_t execloops) {
         break;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2676,8 +2675,8 @@ void exec86(uint32_t execloops) {
         break;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2715,8 +2714,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2740,8 +2739,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2765,8 +2764,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2791,8 +2790,8 @@ void exec86(uint32_t execloops) {
         regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2824,8 +2823,8 @@ void exec86(uint32_t execloops) {
         break;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -2857,8 +2856,8 @@ void exec86(uint32_t execloops) {
         break;
       }
 
-      totalexec++;
-      loopcount++;
+      ++totalexec;
+      --cycles;
       if (!reptype) {
         break;
       }
@@ -3342,10 +3341,12 @@ void exec86(uint32_t execloops) {
       break;
     }
 
+#if 0
   skipexecution:
     if (!running) {
       return;
     }
+#endif
   }
 }
 #endif

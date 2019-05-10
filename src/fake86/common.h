@@ -150,7 +150,6 @@ extern uint8_t bootdrive, hdcount;
 bool disk_is_inserted(int num);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- log.c
-
 enum {
   LOG_CHAN_ALL,
   LOG_CHAN_DISK,
@@ -160,8 +159,20 @@ enum {
   LOG_CHAN_MEM,
   LOG_CHAN_VIDEO,
   LOG_CHAN_AUDIO,
+  LOG_CHAN_PORT,
 };
 
 void log_init();
 void log_close();
 void log_printf(int channel, const char *fmt, ...);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ports.c
+typedef void (*port_write_b_t)(uint16_t portnum, uint8_t value);
+typedef uint8_t (*port_read_b_t)(uint16_t portnum);
+typedef void (*port_write_w_t)(uint16_t portnum, uint16_t value);
+typedef uint16_t (*port_read_w_t)(uint16_t portnum);
+
+void portout(uint16_t portnum, uint8_t value);
+void portout16(uint16_t portnum, uint16_t value);
+uint8_t portin(uint16_t portnum);
+uint16_t portin16(uint16_t portnum);

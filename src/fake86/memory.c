@@ -63,11 +63,6 @@ static void mem_write_16(uint32_t addr, uint16_t data) {
 void write86(uint32_t addr32, uint8_t value) {
   addr32 &= 0xFFFFF;
 
-#ifdef CPU_ADDR_MODE_CACHE
-  if (!readonly[tempaddr32]) {
-    addrcachevalid[tempaddr32] = 0;
-  }
-#endif
   if (readonly[addr32] || (addr32 >= 0xC0000)) {
     return;
   }

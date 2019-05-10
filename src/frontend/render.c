@@ -34,7 +34,7 @@ extern uint8_t VRAM[262144], vidmode, cgabg, blankattr, vidgfxmode, vidcolor;
 extern uint8_t running;
 extern uint16_t cursx, cursy, cols, rows, vgapage, cursorposition;
 extern uint16_t cursorvisible;
-extern uint8_t updatedscreen, clocksafe, port3da, port6, portout16;
+extern uint8_t updatedscreen;
 extern uint16_t VGA_SC[0x100], VGA_CRTC[0x100], VGA_ATTR[0x100], VGA_GC[0x100];
 extern uint32_t videobase, textbase;
 extern uint8_t fontcga[32768];

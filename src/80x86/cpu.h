@@ -44,35 +44,39 @@ enum {
   regbh = 7,
 };
 
+void cpu_setreg8(const int regid, const uint8_t val);
+void cpu_setreg16(const int regid, const uint16_t val);
+uint8_t cpu_getreg8(const int regid);
 uint16_t cpu_getreg16(const int regid);
-uint8_t  cpu_getreg8(const int regid);
 
+#define OLD_REGS 1
+#if OLD_REGS
 union _bytewordregs_ {
   uint16_t wordregs[8];
   uint8_t byteregs[8];
 };
-
-#ifdef CPU_ADDR_MODE_CACHE
-struct addrmodecache_s {
-  uint16_t exitcs;
-  uint16_t exitip;
-  uint16_t disp16;
-  uint32_t len;
-  uint8_t mode;
-  uint8_t reg;
-  uint8_t rm;
-  uint8_t forcess;
-  uint8_t valid;
+extern union _bytewordregs_ regs;
+#else
+struct cpu_regs_t {
+  union { uint16_t ax; struct { uint8_t al, ah; }; };
+  union { uint16_t bx; struct { uint8_t bl, bh; }; };
+  union { uint16_t cx; struct { uint8_t cl, ch; }; };
+  union { uint16_t dx; struct { uint8_t dl, dh; }; };
+  uint16_t sp;
+  uint16_t bp;
+  uint16_t si;
+  uint16_t di;
 };
+extern struct cpu_regs_t cpu_regs;
 #endif
 
 void cpu_push(uint16_t pushval);
 uint16_t cpu_pop();
 void cpu_reset();
 void cpu_prep_interupt(uint16_t intnum);
+void cpu_exec86(int32_t cycles);
 
 extern uint16_t segregs[4];
-extern union _bytewordregs_ regs;
 
 extern uint8_t didbootstrap;
 

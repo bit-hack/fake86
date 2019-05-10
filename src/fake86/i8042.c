@@ -19,76 +19,33 @@
 */
 #include "common.h"
 
-static uint8_t _key_buf[256];
-static uint8_t _tail, _head;
-
-SDL_mutex *_mutex;
+static uint8_t _key_buf;
+static bool _out_full;
 
 void i8042_key_push(uint8_t key) {
-  assert(_mutex);
-  SDL_LockMutex(_mutex);
-#if 1
-  _key_buf[0] = key;
-  printf("push %d\n", (int)key);
+  _key_buf = key;
+  _out_full = true;
   i8259_doirq(1);
-#else
-  {
-    printf("h%02d t%02d  <-  %d\n", (int)_head, (int)_tail, (int)key);
-    _key_buf[_head++] = key;
-    // if we are at the end of the list nudge the tail
-    if (_head == _tail) {
-      ++_tail;
-    }
-
-    // keyboard interrupt
-    i8259_doirq(1);
-  }
-#endif
-  SDL_UnlockMutex(_mutex);
-}
-
-uint8_t i8042_key_pop() {
-  assert(_mutex);
-  SDL_LockMutex(_mutex);
-#if 1
-  const uint8_t out = _key_buf[0];
-  printf("pop  %d\n", (int)out);
-#else
-  const uint8_t out = _key_buf[_tail];
-  {
-    // if we are not empty then advance
-    if (_tail != _head) {
-      ++_tail;
-    }
-    printf("h%02d t%02d  ->  %d\n", (int)_head, (int)_tail, (int)out);
-  }
-#endif
-  SDL_UnlockMutex(_mutex);
-  return out;
 }
 
 uint8_t i8042_port_read(uint16_t port) {
   // data port (scancode)
   if (port == 0x60) {
-    const uint8_t data = i8042_key_pop();
-    return data;
+    _out_full = false;
+    return _key_buf;
   }
   // status
   if (port == 0x64) {
-
+    __debugbreak();
     // input buffer is sent from host to keyboard
     // output buffer is sent from keyboard to host
-
     uint8_t status;
     // output buffer full
-    status |= (_head != _tail) ? 0x01 : 0x00;
+    status |= _out_full ? 0x01 : 0x00;
     // system flag
     status |= 0x40;
     // ?? why should this always be set
     status |= 2;
-
-    __debugbreak();
-
     return status;
   }
   return 0;
@@ -97,8 +54,7 @@ uint8_t i8042_port_read(uint16_t port) {
 void i8042_port_write(uint16_t port, uint8_t value) {
   // data port (scancode)
   if (port == 0x60) {
-    _key_buf[_tail] = value;
-    __debugbreak();
+    _key_buf = value;
   }
   // command
   if (port == 0x64) {
@@ -107,25 +63,12 @@ void i8042_port_write(uint16_t port, uint8_t value) {
 }
 
 void i8042_reset() {
-#if 0
-  assert(_mutex);
-  SDL_LockMutex(_mutex);
-  {
-    _head = 0;
-    _tail = 0;
-  }
-  SDL_UnlockMutex(_mutex);
-#endif
+  _out_full = false;
 }
 
 void i8042_tick() {
-  if (_head != _tail) {
-//    i8259_doirq(1);
-  }
 }
 
 void i8042_init() {
-  _mutex = SDL_CreateMutex();
-  assert(_mutex);
   i8042_reset();
 }
