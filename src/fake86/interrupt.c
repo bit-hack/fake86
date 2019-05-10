@@ -58,11 +58,5 @@ void intcall86(uint8_t intnum) {
   }
 
   // prepare an interupt?
-  cpu_push(makeflagsword());
-  cpu_push(segregs[regcs]);
-  cpu_push(ip);
-  segregs[regcs] = getmem16(0, (uint16_t)intnum * 4 + 2);
-  ip = getmem16(0, (uint16_t)intnum * 4);
-  ifl = 0;
-  tf = 0;
+  cpu_prep_interupt(intnum);
 }

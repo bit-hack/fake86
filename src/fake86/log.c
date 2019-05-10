@@ -33,6 +33,7 @@ static const char *channel_name[] = {
   "[CPU  ]  ",
   "[MEM  ]  ",
   "[VIDEO]  ",
+  "[AUDIO]  ",
 };
 
 void log_init() {

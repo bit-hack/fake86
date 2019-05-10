@@ -46,20 +46,25 @@ extern uint8_t doaudio;
 extern uint64_t totalexec, totalframes;
 uint64_t starttick, endtick, lasttick;
 
-uint8_t *biosfile = NULL, verbose = 0, cgaonly = 0, useconsole = 0;
+const char *biosfile = "pcxtbios.bin";
+
+uint8_t *verbose = 0, cgaonly = 0, useconsole = 0;
 uint32_t speed = 0;
 
 extern uint8_t insertdisk(uint8_t drivenum, char *filename);
 extern void ejectdisk(uint8_t drivenum);
 extern uint8_t bootdrive, ethif, net_enabled;
 extern void doirq(uint8_t irqnum);
-extern void parsecl(int argc, char *argv[]);
+
+extern bool cl_parse(int argc, char *argv[]);
+
 void timing();
 void tickaudio();
 void inittiming();
 void initaudio();
 void init8253();
 void init8259();
+
 extern void init8237();
 extern void initVideoPorts();
 extern void killaudio();
@@ -179,7 +184,9 @@ int main(int argc, char *argv[]) {
   // initalize the log file
   log_init();
   // parse the input command line
-  parsecl(argc, argv);
+  if (!cl_parse(argc, argv)) {
+    return 1;
+  }
   // initalize memory
   mem_init();
   // load bios
@@ -191,7 +198,7 @@ int main(int argc, char *argv[]) {
     return (-1);
 #endif
   // load other roms
-  if (biossize <= 8192) {
+  if (biossize <= (1024 * 8)) {
     mem_loadrom(0xF6000UL, PATH_DATAFILES "rombasic.bin", 0);
     if (!mem_loadrom(0xC0000UL, PATH_DATAFILES "videorom.bin", 1))
       return (-1);

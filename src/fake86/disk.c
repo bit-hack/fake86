@@ -60,7 +60,7 @@ bool disk_is_inserted(int num) {
   return disk[num].inserted != 0;
 }
 
-static uint8_t disk_insert_image(uint8_t drivenum, char *filename) {
+static bool disk_insert_image(uint8_t drivenum, const char *filename) {
   struct struct_drive* d = &disk[drivenum];
   if (d->inserted) {
     fclose(d->diskfile);
@@ -72,7 +72,7 @@ static uint8_t disk_insert_image(uint8_t drivenum, char *filename) {
   if (d->diskfile == NULL) {
     log_printf(LOG_CHAN_DISK, "fopen failed");
     d->inserted = 0;
-    return 1;
+    return false;
   }
   fseek(d->diskfile, 0L, SEEK_END);
   d->filesize = ftell(d->diskfile);
@@ -104,10 +104,10 @@ static uint8_t disk_insert_image(uint8_t drivenum, char *filename) {
       d->heads = 1;
     }
   }
-  return 0;
+  return true;
 }
 
-static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
+static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
 #if DISK_PASS_THROUGH
   struct struct_drive* d = &disk[drivenum];
 
@@ -138,7 +138,7 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
   if (INVALID_HANDLE_VALUE == d->handle) {
     DWORD error = GetLastError();
     log_printf(LOG_CHAN_DISK, "CreateFileA failed (%d)", error);
-    return 1;
+    return false;
   }
 
   DWORD dwRet = 0;
@@ -155,12 +155,12 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
   if (FALSE == DeviceIoControl(d->handle, IOCTL_DISK_GET_DRIVE_GEOMETRY,
                                NULL, 0, &geo, sizeof(geo), &dwRet, NULL)) {
     log_printf(LOG_CHAN_DISK, "IOCTL_DISK_GET_DRIVE_GEOMETRY failed");
-    return 1;
+    return false;
   }
 
   if (geo.BytesPerSector != 512) {
     log_printf(LOG_CHAN_DISK, "sector size of %d is unsuitable", geo.BytesPerSector);
-    return 1;
+    return false;
   }
 
   d->cyls = geo.Cylinders.LowPart;
@@ -169,7 +169,7 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
 
   if (geo.Cylinders.HighPart) {
     log_printf(LOG_CHAN_DISK, "disk too large!");
-    return 1;
+    return false;
   }
 
   // Calculate drive size
@@ -184,20 +184,20 @@ static uint8_t disk_insert_raw(uint8_t drivenum, char *filename) {
   log_printf(LOG_CHAN_DISK, "disk mapped");
 
 #endif // DISK_PASS_THROUGH
-  return 0;
+  return true;
 }
 
-uint8_t disk_insert(uint8_t drivenum, char *filename) {
+bool disk_insert(uint8_t drivenum, const char *filename) {
 #if DISK_PASS_THROUGH
   if (filename[0] == '\\' && filename[1] == '\\') {
 #else
   if (true) {
 #endif
-    log_printf(LOG_CHAN_DISK, "mapping raw disk '%s'", filename);
+    log_printf(LOG_CHAN_DISK, "mapping raw disk '%s' (%d)", filename, (int)drivenum);
     return disk_insert_raw(drivenum, filename);
   }
   else {
-    log_printf(LOG_CHAN_DISK, "inserting disk '%s'", filename);
+    log_printf(LOG_CHAN_DISK, "inserting disk '%s' (%d)", filename, (int)drivenum);
     return disk_insert_image(drivenum, filename);
   }
 }
@@ -376,7 +376,7 @@ void disk_int_handler(int intnum) {
     if (disk[regs.byteregs[regdl]].inserted) {
       disk_read(regs.byteregs[regdl],
                 segregs[reges],
-                getreg16(regbx),
+                cpu_getreg16(regbx),
                 regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
                 regs.byteregs[regcl] & 63,
                 regs.byteregs[regdh],
@@ -391,7 +391,7 @@ void disk_int_handler(int intnum) {
   case 3: // write sector(s) from memory
     if (disk[regs.byteregs[regdl]].inserted) {
       disk_write(regs.byteregs[regdl],
-                 segregs[reges], getreg16(regbx),
+                 segregs[reges], cpu_getreg16(regbx),
                  regs.byteregs[regch] + (regs.byteregs[regcl] / 64) * 256,
                  regs.byteregs[regcl] & 63,
                  regs.byteregs[regdh],
@@ -444,12 +444,14 @@ void disk_bootstrap(int intnum) {
   running = 0;
 #endif
   // read first sector of boot drive into 07C0:0000 and execute it
-  if (bootdrive < 255) { 
+  if (bootdrive < 255) {
+    log_printf(LOG_CHAN_DISK, "booting from disk %d", bootdrive);
     regs.byteregs[regdl] = bootdrive;
     disk_read(regs.byteregs[regdl], 0x07C0, 0x0000, 0, 1, 0, 1);
     segregs[regcs] = 0x0000;
     ip = 0x7C00;
   } else {
+    log_printf(LOG_CHAN_DISK, "booting into ROM BASIC");
     segregs[regcs] = 0xF600; // start ROM BASIC at bootstrap if requested
     ip = 0x0000;
   }

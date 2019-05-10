@@ -33,8 +33,31 @@ extern struct i8253_s i8253;
 extern struct structpic i8259;
 uint64_t curtimer, lasttimer, timerfreq;
 
-uint8_t byteregtable[8] = {regal, regcl, regdl, regbl,
-                           regah, regch, regdh, regbh};
+static const uint8_t byteregtable[8] = {
+  regal, regcl, regdl, regbl,
+  regah, regch, regdh, regbh
+};
+
+#define StepIP(x) ip += x
+#define getmem8(x, y) read86(segbase(x) + y)
+#define getmem16(x, y) readw86(segbase(x) + y)
+#define putmem8(x, y, z) write86(segbase(x) + y, z)
+#define putmem16(x, y, z) writew86(segbase(x) + y, z)
+#define signext(value) (int16_t)(int8_t)(value)
+#define signext32(value) (int32_t)(int16_t)(value)
+#define putreg16(regid, writeval) regs.wordregs[regid] = writeval
+#define putreg8(regid, writeval) regs.byteregs[byteregtable[regid]] = writeval
+#define getsegreg(regid) segregs[regid]
+#define putsegreg(regid, writeval) segregs[regid] = writeval
+#define segbase(x) ((uint32_t)x << 4)
+
+inline uint16_t cpu_getreg16(const int regid) {
+  return regs.wordregs[regid];
+}
+
+inline uint8_t cpu_getreg8(const int regid)  {
+  return regs.byteregs[byteregtable[regid]];
+}
 
 static const uint8_t parity[0x100] = {
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1,
@@ -69,24 +92,31 @@ extern uint8_t verbose;
 // interrupt.c
 void intcall86(uint8_t intnum);
 
-#define makeflagsword()                                                        \
-  (2 | (uint16_t)cf | ((uint16_t)pf << 2) | ((uint16_t)af << 4) |              \
-   ((uint16_t)zf << 6) | ((uint16_t)sf << 7) | ((uint16_t)tf << 8) |           \
-   ((uint16_t)ifl << 9) | ((uint16_t)df << 10) | ((uint16_t)of << 11))
+static inline uint16_t makeflagsword(void) {
+  return
+    (2 |
+    ((uint16_t)cf  << 0) |
+    ((uint16_t)pf  << 2) |
+    ((uint16_t)af  << 4) |
+    ((uint16_t)zf  << 6) |
+    ((uint16_t)sf  << 7) |
+    ((uint16_t)tf  << 8) |
+    ((uint16_t)ifl << 9) |
+    ((uint16_t)df  << 10) |
+    ((uint16_t)of  << 11));
+}
 
-#define decodeflagsword(x)                                                     \
-  {                                                                            \
-    temp16 = x;                                                                \
-    cf = temp16 & 1;                                                           \
-    pf = (temp16 >> 2) & 1;                                                    \
-    af = (temp16 >> 4) & 1;                                                    \
-    zf = (temp16 >> 6) & 1;                                                    \
-    sf = (temp16 >> 7) & 1;                                                    \
-    tf = (temp16 >> 8) & 1;                                                    \
-    ifl = (temp16 >> 9) & 1;                                                   \
-    df = (temp16 >> 10) & 1;                                                   \
-    of = (temp16 >> 11) & 1;                                                   \
-  }
+static inline void decodeflagsword(const uint16_t x) {
+  cf  = (x >>  0) & 1;
+  pf  = (x >>  2) & 1;
+  af  = (x >>  4) & 1;
+  zf  = (x >>  6) & 1;
+  sf  = (x >>  7) & 1;
+  tf  = (x >>  8) & 1;
+  ifl = (x >>  9) & 1;
+  df  = (x >> 10) & 1;
+  of  = (x >> 11) & 1;
+}
 
 //extern void writeVGA(uint32_t addr32, uint8_t value);
 extern void portout(uint16_t portnum, uint8_t value);
@@ -506,7 +536,7 @@ static uint16_t readrm16(uint8_t rmval) {
     getea(rmval);
     return read86(ea) | ((uint16_t)read86(ea + 1) << 8);
   } else {
-    return getreg16(rmval);
+    return cpu_getreg16(rmval);
   }
 }
 
@@ -515,7 +545,7 @@ static uint8_t readrm8(uint8_t rmval) {
     getea(rmval);
     return read86(ea);
   } else {
-    return getreg8(rmval);
+    return cpu_getreg8(rmval);
   }
 }
 
@@ -1225,7 +1255,7 @@ void exec86(uint32_t execloops) {
     case 0x0: /* 00 ADD Eb Gb */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getreg8(reg);
+      oper2b = cpu_getreg8(reg);
       op_add8();
       writerm8(rm, res8);
       break;
@@ -1233,14 +1263,14 @@ void exec86(uint32_t execloops) {
     case 0x1: /* 01 ADD Ev Gv */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getreg16(reg);
+      oper2 = cpu_getreg16(reg);
       op_add16();
       writerm16(rm, res16);
       break;
 
     case 0x2: /* 02 ADD Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_add8();
       putreg8(reg, res8);
@@ -1248,7 +1278,7 @@ void exec86(uint32_t execloops) {
 
     case 0x3: /* 03 ADD Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_add16();
       putreg16(reg, res16);
@@ -1281,7 +1311,7 @@ void exec86(uint32_t execloops) {
     case 0x8: /* 08 OR Eb Gb */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getreg8(reg);
+      oper2b = cpu_getreg8(reg);
       op_or8();
       writerm8(rm, res8);
       break;
@@ -1289,14 +1319,14 @@ void exec86(uint32_t execloops) {
     case 0x9: /* 09 OR Ev Gv */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getreg16(reg);
+      oper2 = cpu_getreg16(reg);
       op_or16();
       writerm16(rm, res16);
       break;
 
     case 0xA: /* 0A OR Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_or8();
       putreg8(reg, res8);
@@ -1304,7 +1334,7 @@ void exec86(uint32_t execloops) {
 
     case 0xB: /* 0B OR Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_or16();
       if ((oper1 == 0xF802) && (oper2 == 0xF802)) {
@@ -1343,7 +1373,7 @@ void exec86(uint32_t execloops) {
     case 0x10: /* 10 ADC Eb Gb */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getreg8(reg);
+      oper2b = cpu_getreg8(reg);
       op_adc8();
       writerm8(rm, res8);
       break;
@@ -1351,14 +1381,14 @@ void exec86(uint32_t execloops) {
     case 0x11: /* 11 ADC Ev Gv */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getreg16(reg);
+      oper2 = cpu_getreg16(reg);
       op_adc16();
       writerm16(rm, res16);
       break;
 
     case 0x12: /* 12 ADC Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_adc8();
       putreg8(reg, res8);
@@ -1366,7 +1396,7 @@ void exec86(uint32_t execloops) {
 
     case 0x13: /* 13 ADC Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_adc16();
       putreg16(reg, res16);
@@ -1399,7 +1429,7 @@ void exec86(uint32_t execloops) {
     case 0x18: /* 18 SBB Eb Gb */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getreg8(reg);
+      oper2b = cpu_getreg8(reg);
       op_sbb8();
       writerm8(rm, res8);
       break;
@@ -1407,14 +1437,14 @@ void exec86(uint32_t execloops) {
     case 0x19: /* 19 SBB Ev Gv */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getreg16(reg);
+      oper2 = cpu_getreg16(reg);
       op_sbb16();
       writerm16(rm, res16);
       break;
 
     case 0x1A: /* 1A SBB Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_sbb8();
       putreg8(reg, res8);
@@ -1422,7 +1452,7 @@ void exec86(uint32_t execloops) {
 
     case 0x1B: /* 1B SBB Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_sbb16();
       putreg16(reg, res16);
@@ -1455,7 +1485,7 @@ void exec86(uint32_t execloops) {
     case 0x20: /* 20 AND Eb Gb */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getreg8(reg);
+      oper2b = cpu_getreg8(reg);
       op_and8();
       writerm8(rm, res8);
       break;
@@ -1463,14 +1493,14 @@ void exec86(uint32_t execloops) {
     case 0x21: /* 21 AND Ev Gv */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getreg16(reg);
+      oper2 = cpu_getreg16(reg);
       op_and16();
       writerm16(rm, res16);
       break;
 
     case 0x22: /* 22 AND Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_and8();
       putreg8(reg, res8);
@@ -1478,7 +1508,7 @@ void exec86(uint32_t execloops) {
 
     case 0x23: /* 23 AND Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_and16();
       putreg16(reg, res16);
@@ -1509,7 +1539,6 @@ void exec86(uint32_t execloops) {
         } else {
           cf = 0;
         }
-
         af = 1;
       } else {
         // af = 0;
@@ -1529,7 +1558,7 @@ void exec86(uint32_t execloops) {
     case 0x28: /* 28 SUB Eb Gb */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getreg8(reg);
+      oper2b = cpu_getreg8(reg);
       op_sub8();
       writerm8(rm, res8);
       break;
@@ -1537,14 +1566,14 @@ void exec86(uint32_t execloops) {
     case 0x29: /* 29 SUB Ev Gv */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getreg16(reg);
+      oper2 = cpu_getreg16(reg);
       op_sub16();
       writerm16(rm, res16);
       break;
 
     case 0x2A: /* 2A SUB Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_sub8();
       putreg8(reg, res8);
@@ -1552,7 +1581,7 @@ void exec86(uint32_t execloops) {
 
     case 0x2B: /* 2B SUB Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_sub16();
       putreg16(reg, res16);
@@ -1583,26 +1612,23 @@ void exec86(uint32_t execloops) {
         } else {
           cf = 0;
         }
-
         af = 1;
       } else {
         af = 0;
       }
-
       if (((regs.byteregs[regal] & 0xF0) > 0x90) || (cf == 1)) {
         regs.byteregs[regal] = regs.byteregs[regal] - 0x60;
         cf = 1;
       } else {
         cf = 0;
       }
-
       flag_szp8(regs.byteregs[regal]);
       break;
 
     case 0x30: /* 30 XOR Eb Gb */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getreg8(reg);
+      oper2b = cpu_getreg8(reg);
       op_xor8();
       writerm8(rm, res8);
       break;
@@ -1610,14 +1636,14 @@ void exec86(uint32_t execloops) {
     case 0x31: /* 31 XOR Ev Gv */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getreg16(reg);
+      oper2 = cpu_getreg16(reg);
       op_xor16();
       writerm16(rm, res16);
       break;
 
     case 0x32: /* 32 XOR Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_xor8();
       putreg8(reg, res8);
@@ -1625,7 +1651,7 @@ void exec86(uint32_t execloops) {
 
     case 0x33: /* 33 XOR Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_xor16();
       putreg16(reg, res16);
@@ -1657,34 +1683,33 @@ void exec86(uint32_t execloops) {
         af = 0;
         cf = 0;
       }
-
       regs.byteregs[regal] = regs.byteregs[regal] & 0xF;
       break;
 
     case 0x38: /* 38 CMP Eb Gb */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getreg8(reg);
+      oper2b = cpu_getreg8(reg);
       flag_sub8(oper1b, oper2b);
       break;
 
     case 0x39: /* 39 CMP Ev Gv */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getreg16(reg);
+      oper2 = cpu_getreg16(reg);
       flag_sub16(oper1, oper2);
       break;
 
     case 0x3A: /* 3A CMP Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       flag_sub8(oper1b, oper2b);
       break;
 
     case 0x3B: /* 3B CMP Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       flag_sub16(oper1, oper2);
       break;
@@ -1713,7 +1738,6 @@ void exec86(uint32_t execloops) {
         af = 0;
         cf = 0;
       }
-
       regs.byteregs[regal] = regs.byteregs[regal] & 0xF;
       break;
 
@@ -1956,11 +1980,11 @@ void exec86(uint32_t execloops) {
     case 0x62: /* 62 BOUND Gv, Ev (80186+) */
       modregrm();
       getea(rm);
-      if (signext32(getreg16(reg)) < signext32(getmem16(ea >> 4, ea & 15))) {
+      if (signext32(cpu_getreg16(reg)) < signext32(getmem16(ea >> 4, ea & 15))) {
         intcall86(5); // bounds check exception
       } else {
         ea += 2;
-        if (signext32(getreg16(reg)) > signext32(getmem16(ea >> 4, ea & 15))) {
+        if (signext32(cpu_getreg16(reg)) > signext32(getmem16(ea >> 4, ea & 15))) {
           intcall86(5); // bounds check exception
         }
       }
@@ -2349,40 +2373,40 @@ void exec86(uint32_t execloops) {
 
     case 0x84: /* 84 TEST Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       flag_log8(oper1b & oper2b);
       break;
 
     case 0x85: /* 85 TEST Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       flag_log16(oper1 & oper2);
       break;
 
     case 0x86: /* 86 XCHG Gb Eb */
       modregrm();
-      oper1b = getreg8(reg);
+      oper1b = cpu_getreg8(reg);
       putreg8(reg, readrm8(rm));
       writerm8(rm, oper1b);
       break;
 
     case 0x87: /* 87 XCHG Gv Ev */
       modregrm();
-      oper1 = getreg16(reg);
+      oper1 = cpu_getreg16(reg);
       putreg16(reg, readrm16(rm));
       writerm16(rm, oper1);
       break;
 
     case 0x88: /* 88 MOV Eb Gb */
       modregrm();
-      writerm8(rm, getreg8(reg));
+      writerm8(rm, cpu_getreg8(reg));
       break;
 
     case 0x89: /* 89 MOV Ev Gv */
       modregrm();
-      writerm16(rm, getreg16(reg));
+      writerm16(rm, cpu_getreg16(reg));
       break;
 
     case 0x8A: /* 8A MOV Gb Eb */
@@ -3325,3 +3349,19 @@ void exec86(uint32_t execloops) {
   }
 }
 #endif
+
+void cpu_prep_interupt(uint16_t intnum) {
+  // push flags
+  cpu_push(makeflagsword());
+  // push cs register
+  cpu_push(segregs[regcs]);
+  // push ip
+  cpu_push(ip);
+  // new cs reguster
+  segregs[regcs] = getmem16(0, (uint16_t)intnum * 4 + 2);
+  // new ip
+  ip = getmem16(0, (uint16_t)intnum * 4);
+  // clear flags
+  ifl = 0;
+  tf = 0;
+}

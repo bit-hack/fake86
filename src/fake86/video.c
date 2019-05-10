@@ -68,13 +68,12 @@ extern uint32_t nw, nh;
 static void vidinterrupt() {
   uint32_t tempcalc, memloc, n;
   updatedscreen = 1;
-  switch (regs.byteregs[regah]) { // what video interrupt function?
+  // what video interrupt function
+  switch (regs.byteregs[regah]) {
   case 0: // set video mode
-    if (verbose) {
-      printf("Set video mode %02Xh\n", regs.byteregs[regal]);
-    }
-    VGA_SC[0x4] =
-        0; // VGA modes are in chained mode by default after a mode switch
+    log_printf(LOG_CHAN_VIDEO, "set video mode %02Xh", regs.byteregs[regal]);
+    // VGA modes are in chained mode by default after a mode switch
+    VGA_SC[0x4] = 0;
     // regs.byteregs[regal] = 3;
     switch (regs.byteregs[regal] & 0x7F) {
     case 0: // 40x25 mono text
@@ -193,7 +192,7 @@ static void vidinterrupt() {
       vidcolor = 1;
       vidgfxmode = 1;
       blankattr = 0;
-      for (tempcalc = videobase; tempcalc < videobase + 65535; tempcalc += 2) {
+      for (tempcalc = videobase; tempcalc < videobase + 0xffff; tempcalc += 2) {
         RAM[tempcalc] = 0;
         RAM[tempcalc + 1] = blankattr;
       }
@@ -202,11 +201,7 @@ static void vidinterrupt() {
     }
 
     const int new_vidmode = regs.byteregs[regal] & 0x7F;
-    if (vidmode != new_vidmode) {
-      log_printf(LOG_CHAN_VIDEO, "change video mode to 0x%x", new_vidmode);
-    }
-
-    vidmode = regs.byteregs[regal] & 0x7F;
+    vidmode = new_vidmode;
     RAM[0x449] = vidmode;
     RAM[0x44A] = (uint8_t)cols;
     RAM[0x44B] = 0;
@@ -245,14 +240,14 @@ static void vidinterrupt() {
   case 0x10: // VGA DAC functions
     switch (regs.byteregs[regal]) {
     case 0x10: // set individual DAC register
-      palettevga[getreg16(regbx)] = rgb((regs.byteregs[regdh] & 63) << 2,
+      palettevga[cpu_getreg16(regbx)] = rgb((regs.byteregs[regdh] & 63) << 2,
                                         (regs.byteregs[regch] & 63) << 2,
                                         (regs.byteregs[regcl] & 63) << 2);
       break;
     case 0x12: // set block of DAC registers
-      memloc = segregs[reges] * 16 + getreg16(regdx);
-      for (n = getreg16(regbx);
-           n < (uint32_t)(getreg16(regbx) + getreg16(regcx)); n++) {
+      memloc = segregs[reges] * 16 + cpu_getreg16(regdx);
+      for (n = cpu_getreg16(regbx);
+           n < (uint32_t)(cpu_getreg16(regbx) + cpu_getreg16(regcx)); n++) {
         palettevga[n] = rgb(read86(memloc) << 2, read86(memloc + 1) << 2,
                             read86(memloc + 2) << 2);
         memloc += 3;

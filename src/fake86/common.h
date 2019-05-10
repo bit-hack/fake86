@@ -86,9 +86,9 @@ uint8_t read86(uint32_t addr32);
 uint16_t readw86(uint32_t addr32);
 
 void mem_init();
-uint32_t mem_loadbinary(uint32_t addr32, uint8_t *filename, uint8_t roflag);
-uint32_t mem_loadrom(uint32_t addr32, uint8_t *filename, uint8_t failure_fatal);
-uint32_t mem_loadbios(uint8_t *filename);
+uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag);
+uint32_t mem_loadrom(uint32_t addr32, const char *filename, uint8_t failure_fatal);
+uint32_t mem_loadbios(const char *filename);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8237.c
 struct dmachan_s {
@@ -131,7 +131,7 @@ void i8042_reset();
 void i8042_init();
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
-uint8_t disk_insert(uint8_t drivenum, char *filename);
+bool disk_insert(uint8_t drivenum, const char *filename);
 
 void disk_eject(uint8_t drivenum);
 
@@ -159,6 +159,7 @@ enum {
   LOG_CHAN_CPU,
   LOG_CHAN_MEM,
   LOG_CHAN_VIDEO,
+  LOG_CHAN_AUDIO,
 };
 
 void log_init();

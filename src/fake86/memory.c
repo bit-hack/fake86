@@ -128,7 +128,7 @@ uint16_t readw86(uint32_t addr32) {
          (uint16_t)(read86(addr32 + 1) << 8);
 }
 
-uint32_t mem_loadbinary(uint32_t addr32, uint8_t *filename, uint8_t roflag) {
+uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag) {
   FILE *binfile = fopen(filename, "rb");
   if (binfile == NULL) {
     log_printf(LOG_CHAN_MEM, "unable to open rom file '%s'", filename);
@@ -147,7 +147,7 @@ uint32_t mem_loadbinary(uint32_t addr32, uint8_t *filename, uint8_t roflag) {
   return (readsize);
 }
 
-uint32_t mem_loadrom(uint32_t addr32, uint8_t *filename, uint8_t failure_fatal) {
+uint32_t mem_loadrom(uint32_t addr32, const char *filename, uint8_t failure_fatal) {
   uint32_t readsize;
   readsize = mem_loadbinary(addr32, filename, 1);
   if (!readsize) {
@@ -157,7 +157,7 @@ uint32_t mem_loadrom(uint32_t addr32, uint8_t *filename, uint8_t failure_fatal) 
   }
 }
 
-uint32_t mem_loadbios(uint8_t *filename) {
+uint32_t mem_loadbios(const char *filename) {
   FILE *binfile = fopen(filename, "rb");
   if (binfile == NULL) {
     log_printf(LOG_CHAN_MEM, "unable to open bios file '%s'", filename);
