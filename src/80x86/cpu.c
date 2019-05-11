@@ -28,15 +28,11 @@
 #include "cpu.h"
 #include "modregrm.h"
 
+struct cpu_regs_t cpu_regs;
 
 extern struct i8253_s i8253;
 extern struct structpic i8259;
 uint64_t curtimer, lasttimer, timerfreq;
-
-static const uint8_t byteregtable[8] = {
-  regal, regcl, regdl, regbl,
-  regah, regch, regdh, regbh
-};
 
 #define StepIP(x) ip += x
 
@@ -48,25 +44,72 @@ static const uint8_t byteregtable[8] = {
 
 #define signext(value) (int16_t)(int8_t)(value)
 #define signext32(value) (int32_t)(int16_t)(value)
-#define putreg16(regid, writeval) regs.wordregs[regid] = writeval
-#define putreg8(regid, writeval) regs.byteregs[byteregtable[regid]] = writeval
+
 #define getsegreg(regid) segregs[regid]
 #define putsegreg(regid, writeval) segregs[regid] = writeval
+
 #define segbase(x) ((uint32_t)x << 4)
 
-inline void cpu_setreg8(const int regid, const uint8_t val) {
-  regs.byteregs[byteregtable[regid]] = val;
+// set register based on mod-reg-rm bit layout
+static inline void cpu_setreg8(const int regid, const uint8_t val) {
+  switch (regid) {
+  case 0: cpu_regs.al = val; return;
+  case 1: cpu_regs.cl = val; return;
+  case 2: cpu_regs.dl = val; return;
+  case 3: cpu_regs.bl = val; return;
+  case 4: cpu_regs.ah = val; return;
+  case 5: cpu_regs.ch = val; return;
+  case 6: cpu_regs.dh = val; return;
+  case 7: cpu_regs.bh = val; return;
+  }
+  __debugbreak();
 }
 
-inline void cpu_setreg16(const int regid, const uint16_t val) {
-  regs.wordregs[regid] = val;
-}
-inline uint8_t cpu_getreg8(const int regid)  {
-  return regs.byteregs[byteregtable[regid]];
+// set register based on mod-reg-rm bit index
+static inline void cpu_setreg16(const int regid, const uint16_t val) {
+  switch (regid) {
+  case 0: cpu_regs.ax = val; return;
+  case 1: cpu_regs.cx = val; return;
+  case 2: cpu_regs.dx = val; return;
+  case 3: cpu_regs.bx = val; return;
+  case 4: cpu_regs.sp = val; return;
+  case 5: cpu_regs.bp = val; return;
+  case 6: cpu_regs.si = val; return;
+  case 7: cpu_regs.di = val; return;
+  }
+  __debugbreak();
 }
 
-inline uint16_t cpu_getreg16(const int regid) {
-  return regs.wordregs[regid];
+// get register based on mod-reg-rm bit index
+static inline uint8_t cpu_getreg8(const int regid)  {
+  switch (regid) {
+  case 0: return cpu_regs.al;
+  case 1: return cpu_regs.cl;
+  case 2: return cpu_regs.dl;
+  case 3: return cpu_regs.bl;
+  case 4: return cpu_regs.ah;
+  case 5: return cpu_regs.ch;
+  case 6: return cpu_regs.dh;
+  case 7: return cpu_regs.bh;
+  }
+  __debugbreak();
+  return 0;
+}
+
+// get register based on mod-reg-rm bit index
+static inline uint16_t cpu_getreg16(const int regid) {
+  switch (regid) {
+  case 0: return cpu_regs.ax;
+  case 1: return cpu_regs.cx;
+  case 2: return cpu_regs.dx;
+  case 3: return cpu_regs.bx;
+  case 4: return cpu_regs.sp;
+  case 5: return cpu_regs.bp;
+  case 6: return cpu_regs.si;
+  case 7: return cpu_regs.di;
+  }
+  __debugbreak();
+  return 0;
 }
 
 static const uint8_t parity[0x100] = {
@@ -91,7 +134,7 @@ uint32_t temp1, temp2, temp3, temp4, temp5, temp32, ea;
 int32_t result;
 uint64_t totalexec;
 
-union _bytewordregs_ regs;
+//union _bytewordregs_ regs;
 
 uint8_t running = 0, debugmode, showcsip, verbose, mouseemu, didbootstrap = 0;
 uint8_t ethif;
@@ -450,34 +493,33 @@ static void op_sbb16() {
 
 static void getea(uint8_t rmval) {
   uint32_t tempea;
-
   tempea = 0;
   switch (mode) {
   case 0:
     switch (rmval) {
     case 0:
-      tempea = regs.wordregs[regbx] + regs.wordregs[regsi];
+      tempea = (uint32_t)cpu_regs.bx + (uint32_t)cpu_regs.si;
       break;
     case 1:
-      tempea = regs.wordregs[regbx] + regs.wordregs[regdi];
+      tempea = (uint32_t)cpu_regs.bx + (uint32_t)cpu_regs.di;
       break;
     case 2:
-      tempea = regs.wordregs[regbp] + regs.wordregs[regsi];
+      tempea = cpu_regs.bp + cpu_regs.si;
       break;
     case 3:
-      tempea = regs.wordregs[regbp] + regs.wordregs[regdi];
+      tempea = cpu_regs.bp + cpu_regs.di;
       break;
     case 4:
-      tempea = regs.wordregs[regsi];
+      tempea = cpu_regs.si;
       break;
     case 5:
-      tempea = regs.wordregs[regdi];
+      tempea = cpu_regs.di;
       break;
     case 6:
       tempea = disp16;
       break;
     case 7:
-      tempea = regs.wordregs[regbx];
+      tempea = cpu_regs.bx;
       break;
     }
     break;
@@ -486,28 +528,28 @@ static void getea(uint8_t rmval) {
   case 2:
     switch (rmval) {
     case 0:
-      tempea = regs.wordregs[regbx] + regs.wordregs[regsi] + disp16;
+      tempea = cpu_regs.bx + cpu_regs.si + disp16;
       break;
     case 1:
-      tempea = regs.wordregs[regbx] + regs.wordregs[regdi] + disp16;
+      tempea = cpu_regs.bx + cpu_regs.di + disp16;
       break;
     case 2:
-      tempea = regs.wordregs[regbp] + regs.wordregs[regsi] + disp16;
+      tempea = cpu_regs.bp + cpu_regs.si + disp16;
       break;
     case 3:
-      tempea = regs.wordregs[regbp] + regs.wordregs[regdi] + disp16;
+      tempea = cpu_regs.bp + cpu_regs.di + disp16;
       break;
     case 4:
-      tempea = regs.wordregs[regsi] + disp16;
+      tempea = cpu_regs.si + disp16;
       break;
     case 5:
-      tempea = regs.wordregs[regdi] + disp16;
+      tempea = cpu_regs.di + disp16;
       break;
     case 6:
-      tempea = regs.wordregs[regbp] + disp16;
+      tempea = cpu_regs.bp + disp16;
       break;
     case 7:
-      tempea = regs.wordregs[regbx] + disp16;
+      tempea = cpu_regs.bx + disp16;
       break;
     }
     break;
@@ -517,13 +559,13 @@ static void getea(uint8_t rmval) {
 }
 
 void cpu_push(uint16_t pushval) {
-  regs.wordregs[regsp] = regs.wordregs[regsp] - 2;
-  putmem16(segregs[regss], regs.wordregs[regsp], pushval);
+  cpu_regs.sp = cpu_regs.sp - 2;
+  putmem16(segregs[regss], cpu_regs.sp, pushval);
 }
 
 uint16_t cpu_pop() {
-  uint16_t tempval = getmem16(segregs[regss], regs.wordregs[regsp]);
-  regs.wordregs[regsp] = regs.wordregs[regsp] + 2;
+  uint16_t tempval = getmem16(segregs[regss], cpu_regs.sp);
+  cpu_regs.sp = cpu_regs.sp + 2;
   return tempval;
 }
 
@@ -558,7 +600,7 @@ static void writerm16(uint8_t rmval, uint16_t value) {
     write86(ea, value & 0xFF);
     write86(ea + 1, value >> 8);
   } else {
-    putreg16(rmval, value);
+    cpu_setreg16(rmval, value);
   }
 }
 
@@ -567,7 +609,7 @@ static void writerm8(uint8_t rmval, uint8_t value) {
     getea(rmval);
     write86(ea, value);
   } else {
-    putreg8(rmval, value);
+    cpu_setreg8(rmval, value);
   }
 }
 
@@ -831,8 +873,8 @@ static void op_div8(uint16_t valdiv, uint8_t divisor) {
     return;
   }
 
-  regs.byteregs[regah] = valdiv % (uint16_t)divisor;
-  regs.byteregs[regal] = valdiv / (uint16_t)divisor;
+  cpu_regs.ah = valdiv % (uint16_t)divisor;
+  cpu_regs.al = valdiv / (uint16_t)divisor;
 }
 
 static void op_idiv8(uint16_t valdiv, uint8_t divisor) {
@@ -865,8 +907,8 @@ static void op_idiv8(uint16_t valdiv, uint8_t divisor) {
     d2 = (~d2 + 1) & 0xff;
   }
 
-  regs.byteregs[regah] = (uint8_t)d2;
-  regs.byteregs[regal] = (uint8_t)d1;
+  cpu_regs.ah = (uint8_t)d2;
+  cpu_regs.al = (uint8_t)d1;
 }
 
 static void op_grp3_8() {
@@ -894,10 +936,10 @@ static void op_grp3_8() {
     break;
 
   case 4: /* MUL */
-    temp1 = (uint32_t)oper1b * (uint32_t)regs.byteregs[regal];
-    regs.wordregs[regax] = temp1 & 0xFFFF;
+    temp1 = (uint32_t)oper1b * (uint32_t)cpu_regs.al;
+    cpu_regs.ax = temp1 & 0xFFFF;
     flag_szp8((uint8_t)temp1);
-    if (regs.byteregs[regah]) {
+    if (cpu_regs.ah) {
       cf = 1;
       of = 1;
     } else {
@@ -911,7 +953,7 @@ static void op_grp3_8() {
 
   case 5: /* IMUL */
     oper1 = signext(oper1b);
-    temp1 = signext(regs.byteregs[regal]);
+    temp1 = signext(cpu_regs.al);
     temp2 = oper1;
     if ((temp1 & 0x80) == 0x80) {
       temp1 = temp1 | 0xFFFFFF00;
@@ -922,8 +964,8 @@ static void op_grp3_8() {
     }
 
     temp3 = (temp1 * temp2) & 0xFFFF;
-    regs.wordregs[regax] = temp3 & 0xFFFF;
-    if (regs.byteregs[regah]) {
+    cpu_regs.ax = temp3 & 0xFFFF;
+    if (cpu_regs.ah) {
       cf = 1;
       of = 1;
     } else {
@@ -936,11 +978,11 @@ static void op_grp3_8() {
     break;
 
   case 6: /* DIV */
-    op_div8(regs.wordregs[regax], oper1b);
+    op_div8(cpu_regs.ax, oper1b);
     break;
 
   case 7: /* IDIV */
-    op_idiv8(regs.wordregs[regax], oper1b);
+    op_idiv8(cpu_regs.ax, oper1b);
     break;
   }
 }
@@ -956,8 +998,8 @@ static void op_div16(uint32_t valdiv, uint16_t divisor) {
     return;
   }
 
-  regs.wordregs[regdx] = valdiv % (uint32_t)divisor;
-  regs.wordregs[regax] = valdiv / (uint32_t)divisor;
+  cpu_regs.dx = valdiv % (uint32_t)divisor;
+  cpu_regs.ax = valdiv / (uint32_t)divisor;
 }
 
 static void op_idiv16(uint32_t valdiv, uint16_t divisor) {
@@ -991,8 +1033,8 @@ static void op_idiv16(uint32_t valdiv, uint16_t divisor) {
     d2 = (~d2 + 1) & 0xffff;
   }
 
-  regs.wordregs[regax] = d1;
-  regs.wordregs[regdx] = d2;
+  cpu_regs.ax = d1;
+  cpu_regs.dx = d2;
 }
 
 static void op_grp3_16() {
@@ -1018,11 +1060,11 @@ static void op_grp3_16() {
     break;
 
   case 4: /* MUL */
-    temp1 = (uint32_t)oper1 * (uint32_t)regs.wordregs[regax];
-    regs.wordregs[regax] = temp1 & 0xFFFF;
-    regs.wordregs[regdx] = temp1 >> 16;
+    temp1 = (uint32_t)oper1 * (uint32_t)cpu_regs.ax;
+    cpu_regs.ax = temp1 & 0xFFFF;
+    cpu_regs.dx = temp1 >> 16;
     flag_szp16((uint16_t)temp1);
-    if (regs.wordregs[regdx]) {
+    if (cpu_regs.dx) {
       cf = 1;
       of = 1;
     } else {
@@ -1035,7 +1077,7 @@ static void op_grp3_16() {
     break;
 
   case 5: /* IMUL */
-    temp1 = regs.wordregs[regax];
+    temp1 = cpu_regs.ax;
     temp2 = oper1;
     if (temp1 & 0x8000) {
       temp1 |= 0xFFFF0000;
@@ -1046,9 +1088,9 @@ static void op_grp3_16() {
     }
 
     temp3 = temp1 * temp2;
-    regs.wordregs[regax] = temp3 & 0xFFFF; /* into register ax */
-    regs.wordregs[regdx] = temp3 >> 16;    /* into register dx */
-    if (regs.wordregs[regdx]) {
+    cpu_regs.ax = temp3 & 0xFFFF; /* into register ax */
+    cpu_regs.dx = temp3 >> 16;    /* into register dx */
+    if (cpu_regs.dx) {
       cf = 1;
       of = 1;
     } else {
@@ -1061,12 +1103,12 @@ static void op_grp3_16() {
     break;
 
   case 6: /* DIV */
-    op_div16(((uint32_t)regs.wordregs[regdx] << 16) + regs.wordregs[regax],
+    op_div16(((uint32_t)cpu_regs.dx << 16) + cpu_regs.ax,
              oper1);
     break;
 
   case 7: /* DIV */
-    op_idiv16(((uint32_t)regs.wordregs[regdx] << 16) + regs.wordregs[regax],
+    op_idiv16(((uint32_t)cpu_regs.dx << 16) + cpu_regs.ax,
               oper1);
     break;
   }
@@ -1272,7 +1314,7 @@ void cpu_exec86(int32_t cycles) {
       oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_add8();
-      putreg8(reg, res8);
+      cpu_setreg8(reg, res8);
       break;
 
     case 0x3: /* 03 ADD Gv Ev */
@@ -1280,23 +1322,23 @@ void cpu_exec86(int32_t cycles) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_add16();
-      putreg16(reg, res16);
+      cpu_setreg16(reg, res16);
       break;
 
-    case 0x4: /* 04 ADD regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0x4: /* 04 ADD cpu_regs.al] Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       op_add8();
-      regs.byteregs[regal] = res8;
+      cpu_regs.al = res8;
       break;
 
     case 0x5: /* 05 ADD eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       op_add16();
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0x6: /* 06 PUSH segregs[reges] */
@@ -1328,7 +1370,7 @@ void cpu_exec86(int32_t cycles) {
       oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_or8();
-      putreg8(reg, res8);
+      cpu_setreg8(reg, res8);
       break;
 
     case 0xB: /* 0B OR Gv Ev */
@@ -1339,24 +1381,23 @@ void cpu_exec86(int32_t cycles) {
       if ((oper1 == 0xF802) && (oper2 == 0xF802)) {
         sf = 0; /* cheap hack to make Wolf 3D think we're a 286 so it plays */
       }
-
-      putreg16(reg, res16);
+      cpu_setreg16(reg, res16);
       break;
 
-    case 0xC: /* 0C OR regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0xC: /* 0C OR cpu_regs.al Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       op_or8();
-      regs.byteregs[regal] = res8;
+      cpu_regs.al = res8;
       break;
 
     case 0xD: /* 0D OR eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       op_or16();
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0xE: /* 0E PUSH segregs[regcs] */
@@ -1390,7 +1431,7 @@ void cpu_exec86(int32_t cycles) {
       oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_adc8();
-      putreg8(reg, res8);
+      cpu_setreg8(reg, res8);
       break;
 
     case 0x13: /* 13 ADC Gv Ev */
@@ -1398,23 +1439,23 @@ void cpu_exec86(int32_t cycles) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_adc16();
-      putreg16(reg, res16);
+      cpu_setreg16(reg, res16);
       break;
 
-    case 0x14: /* 14 ADC regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0x14: /* 14 ADC cpu_regs.al Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       op_adc8();
-      regs.byteregs[regal] = res8;
+      cpu_regs.al = res8;
       break;
 
     case 0x15: /* 15 ADC eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       op_adc16();
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0x16: /* 16 PUSH segregs[regss] */
@@ -1446,7 +1487,7 @@ void cpu_exec86(int32_t cycles) {
       oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_sbb8();
-      putreg8(reg, res8);
+      cpu_setreg8(reg, res8);
       break;
 
     case 0x1B: /* 1B SBB Gv Ev */
@@ -1454,23 +1495,23 @@ void cpu_exec86(int32_t cycles) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_sbb16();
-      putreg16(reg, res16);
+      cpu_setreg16(reg, res16);
       break;
 
-    case 0x1C: /* 1C SBB regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0x1C: /* 1C SBB cpu_regs.al Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       op_sbb8();
-      regs.byteregs[regal] = res8;
+      cpu_regs.al = res8;
       break;
 
     case 0x1D: /* 1D SBB eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       op_sbb16();
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0x1E: /* 1E PUSH segregs[regds] */
@@ -1502,7 +1543,7 @@ void cpu_exec86(int32_t cycles) {
       oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_and8();
-      putreg8(reg, res8);
+      cpu_setreg8(reg, res8);
       break;
 
     case 0x23: /* 23 AND Gv Ev */
@@ -1510,29 +1551,29 @@ void cpu_exec86(int32_t cycles) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_and16();
-      putreg16(reg, res16);
+      cpu_setreg16(reg, res16);
       break;
 
-    case 0x24: /* 24 AND regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0x24: /* 24 AND cpu_regs.al] Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       op_and8();
-      regs.byteregs[regal] = res8;
+      cpu_regs.al = res8;
       break;
 
     case 0x25: /* 25 AND eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       op_and16();
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0x27: /* 27 DAA */
-      if (((regs.byteregs[regal] & 0xF) > 9) || (af == 1)) {
-        oper1 = regs.byteregs[regal] + 6;
-        regs.byteregs[regal] = oper1 & 255;
+      if (((cpu_regs.al & 0xF) > 9) || (af == 1)) {
+        oper1 = cpu_regs.al + 6;
+        cpu_regs.al = oper1 & 255;
         if (oper1 & 0xFF00) {
           cf = 1;
         } else {
@@ -1543,15 +1584,15 @@ void cpu_exec86(int32_t cycles) {
         // af = 0;
       }
 
-      if ((regs.byteregs[regal] > 0x9F) || (cf == 1)) {
-        regs.byteregs[regal] = regs.byteregs[regal] + 0x60;
+      if ((cpu_regs.al > 0x9F) || (cf == 1)) {
+        cpu_regs.al = cpu_regs.al + 0x60;
         cf = 1;
       } else {
         // cf = 0;
       }
 
-      regs.byteregs[regal] = regs.byteregs[regal] & 255;
-      flag_szp8(regs.byteregs[regal]);
+      cpu_regs.al = cpu_regs.al & 255;
+      flag_szp8(cpu_regs.al);
       break;
 
     case 0x28: /* 28 SUB Eb Gb */
@@ -1575,7 +1616,7 @@ void cpu_exec86(int32_t cycles) {
       oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_sub8();
-      putreg8(reg, res8);
+      cpu_setreg8(reg, res8);
       break;
 
     case 0x2B: /* 2B SUB Gv Ev */
@@ -1583,29 +1624,29 @@ void cpu_exec86(int32_t cycles) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_sub16();
-      putreg16(reg, res16);
+      cpu_setreg16(reg, res16);
       break;
 
-    case 0x2C: /* 2C SUB regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0x2C: /* 2C SUB cpu_regs.al Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       op_sub8();
-      regs.byteregs[regal] = res8;
+      cpu_regs.al = res8;
       break;
 
     case 0x2D: /* 2D SUB eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       op_sub16();
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0x2F: /* 2F DAS */
-      if (((regs.byteregs[regal] & 15) > 9) || (af == 1)) {
-        oper1 = regs.byteregs[regal] - 6;
-        regs.byteregs[regal] = oper1 & 255;
+      if (((cpu_regs.al & 15) > 9) || (af == 1)) {
+        oper1 = cpu_regs.al - 6;
+        cpu_regs.al = oper1 & 255;
         if (oper1 & 0xFF00) {
           cf = 1;
         } else {
@@ -1615,13 +1656,13 @@ void cpu_exec86(int32_t cycles) {
       } else {
         af = 0;
       }
-      if (((regs.byteregs[regal] & 0xF0) > 0x90) || (cf == 1)) {
-        regs.byteregs[regal] = regs.byteregs[regal] - 0x60;
+      if (((cpu_regs.al & 0xF0) > 0x90) || (cf == 1)) {
+        cpu_regs.al = cpu_regs.al - 0x60;
         cf = 1;
       } else {
         cf = 0;
       }
-      flag_szp8(regs.byteregs[regal]);
+      flag_szp8(cpu_regs.al);
       break;
 
     case 0x30: /* 30 XOR Eb Gb */
@@ -1645,7 +1686,7 @@ void cpu_exec86(int32_t cycles) {
       oper1b = cpu_getreg8(reg);
       oper2b = readrm8(rm);
       op_xor8();
-      putreg8(reg, res8);
+      cpu_setreg8(reg, res8);
       break;
 
     case 0x33: /* 33 XOR Gv Ev */
@@ -1653,36 +1694,36 @@ void cpu_exec86(int32_t cycles) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_xor16();
-      putreg16(reg, res16);
+      cpu_setreg16(reg, res16);
       break;
 
-    case 0x34: /* 34 XOR regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0x34: /* 34 XOR cpu_regs.al Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       op_xor8();
-      regs.byteregs[regal] = res8;
+      cpu_regs.al = res8;
       break;
 
     case 0x35: /* 35 XOR eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       op_xor16();
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0x37: /* 37 AAA ASCII */
-      if (((regs.byteregs[regal] & 0xF) > 9) || (af == 1)) {
-        regs.byteregs[regal] = regs.byteregs[regal] + 6;
-        regs.byteregs[regah] = regs.byteregs[regah] + 1;
+      if (((cpu_regs.al & 0xF) > 9) || (af == 1)) {
+        cpu_regs.al = cpu_regs.al + 6;
+        cpu_regs.ah = cpu_regs.ah + 1;
         af = 1;
         cf = 1;
       } else {
         af = 0;
         cf = 0;
       }
-      regs.byteregs[regal] = regs.byteregs[regal] & 0xF;
+      cpu_regs.al = cpu_regs.al & 0xF;
       break;
 
     case 0x38: /* 38 CMP Eb Gb */
@@ -1713,267 +1754,267 @@ void cpu_exec86(int32_t cycles) {
       flag_sub16(oper1, oper2);
       break;
 
-    case 0x3C: /* 3C CMP regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0x3C: /* 3C CMP cpu_regs.al Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       flag_sub8(oper1b, oper2b);
       break;
 
     case 0x3D: /* 3D CMP eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       flag_sub16(oper1, oper2);
       break;
 
     case 0x3F: /* 3F AAS ASCII */
-      if (((regs.byteregs[regal] & 0xF) > 9) || (af == 1)) {
-        regs.byteregs[regal] = regs.byteregs[regal] - 6;
-        regs.byteregs[regah] = regs.byteregs[regah] - 1;
+      if (((cpu_regs.al & 0xF) > 9) || (af == 1)) {
+        cpu_regs.al = cpu_regs.al - 6;
+        cpu_regs.ah = cpu_regs.ah - 1;
         af = 1;
         cf = 1;
       } else {
         af = 0;
         cf = 0;
       }
-      regs.byteregs[regal] = regs.byteregs[regal] & 0xF;
+      cpu_regs.al = cpu_regs.al & 0xF;
       break;
 
     case 0x40: /* 40 INC eAX */
       oldcf = cf;
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = 1;
       op_add16();
       cf = oldcf;
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0x41: /* 41 INC eCX */
       oldcf = cf;
-      oper1 = regs.wordregs[regcx];
+      oper1 = cpu_regs.cx;
       oper2 = 1;
       op_add16();
       cf = oldcf;
-      regs.wordregs[regcx] = res16;
+      cpu_regs.cx = res16;
       break;
 
     case 0x42: /* 42 INC eDX */
       oldcf = cf;
-      oper1 = regs.wordregs[regdx];
+      oper1 = cpu_regs.dx;
       oper2 = 1;
       op_add16();
       cf = oldcf;
-      regs.wordregs[regdx] = res16;
+      cpu_regs.dx = res16;
       break;
 
     case 0x43: /* 43 INC eBX */
       oldcf = cf;
-      oper1 = regs.wordregs[regbx];
+      oper1 = cpu_regs.bx;
       oper2 = 1;
       op_add16();
       cf = oldcf;
-      regs.wordregs[regbx] = res16;
+      cpu_regs.bx = res16;
       break;
 
     case 0x44: /* 44 INC eSP */
       oldcf = cf;
-      oper1 = regs.wordregs[regsp];
+      oper1 = cpu_regs.sp;
       oper2 = 1;
       op_add16();
       cf = oldcf;
-      regs.wordregs[regsp] = res16;
+      cpu_regs.sp = res16;
       break;
 
     case 0x45: /* 45 INC eBP */
       oldcf = cf;
-      oper1 = regs.wordregs[regbp];
+      oper1 = cpu_regs.bp;
       oper2 = 1;
       op_add16();
       cf = oldcf;
-      regs.wordregs[regbp] = res16;
+      cpu_regs.bp = res16;
       break;
 
     case 0x46: /* 46 INC eSI */
       oldcf = cf;
-      oper1 = regs.wordregs[regsi];
+      oper1 = cpu_regs.si;
       oper2 = 1;
       op_add16();
       cf = oldcf;
-      regs.wordregs[regsi] = res16;
+      cpu_regs.si = res16;
       break;
 
     case 0x47: /* 47 INC eDI */
       oldcf = cf;
-      oper1 = regs.wordregs[regdi];
+      oper1 = cpu_regs.di;
       oper2 = 1;
       op_add16();
       cf = oldcf;
-      regs.wordregs[regdi] = res16;
+      cpu_regs.di = res16;
       break;
 
     case 0x48: /* 48 DEC eAX */
       oldcf = cf;
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = 1;
       op_sub16();
       cf = oldcf;
-      regs.wordregs[regax] = res16;
+      cpu_regs.ax = res16;
       break;
 
     case 0x49: /* 49 DEC eCX */
       oldcf = cf;
-      oper1 = regs.wordregs[regcx];
+      oper1 = cpu_regs.cx;
       oper2 = 1;
       op_sub16();
       cf = oldcf;
-      regs.wordregs[regcx] = res16;
+      cpu_regs.cx = res16;
       break;
 
     case 0x4A: /* 4A DEC eDX */
       oldcf = cf;
-      oper1 = regs.wordregs[regdx];
+      oper1 = cpu_regs.dx;
       oper2 = 1;
       op_sub16();
       cf = oldcf;
-      regs.wordregs[regdx] = res16;
+      cpu_regs.dx = res16;
       break;
 
     case 0x4B: /* 4B DEC eBX */
       oldcf = cf;
-      oper1 = regs.wordregs[regbx];
+      oper1 = cpu_regs.bx;
       oper2 = 1;
       op_sub16();
       cf = oldcf;
-      regs.wordregs[regbx] = res16;
+      cpu_regs.bx = res16;
       break;
 
     case 0x4C: /* 4C DEC eSP */
       oldcf = cf;
-      oper1 = regs.wordregs[regsp];
+      oper1 = cpu_regs.sp;
       oper2 = 1;
       op_sub16();
       cf = oldcf;
-      regs.wordregs[regsp] = res16;
+      cpu_regs.sp = res16;
       break;
 
     case 0x4D: /* 4D DEC eBP */
       oldcf = cf;
-      oper1 = regs.wordregs[regbp];
+      oper1 = cpu_regs.bp;
       oper2 = 1;
       op_sub16();
       cf = oldcf;
-      regs.wordregs[regbp] = res16;
+      cpu_regs.bp = res16;
       break;
 
     case 0x4E: /* 4E DEC eSI */
       oldcf = cf;
-      oper1 = regs.wordregs[regsi];
+      oper1 = cpu_regs.si;
       oper2 = 1;
       op_sub16();
       cf = oldcf;
-      regs.wordregs[regsi] = res16;
+      cpu_regs.si = res16;
       break;
 
     case 0x4F: /* 4F DEC eDI */
       oldcf = cf;
-      oper1 = regs.wordregs[regdi];
+      oper1 = cpu_regs.di;
       oper2 = 1;
       op_sub16();
       cf = oldcf;
-      regs.wordregs[regdi] = res16;
+      cpu_regs.di = res16;
       break;
 
     case 0x50: /* 50 PUSH eAX */
-      cpu_push(regs.wordregs[regax]);
+      cpu_push(cpu_regs.ax);
       break;
 
     case 0x51: /* 51 PUSH eCX */
-      cpu_push(regs.wordregs[regcx]);
+      cpu_push(cpu_regs.cx);
       break;
 
     case 0x52: /* 52 PUSH eDX */
-      cpu_push(regs.wordregs[regdx]);
+      cpu_push(cpu_regs.dx);
       break;
 
     case 0x53: /* 53 PUSH eBX */
-      cpu_push(regs.wordregs[regbx]);
+      cpu_push(cpu_regs.bx);
       break;
 
     case 0x54: /* 54 PUSH eSP */
 #ifdef USE_286_STYLE_PUSH_SP
-      cpu_push(regs.wordregs[regsp]);
+      cpu_push(cpu_regs.sp);
 #else
-      cpu_push(regs.wordregs[regsp] - 2);
+      cpu_push(cpu_regs.sp - 2);
 #endif
       break;
 
     case 0x55: /* 55 PUSH eBP */
-      cpu_push(regs.wordregs[regbp]);
+      cpu_push(cpu_regs.bp);
       break;
 
     case 0x56: /* 56 PUSH eSI */
-      cpu_push(regs.wordregs[regsi]);
+      cpu_push(cpu_regs.si);
       break;
 
     case 0x57: /* 57 PUSH eDI */
-      cpu_push(regs.wordregs[regdi]);
+      cpu_push(cpu_regs.di);
       break;
 
     case 0x58: /* 58 POP eAX */
-      regs.wordregs[regax] = cpu_pop();
+      cpu_regs.ax = cpu_pop();
       break;
 
     case 0x59: /* 59 POP eCX */
-      regs.wordregs[regcx] = cpu_pop();
+      cpu_regs.cx = cpu_pop();
       break;
 
     case 0x5A: /* 5A POP eDX */
-      regs.wordregs[regdx] = cpu_pop();
+      cpu_regs.dx = cpu_pop();
       break;
 
     case 0x5B: /* 5B POP eBX */
-      regs.wordregs[regbx] = cpu_pop();
+      cpu_regs.bx = cpu_pop();
       break;
 
     case 0x5C: /* 5C POP eSP */
-      regs.wordregs[regsp] = cpu_pop();
+      cpu_regs.sp = cpu_pop();
       break;
 
     case 0x5D: /* 5D POP eBP */
-      regs.wordregs[regbp] = cpu_pop();
+      cpu_regs.bp = cpu_pop();
       break;
 
     case 0x5E: /* 5E POP eSI */
-      regs.wordregs[regsi] = cpu_pop();
+      cpu_regs.si = cpu_pop();
       break;
 
     case 0x5F: /* 5F POP eDI */
-      regs.wordregs[regdi] = cpu_pop();
+      cpu_regs.di = cpu_pop();
       break;
 
 #ifndef CPU_8086
     case 0x60: /* 60 PUSHA (80186+) */
-      oldsp = regs.wordregs[regsp];
-      cpu_push(regs.wordregs[regax]);
-      cpu_push(regs.wordregs[regcx]);
-      cpu_push(regs.wordregs[regdx]);
-      cpu_push(regs.wordregs[regbx]);
+      oldsp = cpu_regs.sp;
+      cpu_push(cpu_regs.ax);
+      cpu_push(cpu_regs.cx);
+      cpu_push(cpu_regs.dx);
+      cpu_push(cpu_regs.bx);
       cpu_push(oldsp);
-      cpu_push(regs.wordregs[regbp]);
-      cpu_push(regs.wordregs[regsi]);
-      cpu_push(regs.wordregs[regdi]);
+      cpu_push(cpu_regs.bp);
+      cpu_push(cpu_regs.si);
+      cpu_push(cpu_regs.di);
       break;
 
     case 0x61: /* 61 POPA (80186+) */
-      regs.wordregs[regdi] = cpu_pop();
-      regs.wordregs[regsi] = cpu_pop();
-      regs.wordregs[regbp] = cpu_pop();
+      cpu_regs.di = cpu_pop();
+      cpu_regs.si = cpu_pop();
+      cpu_regs.bp = cpu_pop();
       dummy = cpu_pop();
-      regs.wordregs[regbx] = cpu_pop();
-      regs.wordregs[regdx] = cpu_pop();
-      regs.wordregs[regcx] = cpu_pop();
-      regs.wordregs[regax] = cpu_pop();
+      cpu_regs.bx = cpu_pop();
+      cpu_regs.dx = cpu_pop();
+      cpu_regs.cx = cpu_pop();
+      cpu_regs.ax = cpu_pop();
       break;
 
     case 0x62: /* 62 BOUND Gv, Ev (80186+) */
@@ -2008,7 +2049,7 @@ void cpu_exec86(int32_t cycles) {
       }
 
       temp3 = temp1 * temp2;
-      putreg16(reg, temp3 & 0xFFFFL);
+      cpu_setreg16(reg, temp3 & 0xFFFFL);
       if (temp3 & 0xFFFF0000L) {
         cf = 1;
         of = 1;
@@ -2037,7 +2078,7 @@ void cpu_exec86(int32_t cycles) {
       }
 
       temp3 = temp1 * temp2;
-      putreg16(reg, temp3 & 0xFFFFL);
+      cpu_setreg16(reg, temp3 & 0xFFFFL);
       if (temp3 & 0xFFFF0000L) {
         cf = 1;
         of = 1;
@@ -2048,21 +2089,21 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0x6C: /* 6E INSB */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      putmem8(useseg, regs.wordregs[regsi], portin(regs.wordregs[regdx]));
+      putmem8(useseg, cpu_regs.si, portin(cpu_regs.dx));
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 1;
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 1;
+        cpu_regs.si = cpu_regs.si - 1;
+        cpu_regs.di = cpu_regs.di - 1;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 1;
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 1;
+        cpu_regs.si = cpu_regs.si + 1;
+        cpu_regs.di = cpu_regs.di + 1;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2075,21 +2116,21 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0x6D: /* 6F INSW */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      putmem16(useseg, regs.wordregs[regsi], portin16(regs.wordregs[regdx]));
+      putmem16(useseg, cpu_regs.si, portin16(cpu_regs.dx));
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 2;
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 2;
+        cpu_regs.si = cpu_regs.si - 2;
+        cpu_regs.di = cpu_regs.di - 2;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 2;
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 2;
+        cpu_regs.si = cpu_regs.si + 2;
+        cpu_regs.di = cpu_regs.di + 2;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2102,21 +2143,21 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0x6E: /* 6E OUTSB */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      portout(regs.wordregs[regdx], getmem8(useseg, regs.wordregs[regsi]));
+      portout(cpu_regs.dx, getmem8(useseg, cpu_regs.si));
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 1;
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 1;
+        cpu_regs.si = cpu_regs.si - 1;
+        cpu_regs.di = cpu_regs.di - 1;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 1;
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 1;
+        cpu_regs.si = cpu_regs.si + 1;
+        cpu_regs.di = cpu_regs.di + 1;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2129,21 +2170,21 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0x6F: /* 6F OUTSW */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      portout16(regs.wordregs[regdx], getmem16(useseg, regs.wordregs[regsi]));
+      portout16(cpu_regs.dx, getmem16(useseg, cpu_regs.si));
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 2;
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 2;
+        cpu_regs.si = cpu_regs.si - 2;
+        cpu_regs.di = cpu_regs.di - 2;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 2;
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 2;
+        cpu_regs.si = cpu_regs.si + 2;
+        cpu_regs.di = cpu_regs.di + 2;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2387,14 +2428,14 @@ void cpu_exec86(int32_t cycles) {
     case 0x86: /* 86 XCHG Gb Eb */
       modregrm();
       oper1b = cpu_getreg8(reg);
-      putreg8(reg, readrm8(rm));
+      cpu_setreg8(reg, readrm8(rm));
       writerm8(rm, oper1b);
       break;
 
     case 0x87: /* 87 XCHG Gv Ev */
       modregrm();
       oper1 = cpu_getreg16(reg);
-      putreg16(reg, readrm16(rm));
+      cpu_setreg16(reg, readrm16(rm));
       writerm16(rm, oper1);
       break;
 
@@ -2410,12 +2451,12 @@ void cpu_exec86(int32_t cycles) {
 
     case 0x8A: /* 8A MOV Gb Eb */
       modregrm();
-      putreg8(reg, readrm8(rm));
+      cpu_setreg8(reg, readrm8(rm));
       break;
 
     case 0x8B: /* 8B MOV Gv Ev */
       modregrm();
-      putreg16(reg, readrm16(rm));
+      cpu_setreg16(reg, readrm16(rm));
       break;
 
     case 0x8C: /* 8C MOV Ew Sw */
@@ -2426,7 +2467,7 @@ void cpu_exec86(int32_t cycles) {
     case 0x8D: /* 8D LEA Gv M */
       modregrm();
       getea(rm);
-      putreg16(reg, ea - segbase(useseg));
+      cpu_setreg16(reg, ea - segbase(useseg));
       break;
 
     case 0x8E: /* 8E MOV Sw Ew */
@@ -2443,60 +2484,60 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0x91: /* 91 XCHG eCX eAX */
-      oper1 = regs.wordregs[regcx];
-      regs.wordregs[regcx] = regs.wordregs[regax];
-      regs.wordregs[regax] = oper1;
+      oper1 = cpu_regs.cx;
+      cpu_regs.cx = cpu_regs.ax;
+      cpu_regs.ax = oper1;
       break;
 
     case 0x92: /* 92 XCHG eDX eAX */
-      oper1 = regs.wordregs[regdx];
-      regs.wordregs[regdx] = regs.wordregs[regax];
-      regs.wordregs[regax] = oper1;
+      oper1 = cpu_regs.dx;
+      cpu_regs.dx = cpu_regs.ax;
+      cpu_regs.ax = oper1;
       break;
 
     case 0x93: /* 93 XCHG eBX eAX */
-      oper1 = regs.wordregs[regbx];
-      regs.wordregs[regbx] = regs.wordregs[regax];
-      regs.wordregs[regax] = oper1;
+      oper1 = cpu_regs.bx;
+      cpu_regs.bx = cpu_regs.ax;
+      cpu_regs.ax = oper1;
       break;
 
     case 0x94: /* 94 XCHG eSP eAX */
-      oper1 = regs.wordregs[regsp];
-      regs.wordregs[regsp] = regs.wordregs[regax];
-      regs.wordregs[regax] = oper1;
+      oper1 = cpu_regs.sp;
+      cpu_regs.sp = cpu_regs.ax;
+      cpu_regs.ax = oper1;
       break;
 
     case 0x95: /* 95 XCHG eBP eAX */
-      oper1 = regs.wordregs[regbp];
-      regs.wordregs[regbp] = regs.wordregs[regax];
-      regs.wordregs[regax] = oper1;
+      oper1 = cpu_regs.bp;
+      cpu_regs.bp = cpu_regs.ax;
+      cpu_regs.ax = oper1;
       break;
 
     case 0x96: /* 96 XCHG eSI eAX */
-      oper1 = regs.wordregs[regsi];
-      regs.wordregs[regsi] = regs.wordregs[regax];
-      regs.wordregs[regax] = oper1;
+      oper1 = cpu_regs.si;
+      cpu_regs.si = cpu_regs.ax;
+      cpu_regs.ax = oper1;
       break;
 
     case 0x97: /* 97 XCHG eDI eAX */
-      oper1 = regs.wordregs[regdi];
-      regs.wordregs[regdi] = regs.wordregs[regax];
-      regs.wordregs[regax] = oper1;
+      oper1 = cpu_regs.di;
+      cpu_regs.di = cpu_regs.ax;
+      cpu_regs.ax = oper1;
       break;
 
     case 0x98: /* 98 CBW */
-      if ((regs.byteregs[regal] & 0x80) == 0x80) {
-        regs.byteregs[regah] = 0xFF;
+      if ((cpu_regs.al & 0x80) == 0x80) {
+        cpu_regs.ah = 0xFF;
       } else {
-        regs.byteregs[regah] = 0;
+        cpu_regs.ah = 0;
       }
       break;
 
     case 0x99: /* 99 CWD */
-      if ((regs.byteregs[regah] & 0x80) == 0x80) {
-        regs.wordregs[regdx] = 0xFFFF;
+      if ((cpu_regs.ah & 0x80) == 0x80) {
+        cpu_regs.dx = 0xFFFF;
       } else {
-        regs.wordregs[regdx] = 0;
+        cpu_regs.dx = 0;
       }
       break;
 
@@ -2528,51 +2569,51 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0x9E: /* 9E SAHF */
-      decodeflagsword((makeflagsword() & 0xFF00) | regs.byteregs[regah]);
+      decodeflagsword((makeflagsword() & 0xFF00) | cpu_regs.ah);
       break;
 
     case 0x9F: /* 9F LAHF */
-      regs.byteregs[regah] = makeflagsword() & 0xFF;
+      cpu_regs.ah = makeflagsword() & 0xFF;
       break;
 
-    case 0xA0: /* A0 MOV regs.byteregs[regal] Ob */
-      regs.byteregs[regal] = getmem8(useseg, getmem16(segregs[regcs], ip));
+    case 0xA0: /* A0 MOV cpu_regs.al Ob */
+      cpu_regs.al = getmem8(useseg, getmem16(segregs[regcs], ip));
       StepIP(2);
       break;
 
     case 0xA1: /* A1 MOV eAX Ov */
       oper1 = getmem16(useseg, getmem16(segregs[regcs], ip));
       StepIP(2);
-      regs.wordregs[regax] = oper1;
+      cpu_regs.ax = oper1;
       break;
 
-    case 0xA2: /* A2 MOV Ob regs.byteregs[regal] */
-      putmem8(useseg, getmem16(segregs[regcs], ip), regs.byteregs[regal]);
+    case 0xA2: /* A2 MOV Ob cpu_regs.al */
+      putmem8(useseg, getmem16(segregs[regcs], ip), cpu_regs.al);
       StepIP(2);
       break;
 
     case 0xA3: /* A3 MOV Ov eAX */
-      putmem16(useseg, getmem16(segregs[regcs], ip), regs.wordregs[regax]);
+      putmem16(useseg, getmem16(segregs[regcs], ip), cpu_regs.ax);
       StepIP(2);
       break;
 
     case 0xA4: /* A4 MOVSB */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      putmem8(segregs[reges], regs.wordregs[regdi],
-              getmem8(useseg, regs.wordregs[regsi]));
+      putmem8(segregs[reges], cpu_regs.di,
+              getmem8(useseg, cpu_regs.si));
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 1;
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 1;
+        cpu_regs.si = cpu_regs.si - 1;
+        cpu_regs.di = cpu_regs.di - 1;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 1;
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 1;
+        cpu_regs.si = cpu_regs.si + 1;
+        cpu_regs.di = cpu_regs.di + 1;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2585,22 +2626,22 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0xA5: /* A5 MOVSW */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      putmem16(segregs[reges], regs.wordregs[regdi],
-               getmem16(useseg, regs.wordregs[regsi]));
+      putmem16(segregs[reges], cpu_regs.di,
+               getmem16(useseg, cpu_regs.si));
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 2;
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 2;
+        cpu_regs.si = cpu_regs.si - 2;
+        cpu_regs.di = cpu_regs.di - 2;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 2;
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 2;
+        cpu_regs.si = cpu_regs.si + 2;
+        cpu_regs.di = cpu_regs.di + 2;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2613,23 +2654,23 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0xA6: /* A6 CMPSB */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      oper1b = getmem8(useseg, regs.wordregs[regsi]);
-      oper2b = getmem8(segregs[reges], regs.wordregs[regdi]);
+      oper1b = getmem8(useseg, cpu_regs.si);
+      oper2b = getmem8(segregs[reges], cpu_regs.di);
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 1;
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 1;
+        cpu_regs.si = cpu_regs.si - 1;
+        cpu_regs.di = cpu_regs.di - 1;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 1;
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 1;
+        cpu_regs.si = cpu_regs.si + 1;
+        cpu_regs.di = cpu_regs.di + 1;
       }
 
       flag_sub8(oper1b, oper2b);
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       if ((reptype == 1) && !zf) {
@@ -2648,23 +2689,23 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0xA7: /* A7 CMPSW */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      oper1 = getmem16(useseg, regs.wordregs[regsi]);
-      oper2 = getmem16(segregs[reges], regs.wordregs[regdi]);
+      oper1 = getmem16(useseg, cpu_regs.si);
+      oper2 = getmem16(segregs[reges], cpu_regs.di);
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 2;
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 2;
+        cpu_regs.si = cpu_regs.si - 2;
+        cpu_regs.di = cpu_regs.di - 2;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 2;
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 2;
+        cpu_regs.si = cpu_regs.si + 2;
+        cpu_regs.di = cpu_regs.di + 2;
       }
 
       flag_sub16(oper1, oper2);
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       if ((reptype == 1) && !zf) {
@@ -2684,34 +2725,34 @@ void cpu_exec86(int32_t cycles) {
       ip = firstip;
       break;
 
-    case 0xA8: /* A8 TEST regs.byteregs[regal] Ib */
-      oper1b = regs.byteregs[regal];
+    case 0xA8: /* A8 TEST cpu_regs.al Ib */
+      oper1b = cpu_regs.al;
       oper2b = getmem8(segregs[regcs], ip);
       StepIP(1);
       flag_log8(oper1b & oper2b);
       break;
 
     case 0xA9: /* A9 TEST eAX Iv */
-      oper1 = regs.wordregs[regax];
+      oper1 = cpu_regs.ax;
       oper2 = getmem16(segregs[regcs], ip);
       StepIP(2);
       flag_log16(oper1 & oper2);
       break;
 
     case 0xAA: /* AA STOSB */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      putmem8(segregs[reges], regs.wordregs[regdi], regs.byteregs[regal]);
+      putmem8(segregs[reges], cpu_regs.di, cpu_regs.al);
       if (df) {
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 1;
+        cpu_regs.di = cpu_regs.di - 1;
       } else {
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 1;
+        cpu_regs.di = cpu_regs.di + 1;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2724,19 +2765,19 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0xAB: /* AB STOSW */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      putmem16(segregs[reges], regs.wordregs[regdi], regs.wordregs[regax]);
+      putmem16(segregs[reges], cpu_regs.di, cpu_regs.ax);
       if (df) {
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 2;
+        cpu_regs.di = cpu_regs.di - 2;
       } else {
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 2;
+        cpu_regs.di = cpu_regs.di + 2;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2749,19 +2790,19 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0xAC: /* AC LODSB */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      regs.byteregs[regal] = getmem8(useseg, regs.wordregs[regsi]);
+      cpu_regs.al = getmem8(useseg, cpu_regs.si);
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 1;
+        cpu_regs.si = cpu_regs.si - 1;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 1;
+        cpu_regs.si = cpu_regs.si + 1;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2774,20 +2815,20 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0xAD: /* AD LODSW */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      oper1 = getmem16(useseg, regs.wordregs[regsi]);
-      regs.wordregs[regax] = oper1;
+      oper1 = getmem16(useseg, cpu_regs.si);
+      cpu_regs.ax = oper1;
       if (df) {
-        regs.wordregs[regsi] = regs.wordregs[regsi] - 2;
+        cpu_regs.si = cpu_regs.si - 2;
       } else {
-        regs.wordregs[regsi] = regs.wordregs[regsi] + 2;
+        cpu_regs.si = cpu_regs.si + 2;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       ++totalexec;
@@ -2800,21 +2841,21 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0xAE: /* AE SCASB */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      oper1b = regs.byteregs[regal];
-      oper2b = getmem8(segregs[reges], regs.wordregs[regdi]);
+      oper1b = cpu_regs.al;
+      oper2b = getmem8(segregs[reges], cpu_regs.di);
       flag_sub8(oper1b, oper2b);
       if (df) {
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 1;
+        cpu_regs.di = cpu_regs.di - 1;
       } else {
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 1;
+        cpu_regs.di = cpu_regs.di + 1;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       if ((reptype == 1) && !zf) {
@@ -2833,21 +2874,21 @@ void cpu_exec86(int32_t cycles) {
       break;
 
     case 0xAF: /* AF SCASW */
-      if (reptype && (regs.wordregs[regcx] == 0)) {
+      if (reptype && (cpu_regs.cx == 0)) {
         break;
       }
 
-      oper1 = regs.wordregs[regax];
-      oper2 = getmem16(segregs[reges], regs.wordregs[regdi]);
+      oper1 = cpu_regs.ax;
+      oper2 = getmem16(segregs[reges], cpu_regs.di);
       flag_sub16(oper1, oper2);
       if (df) {
-        regs.wordregs[regdi] = regs.wordregs[regdi] - 2;
+        cpu_regs.di = cpu_regs.di - 2;
       } else {
-        regs.wordregs[regdi] = regs.wordregs[regdi] + 2;
+        cpu_regs.di = cpu_regs.di + 2;
       }
 
       if (reptype) {
-        regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
+        cpu_regs.cx = cpu_regs.cx - 1;
       }
 
       if ((reptype == 1) && !zf) {
@@ -2865,87 +2906,87 @@ void cpu_exec86(int32_t cycles) {
       ip = firstip;
       break;
 
-    case 0xB0: /* B0 MOV regs.byteregs[regal] Ib */
-      regs.byteregs[regal] = getmem8(segregs[regcs], ip);
+    case 0xB0: /* B0 MOV cpu_regs.al Ib */
+      cpu_regs.al = getmem8(segregs[regcs], ip);
       StepIP(1);
       break;
 
-    case 0xB1: /* B1 MOV regs.byteregs[regcl] Ib */
-      regs.byteregs[regcl] = getmem8(segregs[regcs], ip);
+    case 0xB1: /* B1 MOV cpu_regs.cl Ib */
+      cpu_regs.cl = getmem8(segregs[regcs], ip);
       StepIP(1);
       break;
 
-    case 0xB2: /* B2 MOV regs.byteregs[regdl] Ib */
-      regs.byteregs[regdl] = getmem8(segregs[regcs], ip);
+    case 0xB2: /* B2 MOV cpu_regs.dl Ib */
+      cpu_regs.dl = getmem8(segregs[regcs], ip);
       StepIP(1);
       break;
 
-    case 0xB3: /* B3 MOV regs.byteregs[regbl] Ib */
-      regs.byteregs[regbl] = getmem8(segregs[regcs], ip);
+    case 0xB3: /* B3 MOV cpu_regs.bl Ib */
+      cpu_regs.bl = getmem8(segregs[regcs], ip);
       StepIP(1);
       break;
 
-    case 0xB4: /* B4 MOV regs.byteregs[regah] Ib */
-      regs.byteregs[regah] = getmem8(segregs[regcs], ip);
+    case 0xB4: /* B4 MOV cpu_regs.ah Ib */
+      cpu_regs.ah = getmem8(segregs[regcs], ip);
       StepIP(1);
       break;
 
-    case 0xB5: /* B5 MOV regs.byteregs[regch] Ib */
-      regs.byteregs[regch] = getmem8(segregs[regcs], ip);
+    case 0xB5: /* B5 MOV cpu_regs.ch Ib */
+      cpu_regs.ch = getmem8(segregs[regcs], ip);
       StepIP(1);
       break;
 
-    case 0xB6: /* B6 MOV regs.byteregs[regdh] Ib */
-      regs.byteregs[regdh] = getmem8(segregs[regcs], ip);
+    case 0xB6: /* B6 MOV cpu_regs.dh Ib */
+      cpu_regs.dh = getmem8(segregs[regcs], ip);
       StepIP(1);
       break;
 
-    case 0xB7: /* B7 MOV regs.byteregs[regbh] Ib */
-      regs.byteregs[regbh] = getmem8(segregs[regcs], ip);
+    case 0xB7: /* B7 MOV cpu_regs.bh Ib */
+      cpu_regs.bh = getmem8(segregs[regcs], ip);
       StepIP(1);
       break;
 
     case 0xB8: /* B8 MOV eAX Iv */
       oper1 = getmem16(segregs[regcs], ip);
       StepIP(2);
-      regs.wordregs[regax] = oper1;
+      cpu_regs.ax = oper1;
       break;
 
     case 0xB9: /* B9 MOV eCX Iv */
       oper1 = getmem16(segregs[regcs], ip);
       StepIP(2);
-      regs.wordregs[regcx] = oper1;
+      cpu_regs.cx = oper1;
       break;
 
     case 0xBA: /* BA MOV eDX Iv */
       oper1 = getmem16(segregs[regcs], ip);
       StepIP(2);
-      regs.wordregs[regdx] = oper1;
+      cpu_regs.dx = oper1;
       break;
 
     case 0xBB: /* BB MOV eBX Iv */
       oper1 = getmem16(segregs[regcs], ip);
       StepIP(2);
-      regs.wordregs[regbx] = oper1;
+      cpu_regs.bx = oper1;
       break;
 
     case 0xBC: /* BC MOV eSP Iv */
-      regs.wordregs[regsp] = getmem16(segregs[regcs], ip);
+      cpu_regs.sp = getmem16(segregs[regcs], ip);
       StepIP(2);
       break;
 
     case 0xBD: /* BD MOV eBP Iv */
-      regs.wordregs[regbp] = getmem16(segregs[regcs], ip);
+      cpu_regs.bp = getmem16(segregs[regcs], ip);
       StepIP(2);
       break;
 
     case 0xBE: /* BE MOV eSI Iv */
-      regs.wordregs[regsi] = getmem16(segregs[regcs], ip);
+      cpu_regs.si = getmem16(segregs[regcs], ip);
       StepIP(2);
       break;
 
     case 0xBF: /* BF MOV eDI Iv */
-      regs.wordregs[regdi] = getmem16(segregs[regcs], ip);
+      cpu_regs.di = getmem16(segregs[regcs], ip);
       StepIP(2);
       break;
 
@@ -2968,7 +3009,7 @@ void cpu_exec86(int32_t cycles) {
     case 0xC2: /* C2 RET Iw */
       oper1 = getmem16(segregs[regcs], ip);
       ip = cpu_pop();
-      regs.wordregs[regsp] = regs.wordregs[regsp] + oper1;
+      cpu_regs.sp = cpu_regs.sp + oper1;
       break;
 
     case 0xC3: /* C3 RET */
@@ -2978,14 +3019,14 @@ void cpu_exec86(int32_t cycles) {
     case 0xC4: /* C4 LES Gv Mp */
       modregrm();
       getea(rm);
-      putreg16(reg, read86(ea) + read86(ea + 1) * 256);
+      cpu_setreg16(reg, read86(ea) + read86(ea + 1) * 256);
       segregs[reges] = read86(ea + 2) + read86(ea + 3) * 256;
       break;
 
     case 0xC5: /* C5 LDS Gv Mp */
       modregrm();
       getea(rm);
-      putreg16(reg, read86(ea) + read86(ea + 1) * 256);
+      cpu_setreg16(reg, read86(ea) + read86(ea + 1) * 256);
       segregs[regds] = read86(ea + 2) + read86(ea + 3) * 256;
       break;
 
@@ -3006,31 +3047,31 @@ void cpu_exec86(int32_t cycles) {
       StepIP(2);
       nestlev = getmem8(segregs[regcs], ip);
       StepIP(1);
-      cpu_push(regs.wordregs[regbp]);
-      frametemp = regs.wordregs[regsp];
+      cpu_push(cpu_regs.bp);
+      frametemp = cpu_regs.sp;
       if (nestlev) {
         for (temp16 = 1; temp16 < nestlev; temp16++) {
-          regs.wordregs[regbp] = regs.wordregs[regbp] - 2;
-          cpu_push(regs.wordregs[regbp]);
+          cpu_regs.bp = cpu_regs.bp - 2;
+          cpu_push(cpu_regs.bp);
         }
-        cpu_push(regs.wordregs[regsp]);
+        cpu_push(cpu_regs.sp);
       }
 
-      regs.wordregs[regbp] = frametemp;
-      regs.wordregs[regsp] = regs.wordregs[regbp] - stacksize;
+      cpu_regs.bp = frametemp;
+      cpu_regs.sp = cpu_regs.bp - stacksize;
 
       break;
 
     case 0xC9: /* C9 LEAVE (80186+) */
-      regs.wordregs[regsp] = regs.wordregs[regbp];
-      regs.wordregs[regbp] = cpu_pop();
+      cpu_regs.sp = cpu_regs.bp;
+      cpu_regs.bp = cpu_pop();
       break;
 
     case 0xCA: /* CA RETF Iw */
       oper1 = getmem16(segregs[regcs], ip);
       ip = cpu_pop();
       segregs[regcs] = cpu_pop();
-      regs.wordregs[regsp] = regs.wordregs[regsp] + oper1;
+      cpu_regs.sp = cpu_regs.sp + oper1;
       break;
 
     case 0xCB: /* CB RETF */
@@ -3077,16 +3118,16 @@ void cpu_exec86(int32_t cycles) {
       writerm16(rm, op_grp2_16(1));
       break;
 
-    case 0xD2: /* D2 GRP2 Eb regs.byteregs[regcl] */
+    case 0xD2: /* D2 GRP2 Eb cpu_regs.cl */
       modregrm();
       oper1b = readrm8(rm);
-      writerm8(rm, op_grp2_8(regs.byteregs[regcl]));
+      writerm8(rm, op_grp2_8(cpu_regs.cl));
       break;
 
-    case 0xD3: /* D3 GRP2 Ev regs.byteregs[regcl] */
+    case 0xD3: /* D3 GRP2 Ev cpu_regs.cl */
       modregrm();
       oper1 = readrm16(rm);
-      writerm16(rm, op_grp2_16(regs.byteregs[regcl]));
+      writerm16(rm, op_grp2_16(cpu_regs.cl));
       break;
 
     case 0xD4: /* D4 AAM I0 */
@@ -3097,30 +3138,30 @@ void cpu_exec86(int32_t cycles) {
         break;
       } /* division by zero */
 
-      regs.byteregs[regah] = (regs.byteregs[regal] / oper1) & 255;
-      regs.byteregs[regal] = (regs.byteregs[regal] % oper1) & 255;
-      flag_szp16(regs.wordregs[regax]);
+      cpu_regs.ah = (cpu_regs.al / oper1) & 255;
+      cpu_regs.al = (cpu_regs.al % oper1) & 255;
+      flag_szp16(cpu_regs.ax);
       break;
 
     case 0xD5: /* D5 AAD I0 */
       oper1 = getmem8(segregs[regcs], ip);
       StepIP(1);
-      regs.byteregs[regal] =
-          (regs.byteregs[regah] * oper1 + regs.byteregs[regal]) & 255;
-      regs.byteregs[regah] = 0;
-      flag_szp16(regs.byteregs[regah] * oper1 + regs.byteregs[regal]);
+      cpu_regs.al =
+          (cpu_regs.ah * oper1 + cpu_regs.al) & 255;
+      cpu_regs.ah = 0;
+      flag_szp16(cpu_regs.ah * oper1 + cpu_regs.al);
       sf = 0;
       break;
 
     case 0xD6: /* D6 XLAT on V20/V30, SALC on 8086/8088 */
 #ifndef CPU_NO_SALC
-      regs.byteregs[regal] = cf ? 0xFF : 0x00;
+      cpu_regs.al = cf ? 0xFF : 0x00;
       break;
 #endif
 
     case 0xD7: /* D7 XLAT */
-      regs.byteregs[regal] =
-          read86(useseg * 16 + (regs.wordregs[regbx]) + regs.byteregs[regal]);
+      cpu_regs.al =
+          read86(useseg * 16 + (cpu_regs.bx) + cpu_regs.al);
       break;
 
     case 0xD8:
@@ -3137,8 +3178,8 @@ void cpu_exec86(int32_t cycles) {
     case 0xE0: /* E0 LOOPNZ Jb */
       temp16 = signext(getmem8(segregs[regcs], ip));
       StepIP(1);
-      regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
-      if ((regs.wordregs[regcx]) && !zf) {
+      cpu_regs.cx = cpu_regs.cx - 1;
+      if ((cpu_regs.cx) && !zf) {
         ip = ip + temp16;
       }
       break;
@@ -3146,8 +3187,8 @@ void cpu_exec86(int32_t cycles) {
     case 0xE1: /* E1 LOOPZ Jb */
       temp16 = signext(getmem8(segregs[regcs], ip));
       StepIP(1);
-      regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
-      if (regs.wordregs[regcx] && (zf == 1)) {
+      cpu_regs.cx = cpu_regs.cx - 1;
+      if (cpu_regs.cx && (zf == 1)) {
         ip = ip + temp16;
       }
       break;
@@ -3155,8 +3196,8 @@ void cpu_exec86(int32_t cycles) {
     case 0xE2: /* E2 LOOP Jb */
       temp16 = signext(getmem8(segregs[regcs], ip));
       StepIP(1);
-      regs.wordregs[regcx] = regs.wordregs[regcx] - 1;
-      if (regs.wordregs[regcx]) {
+      cpu_regs.cx = cpu_regs.cx - 1;
+      if (cpu_regs.cx) {
         ip = ip + temp16;
       }
       break;
@@ -3164,33 +3205,33 @@ void cpu_exec86(int32_t cycles) {
     case 0xE3: /* E3 JCXZ Jb */
       temp16 = signext(getmem8(segregs[regcs], ip));
       StepIP(1);
-      if (!regs.wordregs[regcx]) {
+      if (!cpu_regs.cx) {
         ip = ip + temp16;
       }
       break;
 
-    case 0xE4: /* E4 IN regs.byteregs[regal] Ib */
+    case 0xE4: /* E4 IN cpu_regs.al Ib */
       oper1b = getmem8(segregs[regcs], ip);
       StepIP(1);
-      regs.byteregs[regal] = (uint8_t)portin(oper1b);
+      cpu_regs.al = (uint8_t)portin(oper1b);
       break;
 
     case 0xE5: /* E5 IN eAX Ib */
       oper1b = getmem8(segregs[regcs], ip);
       StepIP(1);
-      regs.wordregs[regax] = portin16(oper1b);
+      cpu_regs.ax = portin16(oper1b);
       break;
 
-    case 0xE6: /* E6 OUT Ib regs.byteregs[regal] */
+    case 0xE6: /* E6 OUT Ib cpu_regs.al */
       oper1b = getmem8(segregs[regcs], ip);
       StepIP(1);
-      portout(oper1b, regs.byteregs[regal]);
+      portout(oper1b, cpu_regs.al);
       break;
 
     case 0xE7: /* E7 OUT Ib eAX */
       oper1b = getmem8(segregs[regcs], ip);
       StepIP(1);
-      portout16(oper1b, regs.wordregs[regax]);
+      portout16(oper1b, cpu_regs.ax);
       break;
 
     case 0xE8: /* E8 CALL Jv */
@@ -3220,24 +3261,24 @@ void cpu_exec86(int32_t cycles) {
       ip = ip + oper1;
       break;
 
-    case 0xEC: /* EC IN regs.byteregs[regal] regdx */
-      oper1 = regs.wordregs[regdx];
-      regs.byteregs[regal] = (uint8_t)portin(oper1);
+    case 0xEC: /* EC IN cpu_regs.al regdx */
+      oper1 = cpu_regs.dx;
+      cpu_regs.al = (uint8_t)portin(oper1);
       break;
 
     case 0xED: /* ED IN eAX regdx */
-      oper1 = regs.wordregs[regdx];
-      regs.wordregs[regax] = portin16(oper1);
+      oper1 = cpu_regs.dx;
+      cpu_regs.ax = portin16(oper1);
       break;
 
-    case 0xEE: /* EE OUT regdx regs.byteregs[regal] */
-      oper1 = regs.wordregs[regdx];
-      portout(oper1, regs.byteregs[regal]);
+    case 0xEE: /* EE OUT regdx cpu_regs.al */
+      oper1 = cpu_regs.dx;
+      portout(oper1, cpu_regs.al);
       break;
 
     case 0xEF: /* EF OUT regdx eAX */
-      oper1 = regs.wordregs[regdx];
-      portout16(oper1, regs.wordregs[regax]);
+      oper1 = cpu_regs.dx;
+      portout16(oper1, cpu_regs.ax);
       break;
 
     case 0xF0: /* F0 LOCK */

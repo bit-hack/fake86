@@ -27,10 +27,8 @@
 
 #include "common.h"
 
-#include "../80x86/cpu.h"
 
-
-static const bool _notify_unknown_ports = false;
+static const bool _notify_unknown_ports = true;
 
 uint8_t portram[0x10000];
 

@@ -69,13 +69,13 @@ static void vidinterrupt() {
   uint32_t tempcalc, memloc, n;
   updatedscreen = 1;
   // what video interrupt function
-  switch (regs.byteregs[regah]) {
+  switch (cpu_regs.ah) {
   case 0: // set video mode
-    log_printf(LOG_CHAN_VIDEO, "set video mode %02Xh", regs.byteregs[regal]);
+    log_printf(LOG_CHAN_VIDEO, "set video mode %02Xh", cpu_regs.al);
     // VGA modes are in chained mode by default after a mode switch
     VGA_SC[0x4] = 0;
-    // regs.byteregs[regal] = 3;
-    switch (regs.byteregs[regal] & 0x7F) {
+    // cpu_regs.al = 3;
+    switch (cpu_regs.al & 0x7F) {
     case 0: // 40x25 mono text
       videobase = textbase;
       cols = 40;
@@ -139,7 +139,7 @@ static void vidinterrupt() {
         RAM[tempcalc] = 0;
         RAM[tempcalc + 1] = blankattr;
       }
-      if (regs.byteregs[regal] == 4)
+      if (cpu_regs.al == 4)
         portram[0x3D9] = 48;
       else
         portram[0x3D9] = 0;
@@ -175,7 +175,7 @@ static void vidinterrupt() {
       vidcolor = 1;
       vidgfxmode = 1;
       blankattr = 0;
-      if ((regs.byteregs[regal] & 0x80) == 0)
+      if ((cpu_regs.al & 0x80) == 0)
         for (tempcalc = videobase; tempcalc < videobase + 65535;
              tempcalc += 2) {
           RAM[tempcalc] = 0;
@@ -200,7 +200,7 @@ static void vidinterrupt() {
       break;
     }
 
-    const int new_vidmode = regs.byteregs[regal] & 0x7F;
+    const int new_vidmode = cpu_regs.al & 0x7F;
     vidmode = new_vidmode;
     RAM[0x449] = vidmode;
     RAM[0x44A] = (uint8_t)cols;
@@ -208,7 +208,7 @@ static void vidinterrupt() {
     RAM[0x484] = (uint8_t)(rows - 1);
     cursx = 0;
     cursy = 0;
-    if ((regs.byteregs[regal] & 0x80) == 0x00) {
+    if ((cpu_regs.al & 0x80) == 0x00) {
       memset(&RAM[0xA0000], 0, 0x1FFFF);
       memset(VRAM, 0, 262144);
     }
@@ -238,16 +238,16 @@ static void vidinterrupt() {
     }
     break;
   case 0x10: // VGA DAC functions
-    switch (regs.byteregs[regal]) {
+    switch (cpu_regs.al) {
     case 0x10: // set individual DAC register
-      palettevga[cpu_getreg16(regbx)] = rgb((regs.byteregs[regdh] & 63) << 2,
-                                        (regs.byteregs[regch] & 63) << 2,
-                                        (regs.byteregs[regcl] & 63) << 2);
+      palettevga[cpu_regs.bx] = rgb((cpu_regs.dh & 63) << 2,
+                                        (cpu_regs.ch & 63) << 2,
+                                        (cpu_regs.cl & 63) << 2);
       break;
     case 0x12: // set block of DAC registers
-      memloc = segregs[reges] * 16 + cpu_getreg16(regdx);
-      for (n = cpu_getreg16(regbx);
-           n < (uint32_t)(cpu_getreg16(regbx) + cpu_getreg16(regcx)); n++) {
+      memloc = segregs[reges] * 16 + cpu_regs.dx;
+      for (n = cpu_regs.bx;
+           n < (uint32_t)(cpu_regs.bx + cpu_regs.cx); n++) {
         palettevga[n] = rgb(read86(memloc) << 2, read86(memloc + 1) << 2,
                             read86(memloc + 2) << 2);
         memloc += 3;
@@ -255,8 +255,8 @@ static void vidinterrupt() {
     }
     break;
   case 0x1A: // get display combination code (ps, vga/mcga)
-    regs.byteregs[regal] = 0x1A;
-    regs.byteregs[regbl] = 0x8;
+    cpu_regs.al = 0x1A;
+    cpu_regs.bl = 0x8;
     break;
   }
 }
@@ -553,13 +553,13 @@ void outVGA(uint16_t portnum, uint8_t value) {
   switch (portnum) {
   case 0x3B8: // hercules support
     if (((value & 2) == 2) && (vidmode != 127)) {
-      oldah = regs.byteregs[regah];
-      oldal = regs.byteregs[regal];
-      regs.byteregs[regah] = 0;
-      regs.byteregs[regal] = 127;
+      oldah = cpu_regs.ah;
+      oldal = cpu_regs.al;
+      cpu_regs.ah = 0;
+      cpu_regs.al = 127;
       vidinterrupt();
-      regs.byteregs[regah] = oldah;
-      regs.byteregs[regal] = oldal;
+      cpu_regs.ah = oldah;
+      cpu_regs.al = oldal;
     }
     if (value & 0x80)
       videobase = 0xB8000;
@@ -910,29 +910,29 @@ bool video_int_handler(int intnum) {
   switch (intnum) {
   case 0x10:
     updatedscreen = 1;
-    if ((regs.byteregs[regah] == 0x00) || (regs.byteregs[regah] == 0x10)) {
-      const uint16_t oldregax = regs.wordregs[regax];
+    if ((cpu_regs.ah == 0x00) || (cpu_regs.ah == 0x10)) {
+      const uint16_t oldregax = cpu_regs.ax;
       vidinterrupt();
-      regs.wordregs[regax] = oldregax;
-      if (regs.byteregs[regah] == 0x10) {
+      cpu_regs.ax = oldregax;
+      if (cpu_regs.ah == 0x10) {
         return true;
       }
       if (vidmode == 9) {
         return true;
       }
     }
-    if ((regs.byteregs[regah] == 0x1A) &&
+    if ((cpu_regs.ah == 0x1A) &&
         (lastint10ax != 0x0100)) { // the 0x0100 is a cheap hack to make it not
                                    // do this if DOS EDIT/QBASIC
-      regs.byteregs[regal] = 0x1A;
-      regs.byteregs[regbl] = 0x8;
+      cpu_regs.al = 0x1A;
+      cpu_regs.bl = 0x8;
       return true;
     }
-    lastint10ax = regs.wordregs[regax];
-    if (regs.byteregs[regah] == 0x1B) {
-      regs.byteregs[regal] = 0x1B;
+    lastint10ax = cpu_regs.ax;
+    if (cpu_regs.ah == 0x1B) {
+      cpu_regs.al = 0x1B;
       segregs[reges] = 0xC800;
-      regs.wordregs[regdi] = 0x0000;
+      cpu_regs.di = 0x0000;
       writew86(0xC8000, 0x0000);
       writew86(0xC8002, 0xC900);
       write86(0xC9000, 0x00);

@@ -19,6 +19,14 @@
 */
 
 enum {
+  reges = 0,
+  regcs = 1,
+  regss = 2,
+  regds = 3,
+};
+
+#if 0
+enum {
   regax = 0,
   regcx = 1,
   regdx = 2,
@@ -43,32 +51,23 @@ enum {
   regbl = 6,
   regbh = 7,
 };
+#endif
 
-void cpu_setreg8(const int regid, const uint8_t val);
-void cpu_setreg16(const int regid, const uint16_t val);
-uint8_t cpu_getreg8(const int regid);
-uint16_t cpu_getreg16(const int regid);
 
-#define OLD_REGS 1
-#if OLD_REGS
-union _bytewordregs_ {
-  uint16_t wordregs[8];
-  uint8_t byteregs[8];
-};
-extern union _bytewordregs_ regs;
-#else
+#pragma pack(push, 1)
 struct cpu_regs_t {
-  union { uint16_t ax; struct { uint8_t al, ah; }; };
-  union { uint16_t bx; struct { uint8_t bl, bh; }; };
-  union { uint16_t cx; struct { uint8_t cl, ch; }; };
-  union { uint16_t dx; struct { uint8_t dl, dh; }; };
-  uint16_t sp;
-  uint16_t bp;
-  uint16_t si;
-  uint16_t di;
+  union {
+    struct {
+      uint16_t ax, cx, dx, bx;
+    };
+    struct {
+      uint8_t al, ah, cl, ch, dl, dh, bl, bh;
+    };
+  };
+  uint16_t sp, bp, si, di;
 };
 extern struct cpu_regs_t cpu_regs;
-#endif
+#pragma pack(pop)
 
 void cpu_push(uint16_t pushval);
 uint16_t cpu_pop();
