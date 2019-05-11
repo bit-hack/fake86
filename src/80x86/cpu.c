@@ -50,6 +50,7 @@ uint64_t curtimer, lasttimer, timerfreq;
 
 #define segbase(x) ((uint32_t)x << 4)
 
+// set register based on mod-reg-rm bit layout
 static inline void cpu_setreg8(const int regid, const uint8_t val) {
   switch (regid) {
   case 0: cpu_regs.al = val; return;
@@ -64,6 +65,7 @@ static inline void cpu_setreg8(const int regid, const uint8_t val) {
   __debugbreak();
 }
 
+// set register based on mod-reg-rm bit index
 static inline void cpu_setreg16(const int regid, const uint16_t val) {
   switch (regid) {
   case 0: cpu_regs.ax = val; return;
@@ -78,6 +80,7 @@ static inline void cpu_setreg16(const int regid, const uint16_t val) {
   __debugbreak();
 }
 
+// get register based on mod-reg-rm bit index
 static inline uint8_t cpu_getreg8(const int regid)  {
   switch (regid) {
   case 0: return cpu_regs.al;
@@ -93,6 +96,7 @@ static inline uint8_t cpu_getreg8(const int regid)  {
   return 0;
 }
 
+// get register based on mod-reg-rm bit index
 static inline uint16_t cpu_getreg16(const int regid) {
   switch (regid) {
   case 0: return cpu_regs.ax;

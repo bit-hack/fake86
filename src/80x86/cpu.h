@@ -19,6 +19,14 @@
 */
 
 enum {
+  reges = 0,
+  regcs = 1,
+  regss = 2,
+  regds = 3,
+};
+
+#if 0
+enum {
   regax = 0,
   regcx = 1,
   regdx = 2,
@@ -43,6 +51,7 @@ enum {
   regbl = 6,
   regbh = 7,
 };
+#endif
 
 
 #pragma pack(push, 1)
@@ -55,10 +64,7 @@ struct cpu_regs_t {
       uint8_t al, ah, cl, ch, dl, dh, bl, bh;
     };
   };
-  uint16_t sp;
-  uint16_t bp;
-  uint16_t si;
-  uint16_t di;
+  uint16_t sp, bp, si, di;
 };
 extern struct cpu_regs_t cpu_regs;
 #pragma pack(pop)
