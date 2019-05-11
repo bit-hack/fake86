@@ -40,7 +40,7 @@ extern volatile bool scrmodechange;
 
 static uint16_t lastint10ax;
 uint16_t vtotal = 0;
-uint8_t VRAM[262144], vidmode, cgabg, blankattr, vidgfxmode, vidcolor;
+uint8_t VRAM[0x40000], vidmode, cgabg, blankattr, vidgfxmode, vidcolor;
 uint16_t cursx, cursy, cols = 80, rows = 25, vgapage, cursorposition,
                        cursorvisible;
 uint8_t updatedscreen, clocksafe, port3da;
@@ -55,12 +55,8 @@ uint8_t latchReadRGB = 0, latchReadPal = 0;
 uint32_t tempRGB;
 uint16_t oldw, oldh; // used when restoring screen mode
 
-uint32_t rgb(uint32_t r, uint32_t g, uint32_t b) {
-#ifdef __BIG_ENDIAN__
-  return ((r << 24) | (g << 16) | (b << 8));
-#else
-  return (r | (g << 8) | (b << 16));
-#endif
+static inline uint32_t rgb(uint32_t r, uint32_t g, uint32_t b) {
+  return r | (g << 8) | (b << 16);
 }
 
 extern uint32_t nw, nh;
@@ -544,6 +540,17 @@ void initcga() {
   palettevga[253] = rgb(0, 0, 0);
   palettevga[254] = rgb(0, 0, 0);
   palettevga[255] = rgb(0, 0, 0);
+
+  // dump me
+  __debugbreak();
+  printf("CGA:\n");
+  for (int i = 0; i < 16; ++i) {
+    printf("%08x\n", palettecga[i]);
+  }
+  printf("VGA:\n");
+  for (int i = 0; i < 256; ++i) {
+    printf("%08x\n", palettevga[i]);
+  }
 }
 
 void outVGA(uint16_t portnum, uint8_t value) {
@@ -890,15 +897,14 @@ uint8_t readVGA(uint32_t addr32) {
   VGA_latch[2] = VRAM[addr32 + planesize * 2];
   VGA_latch[3] = VRAM[addr32 + planesize * 3];
   if (VGA_SC[2] & 1)
-    return (VRAM[addr32]);
+    return VRAM[addr32];
   if (VGA_SC[2] & 2)
-    return (VRAM[addr32 + planesize]);
+    return VRAM[addr32 + planesize];
   if (VGA_SC[2] & 4)
-    return (VRAM[addr32 + planesize * 2]);
+    return VRAM[addr32 + planesize * 2];
   if (VGA_SC[2] & 8)
-    return (VRAM[addr32 + planesize * 3]);
-  return (
-      0); // this won't be reached, but without it some compilers give a warning
+    return VRAM[addr32 + planesize * 3];
+  UNREACHABLE();
 }
 
 void initVideoPorts() {

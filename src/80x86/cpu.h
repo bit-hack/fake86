@@ -25,35 +25,6 @@ enum {
   regds = 3,
 };
 
-#if 0
-enum {
-  regax = 0,
-  regcx = 1,
-  regdx = 2,
-  regbx = 3,
-  regsp = 4,
-  regbp = 5,
-  regsi = 6,
-  regdi = 7,
-  reges = 0,
-  regcs = 1,
-  regss = 2,
-  regds = 3,
-};
-
-enum {
-  regal = 0,
-  regah = 1,
-  regcl = 2,
-  regch = 3,
-  regdl = 4,
-  regdh = 5,
-  regbl = 6,
-  regbh = 7,
-};
-#endif
-
-
 #pragma pack(push, 1)
 struct cpu_regs_t {
   union {

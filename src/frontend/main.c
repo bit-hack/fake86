@@ -223,10 +223,12 @@ int main(int argc, char *argv[]) {
 
       // cpu cycles per second
 //    const int32_t cpu_mhz = 4770000; // ibm5160
-      const int32_t cpu_mhz = 6000000; // ibm5162
+//    const int32_t cpu_mhz = 6000000; // ibm5162
+      const int32_t cpu_mhz = 10000000;
       // average cycles per instruction
 //    const int32_t avg_ins = 7; // ~6-8 8086
-      const int32_t avg_ins = 4; // ~4   80286
+//    const int32_t avg_ins = 4; // ~4   80286
+      const int32_t avg_ins = 1;
       // refresh rate
       const int32_t refresh = 60;
 

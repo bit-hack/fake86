@@ -33,6 +33,18 @@
 #include "config.h"
 
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- misc
+
+#if NDEBUG
+  #ifdef _MSC_VER
+    #define UNREACHABLE() { __assume(0); }
+  #else
+    #define UNREACHABLE() { __builtin_unreachable(); }
+  #endif
+#else
+  #define UNREACHABLE() { assert(!"unreachable"); abort(); }
+#endif
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8259.c
 struct structpic {
   // mask register
