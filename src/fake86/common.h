@@ -33,6 +33,23 @@
 #include "config.h"
 
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- misc
+
+#if NDEBUG
+  #ifdef _MSC_VER
+    #define UNREACHABLE() { __assume(0); }
+  #else
+    #define UNREACHABLE() { __builtin_unreachable(); }
+  #endif
+#else
+  #ifdef _MSC_VER
+    #define UNREACHABLE() { __debugbreak(); abort(); }
+  #else
+    #define __debugbreak() {}
+    #define UNREACHABLE() { abort(); }
+  #endif
+#endif
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8259.c
 struct structpic {
   // mask register
@@ -55,10 +72,9 @@ struct structpic {
   uint8_t enabled;
 };
 void i8259_init();
-uint8_t i8259_port_read(uint16_t portnum);
-void i8259_port_write(uint16_t portnum, uint8_t value);
 void i8259_doirq(uint8_t irqnum);
 uint8_t i8259_nextintr();
+void i8259_tick(uint64_t cycles);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video.c
 bool video_int_handler(int intnum);
@@ -85,7 +101,7 @@ void writew86(uint32_t addr32, uint16_t value);
 uint8_t read86(uint32_t addr32);
 uint16_t readw86(uint32_t addr32);
 
-void mem_init();
+void mem_init(void);
 uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag);
 uint32_t mem_loadrom(uint32_t addr32, const char *filename, uint8_t failure_fatal);
 uint32_t mem_loadbios(const char *filename);
@@ -101,34 +117,43 @@ struct dmachan_s {
   uint8_t writemode;
   uint8_t masked;
 };
+void i8237_tick(uint64_t cycles);
+bool i8237_init(void);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8253.c
-#define PIT_MODE_LATCHCOUNT 0
-#define PIT_MODE_LOBYTE 1
-#define PIT_MODE_HIBYTE 2
-#define PIT_MODE_TOGGLE 3
+enum {
+  PIT_RLMODE_LATCHCOUNT = 0,
+  PIT_RLMODE_LOBYTE     = 1,
+  PIT_RLMODE_HIBYTE     = 2,
+  PIT_RLMODE_TOGGLE     = 3,
+};
 
 struct i8253_s {
   uint16_t chandata[3];
-  uint8_t accessmode[3];
+  uint8_t rlmode[3];
+  uint8_t mode[3];
   uint8_t bytetoggle[3];
+  bool bcd[3];
   uint32_t effectivedata[3];
   float chanfreq[3];
   uint8_t active[3];
   uint16_t counter[3];
 };
 
-void i8253_port_write(uint16_t portnum, uint8_t value);
-uint8_t i8253_port_read(uint16_t portnum);
 void i8253_init();
+void i8253_tick(uint64_t cycles);
 
-// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8042.c
-void i8042_key_push(uint8_t key);
-uint8_t i8042_port_read(uint16_t port);
-void i8042_port_write(uint16_t port, uint8_t value);
-void i8042_tick();
-void i8042_reset();
-void i8042_init();
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8255.c
+struct i8255_t {
+  uint8_t port_in[3];
+  uint8_t port_out[3];
+  uint8_t ctrl_word;
+};
+extern struct i8255_t i8255;
+
+bool i8255_init();
+void i8255_reset();
+void i8255_tick(uint64_t cycles);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
 bool disk_insert(uint8_t drivenum, const char *filename);
@@ -176,3 +201,17 @@ void portout(uint16_t portnum, uint8_t value);
 void portout16(uint16_t portnum, uint16_t value);
 uint8_t portin(uint16_t portnum);
 uint16_t portin16(uint16_t portnum);
+
+extern uint8_t portram[0x10000];
+
+void set_port_write_redirector(uint16_t startport, uint16_t endport,
+                               void *callback);
+void set_port_read_redirector(uint16_t startport, uint16_t endport,
+                              void *callback);
+void set_port_write_redirector_16(uint16_t startport, uint16_t endport,
+                                  void *callback);
+void set_port_read_redirector_16(uint16_t startport, uint16_t endport,
+                                 void *callback);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- interrupt.c
+extern void intcall86(uint8_t intnum);

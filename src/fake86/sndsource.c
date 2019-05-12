@@ -21,6 +21,8 @@
 /* ssource.c: functions to emulate the Disney Sound Source's 16-byte FIFO
  * buffer. */
 
+#if 0
+
 #include "common.h"
 
 
@@ -85,3 +87,5 @@ void initsoundsource() {
   set_port_read_redirector(0x379, 0x379, &insoundsource);
   ssourceactive = 1;
 }
+
+#endif

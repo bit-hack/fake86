@@ -37,7 +37,7 @@ uint8_t readVGA(uint32_t addr32);
 uint8_t RAM[0x100000];
 uint8_t readonly[0x100000];
 
-void mem_init() {
+void mem_init(void) {
   // its static so not required
   memset(readonly, 0, sizeof(readonly));
   memset(RAM, 0, sizeof(RAM));
@@ -93,27 +93,39 @@ void writew86(uint32_t addr32, uint16_t value) {
 }
 
 uint8_t read86(uint32_t addr32) {
+
+  // wrap address pointer
   addr32 &= 0xFFFFF;
-  if ((addr32 >= 0xA0000) && (addr32 <= 0xBFFFF)) {
-    if ((vidmode == 0xD) || (vidmode == 0xE) || (vidmode == 0x10) ||
-        (vidmode == 0x12)) {
-      return readVGA(addr32 - 0xA0000);
-    }
-    if ((vidmode != 0x13) && (vidmode != 0x12) && (vidmode != 0xD)) {
-      return mem_read_8(addr32);
-    }
-    if ((VGA_SC[4] & 6) == 0) {
-      return mem_read_8(addr32);
-    } else {
-      return readVGA(addr32 - 0xA0000);
+
+  // VRAM read
+  static const uint32_t VRAM_ADDR = 0xA0000;
+  static const uint32_t VRAM_END  = 0xC0000;
+  if ((addr32 >= VRAM_ADDR) && (addr32 < VRAM_END)) {
+    switch (vidmode) {
+    case 0x0D:
+    case 0x0E:
+    case 0x10:
+    case 0x12:
+      return readVGA(addr32 - VRAM_ADDR);
+    case 0x13:
+      if ((VGA_SC[4] & 6) != 0) {
+        return readVGA(addr32 - VRAM_ADDR);
+      }
     }
   }
+
+  // bootstraping hacking
   if (!didbootstrap) {
+
+    // warning this causes landmark test to fail on memory
+
     // ugly hack to make BIOS always believe we have an EGA/VGA card installed
     mem_write_8(0x410, 0x41);
     // the BIOS doesn't have any concept of hard drives, so here's another hack
     mem_write_8(0x475, hdcount);
   }
+
+  // normal ram read
   return mem_read_8(addr32);
 }
 

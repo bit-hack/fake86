@@ -4,7 +4,7 @@
 
 #define modregrm()                                                             \
   {                                                                            \
-    addrbyte = getmem8(segregs[regcs], ip);                                    \
+    addrbyte = getmem8(cpu_regs.cs, ip);                                       \
     StepIP(1);                                                                 \
     mode = addrbyte >> 6;                                                      \
     reg = (addrbyte >> 3) & 7;                                                 \
@@ -12,27 +12,27 @@
     switch (mode) {                                                            \
     case 0:                                                                    \
       if (rm == 6) {                                                           \
-        disp16 = getmem16(segregs[regcs], ip);                                 \
+        disp16 = getmem16(cpu_regs.cs, ip);                                    \
         StepIP(2);                                                             \
       }                                                                        \
       if (((rm == 2) || (rm == 3)) && !segoverride) {                          \
-        useseg = segregs[regss];                                               \
+        useseg = cpu_regs.ss;                                                  \
       }                                                                        \
       break;                                                                   \
                                                                                \
     case 1:                                                                    \
-      disp16 = signext(getmem8(segregs[regcs], ip));                           \
+      disp16 = signext(getmem8(cpu_regs.cs, ip));                              \
       StepIP(1);                                                               \
       if (((rm == 2) || (rm == 3) || (rm == 6)) && !segoverride) {             \
-        useseg = segregs[regss];                                               \
+        useseg = cpu_regs.ss;                                                  \
       }                                                                        \
       break;                                                                   \
                                                                                \
     case 2:                                                                    \
-      disp16 = getmem16(segregs[regcs], ip);                                   \
+      disp16 = getmem16(cpu_regs.cs, ip);                                      \
       StepIP(2);                                                               \
       if (((rm == 2) || (rm == 3) || (rm == 6)) && !segoverride) {             \
-        useseg = segregs[regss];                                               \
+        useseg = cpu_regs.ss;                                                  \
       }                                                                        \
       break;                                                                   \
                                                                                \

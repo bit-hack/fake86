@@ -18,10 +18,7 @@
   USA.
 */
 
-/* i8259.c: functions to emulate the Intel 8259 prioritized interrupt
-   controller.
-   note: this is not a very complete 8259 implementation, but for the purposes
-   of a PC, it's all we need. */
+// i8253 Prioritized Interrupt Controller
 
 #include "common.h"
 
@@ -30,7 +27,7 @@ struct structpic i8259;
 
 extern uint32_t makeupticks;
 
-uint8_t i8259_port_read(uint16_t portnum) {
+static uint8_t i8259_port_read(uint16_t portnum) {
   switch (portnum & 1) {
   case 0:
     if (i8259.readmode == 0)
@@ -43,7 +40,7 @@ uint8_t i8259_port_read(uint16_t portnum) {
   return (0);
 }
 
-void i8259_port_write(uint16_t portnum, uint8_t value) {
+static void i8259_port_write(uint16_t portnum, uint8_t value) {
   uint8_t i;
   switch (portnum & 1) {
   case 0:
@@ -104,4 +101,11 @@ void i8259_doirq(uint8_t irqnum) {
 
 void i8259_init() {
   memset((void *)&i8259, 0, sizeof(i8259));
+
+  set_port_read_redirector(0x20, 0x21, i8259_port_read);
+  set_port_write_redirector(0x20, 0x21, i8259_port_write);
+}
+
+void i8259_tick(uint64_t cycles) {
+  // dummy
 }

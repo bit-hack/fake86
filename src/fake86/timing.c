@@ -21,6 +21,8 @@
 /* timing.c: critical functions to provide accurate timing for the
    system timer interrupt, and to generate new audio output samples. */
 
+#if 0
+
 #include "common.h"
 
 #ifdef _WIN32
@@ -36,6 +38,7 @@ struct timeval tv;
 
 extern struct blaster_s blaster;
 extern struct i8253_s i8253;
+
 extern void tickaudio();
 extern void tickssource();
 extern void tickadlib();
@@ -74,48 +77,8 @@ void inittiming() {
   i8253tickgap = hostfreq / 119318;
 }
 
-void timing() {
-  uint8_t i8253chan;
-
-#ifdef _WIN32
-  QueryPerformanceCounter(&queryperf);
-  curtick = queryperf.QuadPart;
-#else
-  gettimeofday(&tv, NULL);
-  curtick = (uint64_t)tv.tv_sec * (uint64_t)1000000 + (uint64_t)tv.tv_usec;
-#endif
-
-  if (curtick >= (lastscanlinetick + scanlinetiming)) {
-    curscanline = (curscanline + 1) % 525;
-    if (curscanline > 479)
-      port3da = 8;
-    else
-      port3da = 0;
-    if (curscanline & 1)
-      port3da |= 1;
-    pit0counter++;
-    lastscanlinetick = curtick;
-  }
-
-  if (i8253.active[0]) { // timer interrupt channel on i8253
-    if (curtick >= (lasttick + tickgap)) {
-      lasttick = curtick;
-      i8259_doirq(0);
-    }
-  }
-
-  if (curtick >= (lasti8253tick + i8253tickgap)) {
-    for (i8253chan = 0; i8253chan < 3; i8253chan++) {
-      if (i8253.active[i8253chan]) {
-        if (i8253.counter[i8253chan] < 10)
-          i8253.counter[i8253chan] = i8253.chandata[i8253chan];
-        i8253.counter[i8253chan] -= 10;
-      }
-    }
-    lasti8253tick = curtick;
-  }
-
-  if (curtick >= (lastssourcetick + ssourceticks)) {
+static void tick_audio() {
+    if (curtick >= (lastssourcetick + ssourceticks)) {
     tickssource();
     lastssourcetick = curtick - (curtick - (lastssourcetick + ssourceticks));
   }
@@ -143,3 +106,5 @@ void timing() {
     lastadlibtick = curtick - (curtick - (lastadlibtick + adlibticks));
   }
 }
+
+#endif

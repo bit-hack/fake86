@@ -18,6 +18,8 @@
   USA.
 */
 
+#if 0
+
 #include "common.h"
 
 #ifdef DISK_CONTROLLER_ATA
@@ -120,4 +122,6 @@ uint8_t inATA(uint16_t portnum) {
   }
   return (0);
 }
+#endif
+
 #endif

@@ -21,6 +21,8 @@
 /* audio.c: functions to mix the audio channels, and handle SDL's audio
  * interface. */
 
+#if 0
+
 #include "common.h"
 
 #ifdef _WIN32
@@ -31,10 +33,6 @@
 #endif
 
 #include "blaster.h"
-#include "audio.h"
-
-struct wav_hdr_s wav_hdr;
-FILE *wav_file = NULL;
 
 SDL_AudioSpec wanted;
 int8_t audbuf[96000];
@@ -49,31 +47,8 @@ extern int16_t getssourcebyte();
 extern int16_t getBlasterSample();
 extern uint8_t usessource;
 
-void create_output_wav(uint8_t *filename) {
-  printf("Creating %s for audio logging... ", filename);
-  wav_file = fopen(filename, "wb");
-  if (wav_file == NULL) {
-    printf("failed!\n");
-    return;
-  }
-  printf("OK!\n");
-
-  wav_hdr.AudioFormat = 1; // PCM
-  wav_hdr.bitsPerSample = 8;
-  wav_hdr.blockAlign = 1;
-  wav_hdr.ChunkSize = sizeof(wav_hdr) - 4;
-  memcpy(&wav_hdr.WAVE[0], "WAVE", 4);
-  memcpy(&wav_hdr.fmt[0], "fmt ", 4);
-  wav_hdr.NumOfChan = 1;
-  wav_hdr.bytesPerSec = usesamplerate * (uint32_t)(wav_hdr.bitsPerSample >> 3) *
-                        (uint32_t)wav_hdr.NumOfChan;
-  memcpy(&wav_hdr.RIFF[0], "RIFF", 4);
-  wav_hdr.Subchunk1Size = 16;
-  wav_hdr.SamplesPerSec = usesamplerate;
-  memcpy(&wav_hdr.Subchunk2ID[0], "data", 4);
-  wav_hdr.Subchunk2Size = 0;
-  // fwrite((void *)&wav_hdr, 1, sizeof(wav_hdr), wav_file);
-}
+extern uint64_t timinginterval;
+extern void inittiming();
 
 uint64_t doublesamplecount, cursampnum = 0, sampcount = 0, framecount = 0;
 
@@ -99,9 +74,7 @@ void tickaudio() {
     audbuf[audbufptr++] = (uint8_t)((uint16_t)sample + 128);
 }
 
-extern uint64_t timinginterval;
-extern void inittiming();
-void fill_audio(void *udata, int8_t *stream, int len) {
+static void fill_audio(void *udata, int8_t *stream, int len) {
   memcpy(stream, audbuf, len);
   memmove(audbuf, &audbuf[len], usebuffersize - len);
 
@@ -149,11 +122,6 @@ void initaudio() {
 
 void killaudio() {
   SDL_PauseAudio(1);
-
-  if (wav_file == NULL)
-    return;
-  wav_hdr.ChunkSize = wav_hdr.Subchunk2Size + sizeof(wav_hdr) - 8;
-  fseek(wav_file, 0, SEEK_SET);
-  fwrite((void *)&wav_hdr, 1, sizeof(wav_hdr), wav_file);
-  fclose(wav_file);
 }
+
+#endif

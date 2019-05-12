@@ -27,19 +27,20 @@
 
 
 SDL_Surface *screen = NULL;
-uint8_t bmpfilename[256];
+
+uint32_t usefullscreen = 0;
+uint32_t usegrabmode = SDL_GRAB_OFF;
 
 extern uint8_t RAM[0x100000], portram[0x10000];
 extern uint8_t VRAM[262144], vidmode, cgabg, blankattr, vidgfxmode, vidcolor;
 extern uint8_t running;
 extern uint16_t cursx, cursy, cols, rows, vgapage, cursorposition;
-extern uint16_t cursorvisible;
+extern bool cursorvisible;
 extern uint8_t updatedscreen;
 extern uint16_t VGA_SC[0x100], VGA_CRTC[0x100], VGA_ATTR[0x100], VGA_GC[0x100];
 extern uint32_t videobase, textbase;
 extern uint8_t fontcga[32768];
 extern uint32_t palettecga[16], palettevga[256];
-extern uint32_t usefullscreen, usegrabmode;
 extern uint16_t vtotal;
 extern uint16_t oldw, oldh, constantw, constanth;
 
@@ -50,8 +51,6 @@ uint32_t nw, nh;
 
 // time since last screen update
 static uint32_t cursorprevtick = 0;
-
-void draw();
 
 uint64_t totalframes = 0;
 uint32_t framedelay = 20;
@@ -66,13 +65,13 @@ void initcga();
 
 const uint32_t window_flags = SDL_HWSURFACE;
 
-void setwindowtitle(uint8_t *extra) {
+void set_window_title(uint8_t *extra) {
   char temptext[128];
   sprintf(temptext, "%s%s", windowtitle, extra);
   SDL_WM_SetCaption((const char *)temptext, NULL);
 }
 
-bool initscreen() {
+bool render_init(void) {
 
   uint32_t init_flags = SDL_INIT_VIDEO | SDL_INIT_TIMER;
   if (doaudio) {
@@ -90,29 +89,29 @@ bool initscreen() {
   }
 
   sprintf(windowtitle, "%s ", BUILD_STRING);
-  setwindowtitle("");
+  set_window_title("");
 
   initcga();
   return true;
 }
 
-void VideoUpdate() {
+static void render_redraw(void);
+
+void render_update(void) {
   if (screen == NULL) {
     return;
   }
   if (updatedscreen) {
-    draw();
+    render_redraw();
     totalframes++;
     updatedscreen = 0;
   }
 }
 
-static void CheckForModeChange() {
+void render_check_for_mode_change(void) {
   if (!scrmodechange) {
     return;
   }
-
-  i8042_reset();
 
   // free old video surface
   if (screen != NULL) {
@@ -132,8 +131,6 @@ static void CheckForModeChange() {
       screen = SDL_SetVideoMode(640, 400, 32, flags);
     }
   }
-
-  i8042_reset();
 
   if (screen) {
     log_printf(LOG_CHAN_SDL, "new video mode [%d, %d]", screen->w, screen->h);
@@ -157,35 +154,6 @@ static void CheckForModeChange() {
   scrmodechange = false;
 }
 
-void handlevideo() {
-  uint32_t cursorcurtick, delaycalc;
-  cursorprevtick = SDL_GetTicks();
-  cursorvisible = 0;
-
-  if (running) {
-    // check for video mode change
-    CheckForModeChange();
-
-    cursorcurtick = SDL_GetTicks();
-    if ((cursorcurtick - cursorprevtick) >= 250) {
-      updatedscreen = 1;
-      cursorvisible = ~cursorvisible & 1;
-      cursorprevtick = cursorcurtick;
-    }
-
-    if (updatedscreen || renderbenchmark) {
-      VideoUpdate();
-    }
-
-    if (!renderbenchmark) {
-      delaycalc = framedelay - (SDL_GetTicks() - cursorcurtick);
-      if (delaycalc > framedelay)
-        delaycalc = framedelay;
-      SDL_Delay(delaycalc);
-    }
-  }
-}
-
 static void blit_1x(SDL_Surface *target) {
 
   const uint32_t tw = (uint32_t)target->w, th = (uint32_t)target->h;
@@ -201,15 +169,25 @@ static void blit_1x(SDL_Surface *target) {
   for (uint32_t y = 0; y < sz_y; ++y) {
     const uint32_t *src = prestretch[y];
     for (uint32_t x = 0; x < sz_x; ++x) {
+#if 0
       const uint8_t *srcx = (const uint8_t*)(src + x);
       dst[x] = SDL_MapRGB(target->format, srcx[0], srcx[1], srcx[2]);
+#else
+      const uint32_t rgb =
+        (0x0000ff & (src[x] >> 16)) |
+        (0x00ff00 & (src[x] >>  0)) |
+        (0xff0000 & (src[x] << 16));
+      dst[x] = rgb;
+#endif
     }
     dst += target->w;
   }
   if (SDL_MUSTLOCK(target)) {
     SDL_UnlockSurface(target);
   }
+#if !BENCHMARKING
   SDL_UpdateRect(target, 0, 0, tw, th);
+#endif
 }
 
 static void blit_2x(SDL_Surface *target) {
@@ -227,8 +205,15 @@ static void blit_2x(SDL_Surface *target) {
     const uint32_t *src = prestretch[y];
     uint32_t *dstx = dst;
     for (uint32_t x = 0; x < sz_x; ++x) {
+#if 0
       const uint8_t *srcx = (const uint8_t*)(src + x);
       const uint32_t rgb = SDL_MapRGB(target->format, srcx[0], srcx[1], srcx[2]);
+#else
+      const uint32_t rgb =
+        (0x0000ff & (src[x] >> 16)) |
+        (0x00ff00 & (src[x] >>  0)) |
+        (0xff0000 & (src[x] << 16));
+#endif
       dstx[      + 0] = rgb;
       dstx[      + 1] = rgb;
       dstx[pitch + 0] = rgb;
@@ -240,7 +225,9 @@ static void blit_2x(SDL_Surface *target) {
   if (SDL_MUSTLOCK(target)) {
     SDL_UnlockSurface(target);
   }
+#if !BENCHMARKING
   SDL_UpdateRect(target, 0, 0, tw, th);
+#endif
 }
 
 static void draw_mode_text() {
@@ -286,7 +273,7 @@ static void draw_mode_text() {
   }
 }
 
-static void draw_mode_4_5() {
+static void draw_mode_4_5(void) {
   uint32_t color, chary, charx, vidptr, curpixel, usepal, intensity;
   nw = 320;
   nh = 200;
@@ -328,7 +315,7 @@ static void draw_mode_4_5() {
   }
 }
 
-static void draw_mode_6() {
+static void draw_mode_6(void) {
   uint32_t color, chary, charx, vidptr, curpixel;
   nw = 640;
   nh = 200;
@@ -340,13 +327,13 @@ static void draw_mode_6() {
                 (charx >> 3);
       curpixel = (RAM[vidptr] >> (7 - (charx & 7))) & 1;
       color = palettecga[curpixel * 15];
-      prestretch[y][x] = color;
+      prestretch[y + 0][x] = color;
       prestretch[y + 1][x] = color;
     }
   }
 }
 
-static void draw_mode_127() {
+static void draw_mode_127(void) {
   uint32_t color, chary, charx, vidptr, curpixel;
   nw = 720;
   nh = 348;
@@ -370,7 +357,7 @@ static void draw_mode_127() {
   }
 }
 
-static void draw_mode_8() {
+static void draw_mode_8(void) {
   uint32_t color, vidptr;
   // 160x200 16-color (PCjr)
   nw = 640; // fix this
@@ -387,7 +374,7 @@ static void draw_mode_8() {
   }
 }
 
-static void draw_mode_9() {
+static void draw_mode_9(void) {
   uint32_t color, vidptr;
   nw = 640; // fix this
   nh = 400; // part later
@@ -403,7 +390,7 @@ static void draw_mode_9() {
   }
 }
 
-static void draw_mode_d_e() {
+static void draw_mode_d_e(void) {
   uint32_t color, vidptr, divx, divy, x1;
   nw = 640; // fix this
   nh = 400; // part later
@@ -423,7 +410,7 @@ static void draw_mode_d_e() {
   }
 }
 
-void draw() {
+static void render_redraw(void) {
   uint32_t planemode, vgapage, color, vidptr, blockw, curheight, x1, y1;
   switch (vidmode) {
   case 0:
@@ -538,8 +525,4 @@ void draw() {
   } else {
     blit_1x(screen);
   }
-}
-
-void savepic() {
-  SDL_SaveBMP(screen, &bmpfilename[0]);
 }

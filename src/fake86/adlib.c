@@ -21,12 +21,10 @@
 /* adlib.c: very ugly Adlib OPL2 emulation for Fake86. very much a work in
  * progress. :) */
 
+#if 0
+
 #include "common.h"
 
-extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
-                                      void *callback);
-extern void set_port_read_redirector(uint16_t startport, uint16_t endport,
-                                     void *callback);
 
 extern int32_t usesamplerate;
 
@@ -284,3 +282,5 @@ void initadlib(uint16_t baseport) {
   set_port_write_redirector(baseport, baseport + 1, &outadlib);
   set_port_read_redirector(baseport, baseport + 1, &inadlib);
 }
+
+#endif

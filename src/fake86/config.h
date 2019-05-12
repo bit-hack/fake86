@@ -76,11 +76,6 @@
 #define AUDIO_DEFAULT_SAMPLE_RATE 48000
 #define AUDIO_DEFAULT_LATENCY 100
 
-//#define DEBUG_BLASTER
-//#define DEBUG_DMA
-
-//#define BENCHMARK_BIOS
-
 #ifdef _MSC_VER
 #define DISK_PASS_THROUGH 1
 #else
@@ -89,3 +84,10 @@
 
 // Log filename
 #define LOG_FNAME "log.txt"
+
+// disable all OS delays for benchmarking purposes
+#define BENCHMARKING 0
+
+// cpu speed selection
+// 2Mhz cps
+#define CYCLES_PER_SECOND (2000000)

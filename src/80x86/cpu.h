@@ -18,53 +18,22 @@
   USA.
 */
 
-enum {
-  reges = 0,
-  regcs = 1,
-  regss = 2,
-  regds = 3,
-};
-
-#if 0
-enum {
-  regax = 0,
-  regcx = 1,
-  regdx = 2,
-  regbx = 3,
-  regsp = 4,
-  regbp = 5,
-  regsi = 6,
-  regdi = 7,
-  reges = 0,
-  regcs = 1,
-  regss = 2,
-  regds = 3,
-};
-
-enum {
-  regal = 0,
-  regah = 1,
-  regcl = 2,
-  regch = 3,
-  regdl = 4,
-  regdh = 5,
-  regbl = 6,
-  regbh = 7,
-};
-#endif
-
-
 #pragma pack(push, 1)
 struct cpu_regs_t {
   union {
+    // 16bit registers
     struct {
       uint16_t ax, cx, dx, bx;
     };
+    // 8bit registers
     struct {
       uint8_t al, ah, cl, ch, dl, dh, bl, bh;
     };
   };
+  // stack and index registers
   uint16_t sp, bp, si, di;
+  // segment registers
+  uint16_t es, cs, ss, ds;
 };
 extern struct cpu_regs_t cpu_regs;
 #pragma pack(pop)
@@ -73,7 +42,10 @@ void cpu_push(uint16_t pushval);
 uint16_t cpu_pop();
 void cpu_reset();
 void cpu_prep_interupt(uint16_t intnum);
-void cpu_exec86(int32_t cycles);
+int32_t cpu_exec86(int32_t cycle_target);
+
+typedef void (*cpu_intcall_t)(const uint8_t int_num);
+void cpu_set_intcall_handler(cpu_intcall_t handler);
 
 extern uint16_t segregs[4];
 
@@ -82,5 +54,10 @@ extern uint8_t didbootstrap;
 // cpu instruction pointer
 extern uint16_t ip;
 
-// cpu flags
-extern uint8_t cf, pf, af, zf, sf, tf, ifl, df, of;
+union cpu_flags_t {
+  struct {
+    uint32_t cf:1, pf:1, af:1, zf:1, sf:1, tf:1, ifl:1, df:1, of:1;
+  };
+};
+
+extern union cpu_flags_t cpu_flags;

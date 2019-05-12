@@ -18,26 +18,15 @@
   USA.
 */
 
-/* i8237.c: functions to emulate the Intel 8237 DMA controller.
-   the Sound Blaster emulation functions rely on this! */
+// i8237 Direct Memory Access controller
 
 #include "common.h"
 
-#include "blaster.h"
-
-
-extern struct blaster_s blaster;
 
 struct dmachan_s dmachan[4];
-uint8_t flipflop = 0;
+static uint8_t flipflop = 0;
 
-extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
-                                      void *callback);
-extern void set_port_read_redirector(uint16_t startport, uint16_t endport,
-                                     void *callback);
-extern uint8_t read86(uint32_t addr32);
-
-extern uint8_t RAM[0x100000];
+// used by blaster.c
 uint8_t read8237(uint8_t channel) {
   uint8_t ret;
   if (dmachan[channel].masked)
@@ -47,10 +36,6 @@ uint8_t read8237(uint8_t channel) {
     dmachan[channel].count = 0;
   if (dmachan[channel].count > dmachan[channel].reload)
     return (128);
-  // if (dmachan[channel].direction) ret = RAM[dmachan[channel].page +
-  // dmachan[channel].addr + dmachan[channel].count];
-  //	else ret = RAM[dmachan[channel].page + dmachan[channel].addr -
-  //dmachan[channel].count];
   if (dmachan[channel].direction == 0)
     ret = RAM[dmachan[channel].page + dmachan[channel].addr +
               dmachan[channel].count];
@@ -61,22 +46,15 @@ uint8_t read8237(uint8_t channel) {
   return (ret);
 }
 
-void out8237(uint16_t addr, uint8_t value) {
-  uint8_t channel;
-#ifdef DEBUG_DMA
-  printf("out8237(0x%X, %X);\n", addr, value);
-#endif
+// port write
+static void i8237_port_write(uint16_t addr, uint8_t value) {
+  const uint8_t channel = value & 3;
   switch (addr) {
   case 0x2: // channel 1 address register
     if (flipflop == 1)
       dmachan[1].addr = (dmachan[1].addr & 0x00FF) | ((uint32_t)value << 8);
     else
       dmachan[1].addr = (dmachan[1].addr & 0xFF00) | value;
-#ifdef DEBUG_DMA
-    if (flipflop == 1)
-      printf("[NOTICE] DMA channel 1 address register = %04X\n",
-             dmachan[1].addr);
-#endif
     flipflop = ~flipflop & 1;
     break;
   case 0x3: // channel 1 count register
@@ -86,72 +64,63 @@ void out8237(uint16_t addr, uint8_t value) {
       dmachan[1].reload = (dmachan[1].reload & 0xFF00) | value;
     if (flipflop == 1) {
       if (dmachan[1].reload == 0)
-        dmachan[1].reload = 65536;
+        dmachan[1].reload = 0x10000;
       dmachan[1].count = 0;
-#ifdef DEBUG_DMA
-      printf("[NOTICE] DMA channel 1 reload register = %04X\n",
-             dmachan[1].reload);
-#endif
     }
     flipflop = ~flipflop & 1;
     break;
   case 0xA: // write single mask register
-    channel = value & 3;
     dmachan[channel].masked = (value >> 2) & 1;
-#ifdef DEBUG_DMA
-    printf("[NOTICE] DMA channel %u masking = %u\n", channel,
-           dmachan[channel].masked);
-#endif
     break;
   case 0xB: // write mode register
-    channel = value & 3;
     dmachan[channel].direction = (value >> 5) & 1;
-    dmachan[channel].autoinit = (value >> 4) & 1;
+    dmachan[channel].autoinit  = (value >> 4) & 1;
     dmachan[channel].writemode = (value >> 2) & 1; // not quite accurate
-#ifdef DEBUG_DMA
-    printf("[NOTICE] DMA channel %u write mode reg: direction = %u, autoinit = "
-           "%u, write mode = %u\n",
-           channel, dmachan[channel].direction, dmachan[channel].autoinit,
-           dmachan[channel].writemode);
-#endif
     break;
   case 0xC: // clear byte pointer flip-flop
-#ifdef DEBUG_DMA
-    printf("[NOTICE] DMA cleared byte pointer flip-flop\n");
-#endif
     flipflop = 0;
     break;
   case 0x83: // DMA channel 1 page register
     dmachan[1].page = (uint32_t)value << 16;
-#ifdef DEBUG_DMA
-    printf("[NOTICE] DMA channel 1 page base = %05X\n", dmachan[1].page);
-#endif
     break;
   }
 }
 
-uint8_t in8237(uint16_t addr) {
-#ifdef DEBUG_DMA
-  printf("in8237(0x%X);\n", addr);
-#endif
-  switch (addr) {
-  case 3:
-    if (flipflop == 1)
-      return (dmachan[1].reload >> 8);
-    else
-      return (dmachan[1].reload);
-    flipflop = ~flipflop & 1;
-    break;
+// port read
+uint8_t i8237_port_read(uint16_t addr) {
+  if (addr & 0x80) {
+    // this is a DMA page register
   }
-  return (0);
+  else {
+    switch (addr) {
+    case 3:
+      if (flipflop == 1)
+        return dmachan[1].reload >> 8;
+      else
+        return dmachan[1].reload;
+      flipflop = ~flipflop & 1;
+      break;
+    }
+  }
+  return 0;
 }
 
 void init8237() {
   memset(dmachan, 0, sizeof(dmachan));
 
-  set_port_write_redirector(0x00, 0x0F, &out8237);
-  set_port_read_redirector(0x00, 0x0F, &in8237);
+  // DMA 1
+  set_port_write_redirector(0x00, 0x0F, &i8237_port_write);
+  set_port_read_redirector(0x00, 0x0F, &i8237_port_read);
 
-  set_port_write_redirector(0x80, 0x8F, &out8237);
-  set_port_read_redirector(0x80, 0x8F, &in8237);
+  // DMA Page registers
+  set_port_write_redirector(0x80, 0x8F, &i8237_port_write);
+  set_port_read_redirector(0x80, 0x8F, &i8237_port_read);
+}
+
+void i8237_tick(uint64_t cycles) {
+  // dummy
+}
+
+bool i8237_init(void) {
+  return true;
 }

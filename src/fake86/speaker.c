@@ -20,6 +20,8 @@
 
 /* speaker.c: function to generate output samples for PC speaker emulation. */
 
+#if 0
+
 #include "common.h"
 
 
@@ -33,8 +35,9 @@ int16_t speakergensample() {
   int16_t speakervalue;
 
   speakerfullstep = (uint64_t)((float)gensamplerate / (float)i8253.chanfreq[2]);
-  if (speakerfullstep < 2)
+  if (speakerfullstep < 2) {
     speakerfullstep = 2;
+  }
   speakerhalfstep = speakerfullstep >> 1;
   if (speakercurstep < speakerhalfstep) {
     speakervalue = 32;
@@ -42,5 +45,7 @@ int16_t speakergensample() {
     speakervalue = -32;
   }
   speakercurstep = (speakercurstep + 1) % speakerfullstep;
-  return (speakervalue);
+  return speakervalue;
 }
+
+#endif

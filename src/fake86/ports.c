@@ -57,38 +57,6 @@ void portout(uint16_t portnum, uint8_t value) {
 
   portram[portnum] = value;
 
-  switch (portnum) {
-  // (Programmable Interrupt Controller 8259)
-  case 0x20:
-  case 0x21:
-    i8259_port_write(portnum, value);
-    return;
-
-  // 0040-005F ----	PIT  (Programmable Interrupt Timer  8253, 8254)
-  case 0x40:
-  case 0x41:
-  case 0x42:
-  case 0x43:
-    i8253_port_write(portnum, value);
-    return;
-
-  // 0060-006F ----	Keyboard controller 804x (8041, 8042) (or PPI (8255) on PC,XT)
-  case 0x61:
-    speakerenabled = 0;
-    // timer 2 gate to speaker enable
-    if (value & 1) {
-      // speaker data enable
-      if (value & 2) {
-        speakerenabled = 1;
-      }
-    }
-    return;
-  case 0x60:
-  case 0x64:
-    i8042_port_write(portnum, value);
-    return;
-  }
-
   port_write_b_t cb = port_write_callback[portnum];
   if (cb) {
     cb(portnum, value);
@@ -104,27 +72,6 @@ void portout(uint16_t portnum, uint8_t value) {
 
 // 8bit port read
 uint8_t portin(uint16_t portnum) {
-  switch (portnum) {
-  case 0x20:
-  case 0x21:
-    return i8259_port_read(portnum);
-
-  case 0x40:
-  case 0x41:
-  case 0x42:
-  case 0x43:
-    return i8253_port_read(portnum);
-
-  case 0x62:
-    return 0x00;
-  case 0x61:
-  case 0x63:
-    return portram[portnum];
-
-  case 0x60:
-  case 0x64:
-    return i8042_port_read(portnum);
-  }
 
   port_read_b_t cb = port_read_callback[portnum];
   if (cb) {
