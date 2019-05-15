@@ -1,10 +1,10 @@
 ;===================================================================================================
 ;                  Super PC/Turbo XT BIOS for Intel 8088 or NEC "V20" Motherboards
-;           Additions by Ya`akov Miles (1987) and Jon Petrosky <Plasma> (2008, 2011-2012, 2016)
+;              Additions by Ya`akov Miles (1987) and Jon Petrosky <Plasma> (2008-2016)
 ;                                     http://www.phatcode.net/
 ;---------------------------------------------------------------------------------------------------
-; This is a modification of the widely-distributed "(c) Anonymous Generic Turbo XT Anonymous" BIOS,
-; which is actually a Taiwanese BIOS that was reverse-engineered by Ya`akov Miles in 1987.
+; This is a modification of the widely-distributed "(c) Anonymous Generic Turbo XT" BIOS, which is
+; actually a Taiwanese BIOS that was reverse-engineered by Ya`akov Miles in 1987.
 ;
 ; Back in 2008 I put together an XT system and wanted a BIOS that supported booting from a hard
 ; drive. The Generic XT BIOS did not support this, but since source code was provided it was easy to
@@ -20,8 +20,9 @@
 ; "CTRL ALT -" key combination to toggle the computer speed between fast and slow. When the speed is
 ; toggled, the PC speaker will sound a high/low pitched blip to indicate the system speed selected.
 ;---------------------------------------------------------------------------------------------------
-;    File: PCXTBIOS.ASM
-; Updated: v2.6 04-18-2016
+;    File: pcxtbios.asm
+; Updated: v3.0 11-09-2016
+;          v2.6 04-18-2016
 ;          v2.5 05-02-2012
 ;          v2.4 04-23-2012
 ;          v2.3 03-13-2012
@@ -37,11 +38,12 @@
 ;IBM_PC		= 1		; Define if using with original IBM PC (5150) or exact clone
 				;   This will read the 5150 config switches correctly
 				;   and set the BIOS computer type to FFh (PC) rather than FEh (XT).
-				;   You should also disable the TURBO_ENABLED, TURBO_BOOT, and
-				;   SLOW_FLOPPY definitions if using with an original PC.
+				;   You should also disable the TURBO_ENABLED and SLOW_FLOPPY
+				;   definitions if using with an original PC.
 
-TURBO_ENABLED	= 1		; Define to enable "turbo" support and CTRL ALT - hotkey
-TURBO_BOOT	= 1		; Define to boot up in "turbo" mode (full speed)
+TURBO_ENABLED	= 1		; Define to enable "turbo" support
+TURBO_BOOT	= 1		; Define to boot up in turbo mode (full speed)
+TURBO_HOTKEY	= 1		; Define to enable "CTRL ALT -" hotkey to toggle turbo mode
 ;SLOW_FLOPPY	= 1		; Define to always run floppy drive at 4.77 MHz (turbo PCs only)
 
 ;TEST_CPU	= 1		; Define to test CPU at power on
@@ -65,9 +67,17 @@ MAX_MEMORY	= 640		; Maximum conventional memory allowed in KB (with EGA/VGA)
 ENHANCED_KEYB	= 1		; Define for Int 9h enhanced (101-key) keyboard support
 				;   If enabled, TEST_CPU must be disabled due to memory limits
 
-BOOT_DELAY	= 3		; Number of seconds to wait after memory test (keypress will bypass)
+;ROM_START	= 0C000h	; Expansion ROM search start segment, must be 2K aligned
+;ROM_END	= 0FE00h	; Expansion ROM search end segment, must be 2K aligned
+
+ROM_DELAY	= 2		; Seconds to wait after expansion ROM inits (keypress will bypass)
+BOOT_DELAY	= 3		; Seconds to wait after memory test (keypress will bypass)
 
 ;WARM_BOOT_BASIC = 1		; Define to display ROM BASIC boot prompt during a warm boot
+
+;RETRY_DISK	= 1		; Define to always retry disk boot, even if ROM BASIC present
+
+TITLE_BAR_FADE	= 1		; Define for fancy pants (disable to save ROM space)
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -83,6 +93,37 @@ error_rom	equ	20h		; Bad ROM in expansion area, bad checksum
 ;---------------------------------------------------------------------------------------------------
 ; Changes by Plasma
 ;---------------------------------------------------------------------------------------------------
+; Version 3.0 Changes:
+;
+; Tools:
+;  * TASM replaced with Open Watcom Assembler (WASM)
+;  * Win32 and Linux versions of tools now included so BIOS can be built in more environments
+;  * Disassembly listing now automatically generated
+;
+; ROMs:
+;  * Ably-Tech HD Floppy BIOS replaced with Sergey's Floppy BIOS 2.2
+;  * Western Digital IDE SuperBIOS replaced with XT-IDE Universal BIOS 2.0.0.3+ r591
+;  * Future Domain TMC-850M BIOS removed
+;  * Option added to batch files to exclude IBM ROM BASIC
+;
+; Code:
+;  * First pass at optimizing code for space
+;  * Some instructions corrected for stricter assemblers
+;  * Slight modifications to assemble with WASM (still assembles with TASM)
+;  * Location of strings and procs optimized to maximize continguous free space for additional code
+;  * Free space now filled with 90h instead of FFh so it appears more unique in a hex editor
+;
+; Added:
+;  * ROM_START and ROM_END defines set scanning region for expansion ROMs (can overlap BASIC region)
+;  * Option to delay after expansion ROMs init before clearing screen (ROM_DELAY)
+;  * Option to always retry disk boot, even if ROM BASIC present (define RETRY_DISK)
+;  * Keyboard buffer cleared after memory check so BASIC prompt isn't accidentally skipped
+;  * Added base port 2C0h to RTC (clock) detection
+;  * Option for title bar "fade"
+;
+; Changed:
+;  * Memory check now 16-bit access; will be faster on 8086/V30 and some emulators
+;
 ; Version 2.6 Changes:
 ;
 ; Bug Fixed:
@@ -123,7 +164,7 @@ error_rom	equ	20h		; Bad ROM in expansion area, bad checksum
 ;
 ; Version 2.2 Changes:
 ;
-; Added:
+; Tools:
 ;  * Make batch file generates proper 32K ROMs for IBM 5155 and 5160
 ;
 ; Bug Fixed/Changed:
@@ -185,79 +226,28 @@ error_rom	equ	20h		; Bad ROM in expansion area, bad checksum
 ;---------------------------------------------------------------------------------------------------
 
 
-;---------------------------------------------------------------------------------------------------
-; BIOS History from Ya`akov Miles
-;---------------------------------------------------------------------------------------------------
-; From: Ya`akov Miles <multi%dac.triumf.cdn%ubc.csnet at RELAY.CS.NET>
-; To:   Info-IBMPC at MIT-MC
-; Re:   BIOS Musings
-;
-; You may be interested in a history of where     similar source code, although this seems
-; this BIOS came from, and how it arrived in      unlikely.
-; its present form. A heavily patched,
-; partially-functionally BIOS (with no            In any case, as evidenced by DEBUG, some of
-; copyright statement, or other visible           these name-brand BIOS were full of machine-
-; indication of origin) was supplied with my      level patches--did the vendor ever bother to
-; IBM-PC/XT compatible 10 MHz motherboard.        reassemble and optimize the source code? The
-;                                                 code that I examined was full of recursive
-; In order to get my motherboard to function      INT(errupt) instructions, which did not to
-; correctly, in other words, to work with the     contribute to screaming fast BIOS. Therefore,
-; parity interrupt enabled and to operate         the assembly code was rearranged so as to
-; with the NEC "V20", it was necessary to         eliminate some of the unnecessary CALL, JMP,
-; disassemble and thoroughly go through this      and especially INT instructions, as the
-; "anonymous" BIOS, which was hinted as           optimization proceeded with the later releases.
-; supplied by Taiwan, while limping along on
-; a name brand BIOS, as supplied on my            The BIOS is copyright (c) Anonymous, because there
-; previous motherboard by a different vendor.     was no indication of the original authors...
-;
-; In the course of this disassembly, aided by     ps: While playing around with my 10 MHz
-; comparison with the published IBM-PC/XT             motherboard, I encountered an unusual program
-; listings, it became apparent that the               called HELPME.COM, which ran at a higher
-; synchronization on horizontal retrace in            pitch than normal. Since this program behaved
-; the video INT 10h service was the root              normally on other (8 MHz) turbo motherboards,
-; cause of the failure to operate with the            my curiosity was aroused. This eventually
-; NEC "V20", and that correcting it to                led me to discover that the 10 MHz
-; correspond with logic (as in IBM's BIOS)            motherboard was refreshed in hardware by
-; caused the glitch to disappear. I am unable         channel 1 of the 8253 timer IC, and that this
-; to account as to why several name brand             channel appeared to be counting down from an
-; BIOS brands (excluding IBM's) had similar           unusually fast oscillator. Maybe this could
-; glitches--maybe they were produced from             cause problems with other programs...
-;---------------------------------------------------------------------------------------------------
-
-
-;---------------------------------------------------------------------------------------------------
-; Email Header from Original BIOS
-;---------------------------------------------------------------------------------------------------
-; Date:     Wed, 13 Jan 88 04:26 PST
-; From:     <MULTI%TRIUMFCL.BITNET@CUNYVM.CUNY.EDU>
-; Subject:  BIOS.ASM update INFO-IBMPC librarys
-; To:       hicks@walker-emh.arpa
-;---------------------------------------------------------------------------------------------------
-
-
 ideal
 p8086
 model	tiny
 warn
-multerrs
 
 
 ;---------------------------------------------------------------------------------------------------
 ; Macros
 ;---------------------------------------------------------------------------------------------------
-; Pad code to create entry point at specified address
+; Pad code to create entry point at specified address (needed for 100% IBM BIOS compatibility)
 macro	entry	addr
 	pad = str_banner - $ + addr - 0E000h
 	if pad lt 0
 		err	'No room for ENTRY point'
 	endif
 	if pad gt 0
-		db	pad dup(0FFh)
+		db	pad dup(090h)
 	endif
 endm
 
 ; Force far jump
-macro	jmpf	segm, offs
+macro	jmpfar	segm, offs
 	db	0EAh;
 	dw	offs, segm
 endm
@@ -312,7 +302,7 @@ segment	data at 40h				; IBM compatible data structure
 						;   Bit 0: Boot floppy
 						;     0b = not installed
 						;     1b = installed
-	db	?		; 40:12		; MFG test flags, unused by us
+	db	?		; 40:12		; Expansion ROM(s) present flag
 	dw	?		; 40:13		; Memory size, kilobytes
 	db	?		; 40:15		; IPL errors<-table/scratchpad
 	db	?				;  ...unused
@@ -445,15 +435,15 @@ segment	code
 
 ifdef	IBM_PC
 ifdef	TURBO_ENABLED
-	str_banner	db	'Turbo PC BIOS v2.6 for 8088/V20', 0
+	str_banner	db	'Turbo PC BIOS v3.0 - 11/09/2016', 0
 else
-	str_banner	db	'Super PC BIOS v2.6 for 8088/V20', 0
+	str_banner	db	'Super PC BIOS v3.0 - 11/09/2016', 0
 endif
 else
 ifdef	TURBO_ENABLED
-	str_banner	db	'Turbo XT BIOS v2.6 for 8088/V20', 0
+	str_banner	db	'Turbo XT BIOS v3.0 - 11/09/2016', 0
 else
-	str_banner	db	'Super XT BIOS v2.6 for 8088/V20', 0
+	str_banner	db	'Super XT BIOS v3.0 - 11/09/2016', 0
 endif
 endif
 str_banner_end:
@@ -481,7 +471,7 @@ cpu_ok:
 	out	0A0h, al			;   no NMI interrupts
 	mov	dx, 3D8h			; Load Color Graphic port
 	out	dx, al				;   no video display
-	mov	dx, 3B8h			; Load Monochrome port
+	mov	dl, 0B8h			; Load Monochrome port
 	inc	al				;   no video display
 	out	dx, al				;   write it out
 	mov	al, 10011001b			; Program 8255 PIA chip
@@ -514,7 +504,7 @@ endif
 	mov	al, 0FFh			; Refresh byte count
 	out	1, al				;   send lo order
 	out	1, al				;   send hi order
-	mov	al, 0				; Initialize 8237 command reg
+	inc	ax				; Initialize 8237 command reg
 	out	8, al				;   with zero
 	out	0Ah, al 			; Enable DMA on all channels
 	mov	al, 00110110b			; Set up 8253 timer chip
@@ -523,7 +513,7 @@ endif
 	out	40h, al 			;   65536 decimal
 	out	40h, al 			;   0000h or 18.2 tick/sec
 	mov	dx, 213h			; Expansion unit port
-	mov	al, 1				;   enable it
+	inc	ax				;   enable it
 	out	dx, al				;   do the enable
 	mov	ax, 40h 			; Get BIOS data area segment
 	mov	ds, ax				;   into ds register
@@ -541,7 +531,7 @@ endif
 	cmp	dx, [es:di]			;   compare
 	jnz	@@done_mem_size			;   failed, memory end
 	mov	cx, 2000h			; Else zero 16 kilobytes
-	repz	stosw				;   with instruction
+	rep	stosw				;   with instruction
 	add	bh, 4				;   get next 16K bytes
 ifdef	MAX_MEMORY
 	cmp	bh, MAX_MEMORY shr 2		; Found max legal user ram?
@@ -553,9 +543,10 @@ endif
 @@done_mem_size:
 	xor	ax, ax
 	mov	es, ax				; es = vector segment
-	mov	ax, 80h
-	mov	ss, ax				; Set up temporary stack at
-	mov	sp, 100h			;   0080:0100 for memory check
+
+	mov	ss, ax				; Use 0000:0900 instead of 0080:0100
+	mov	sp, 900h			;   for temporary stack to save some bytes
+	
 	push	bp
 	push	bx
 
@@ -581,7 +572,7 @@ endif
 	push	ax
 	push	ax
 	push	ax
-	mov	ax, 30h 			; Set up IBM-compatible stack
+	mov	al, 30h 			; Set up IBM-compatible stack
 	mov	ss, ax				;   segment 0030h
 	mov	sp, 100h			;   offset  0100h
 	push	ds
@@ -620,7 +611,7 @@ endif
 	loop	@@low_vectors
 
 	mov	si, offset vectors		; si --> Vector address table
-	mov	cx, 18h 			;   vectors 08h - 1Fh busy
+	mov	cl, 18h 			;   vectors 08h - 1Fh busy
 
 @@high_vectors:
 	movsw					; Set interrupt vector offset
@@ -628,55 +619,43 @@ endif
 	stosw					; Set interrupt vector segment (BIOS segment)
 	loop	@@high_vectors
 
-	mov	ax, 0F600h			; ax --> ROM BASIC segment
+	mov	ah, 0F6h			; ax --> ROM BASIC segment
 	mov	ds, ax				; ds -->  "	"     "
 	xor	bx, bx				; bx  =  ROM BASIC offset
+
 	mov	ah, 4				; Four BASIC ROMs to check
 
-	mov	bp, sp				; Save the stack pointer
-	push	cs				;   push code segment
-	mov	dx, offset @@skip 		; Save the code offset
-	push	dx				;   for RAM_PATCH subroutine
-	mov	dx, 0EA90h			; mov dx, 'nop, JMP_FAR'
-	push	dx				;   save it on stack
-	mov	dx, 0178Bh			; mov dx, 'mov dx, [bx]'
-	push	dx				;   save it on stack
-	push	ss				; Save stack segment
-	mov	dx, sp				;   get the stack offset
-	add	dx, 02h 			;   calculate xfer address
-	push	dx				;   save it on the stack
-
-	retf					; Test for BASIC rom
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;	mov	dx, [bx] 			; Executes off the stack ;
-;	jmpf	0F000h, skip			;   in RAM space         ;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-@@skip:	mov	sp, bp				; Restore the stack pointer
-	cmp	dl, dh				;   compare 1st and 2nd byte
-	je	@@kosher			;   perfection. No piracy
-
 @@basic_rom:
+	mov	dx, [bx]
+	cmp	dl, dh				; Check for code in the segment
+	je	@@no_basic			; Skip if memory is empty
+
+	cmp	dx, 0AA55h			; Check for expansion ROM in BASIC area
+	je	@@no_basic			; Skip further checking if found
+
 	call	checksum			; Scan for BASIC roms
-	jnz	@@kosher			;   bad BASIC rom
+	jnz	@@no_basic			;   bad BASIC rom
+
 	dec	ah				; Continue
 	jnz	@@basic_rom			;   yes, more
 
 	pop	ds				; Else valid BASIC
 	mov	di, 60h 			;   install BASIC
 
-	xor	ax,ax				;   0000h BASIC interrupt offset
+	xor	ax, ax				;   0000h BASIC interrupt offset
 	stosw
-	mov	ax, 0F600h			;   F600h BASIC interrupt segment
+	mov	ah, 0F6h			;   F600h BASIC interrupt segment
 	stosw
 
 	push	ds
-@@kosher:
+@@no_basic:
 	pop	ds				; Setup special low vectors
+	xor	dx, dx
 	mov	[word es:8], offset int_2	;   NMI interrupt
 	mov	[word es:14h], offset int_5	;   print screen interrupt
-	mov	[word es:7Ch], 0		; No special graphics characters
-	mov	[word es:7Eh], 0		;   so zero vector 1Fh
-	mov	dx, 61h
+	mov	[word es:7Ch], dx		; No special graphics characters
+	mov	[word es:7Eh], dx		;   so zero vector 1Fh
+	mov	dl, 61h
 	in	al, dx				; Read machine flags
 	or	al, 00110000b			;   clear old parity error
 	out	dx, al				; Write them back to reset
@@ -687,7 +666,7 @@ endif
 	mov	ax, 0000000000110000b		; Assume monochrome video
 	mov	[ds:10h], ax			;   card has been installed
 	int	10h				;   initialize if present
-	mov	ax,0000000000100000b		; Assume color/graphics video
+	mov	ax, 0000000000100000b		; Assume color/graphics video
 	mov	[ds:10h], ax			;   card has been installed
 	int	10h				;   initialize if present
 
@@ -735,7 +714,7 @@ endif
 	mov	[ds:1Ah], ax			; Buffer head pointer
 	mov	[ds:1Ch], ax			; Buffer tail pointer
 	mov	[ds:80h], ax			; Buffer start
-	add	ax, 20h 			;   size
+	add	al, 20h 			;   size
 	mov	[ds:82h], ax			; Buffer end
 	mov	ax, 1414h			; Time-out value seconds
 	mov	[ds:78h], ax			;   LPT1
@@ -745,7 +724,7 @@ endif
 	mov	[ds:7Eh], ax			;   COM2
 	mov	si, offset lpt_ports		; si --> LPT port table
 	xor	di, di				;   offset into data seg
-	mov	cx, 3				;   number of printers
+	mov	cl, 3				;   number of printers
 
 @@next_lpt:
 	mov	dx, [cs:si]			; Get LPT port
@@ -802,7 +781,7 @@ endif
 	mov	ax, di				; Get serial interface count
 	or	[ds:11h], al			;   equipment flag
 
-	mov	cx, 100				; Check for game port 100 times
+	mov	cl, 100				; Check for game port 100 times
 	mov	dx, 201h
 @@check_game:
 	in	al, dx				; Anything there?
@@ -817,8 +796,6 @@ endif
 
 	call	fpu_check			; Check for FPU
 
-	mov	dx, 0C000h			; ROM segment start
-
 	mov	bx, [ds:72h]			; Save warm boot flag
 	push	bx				;   (Some ROM inits may trash it)
 	push	ds
@@ -830,16 +807,25 @@ ifdef	TURBO_BOOT				; If defined enable turbo speed at bootup
 	out	61h, al 			; Write new flags back
 endif
 endif
+ifdef	ROM_START
+	mov	dx, ROM_START			; ROM segment start
+else
+	mov	dx, 0C000h
+endif
 
 @@find_rom:
 	mov	ds, dx				; Load ROM segment
 	jmp	short @@continue		; Jump over old int 2 location
 
 cold_boot:
-	mov	ax, 40h 			; Force cold boot
+	xor	ax, ax	 			; Force cold boot
 	mov	ds, ax
-	mov	[word ds:72h], 0		; Show data areas not init
+	mov	[ds:472h], ax			; Show data areas not init
 	jmp	warm_boot
+
+
+str_no_basic	db	'No ROM BASIC, booting from disk...', 0
+
 
 ;-----------------------------------------------
 ; IBM PC 5150 offset for int 2 (NMI)
@@ -849,12 +835,10 @@ cold_boot:
 
 @@continue:
 	xor	bx, bx				;   ID offset
-	mov	ax, [bx]			; Read the ROM ID
-	cmp	ax, 0AA55h
+	cmp	[word bx], 0AA55h		; Check the ROM ID
 	jnz	@@next_rom			;   not valid ROM
 	mov	ax, 40h
 	mov	es, ax
-	mov	ah, 0
 	mov	al, [bx+2]			; Get ROM size (bytes * 512)
 	mov	cl, 5
 	shl	ax, cl				; Now ROM size in segments
@@ -864,11 +848,13 @@ cold_boot:
 	mov	cx, ax				;   checksum requires cx
 	call	checksum_entry			; Find ROM checksum
 	jnz	@@bad_rom			;   bad ROM
-	push	dx
+
+	push	dx				; Save ROM search segment
+	mov	[byte es:12h], 1		; Set expansion ROM found flag
 	mov	[word es:67h], 3		; Offset for ROM being setup
 	mov	[es:69h], ds			; Segment for ROM being setup
 	call	[dword es:67h]			;   call ROM initialization
-	pop	dx
+	pop	dx				; Restore ROM search segment
 	jmp	short @@continue_rom
 
 @@bad_rom:
@@ -878,7 +864,11 @@ cold_boot:
 	add	dx, 80h 			; Segment for next ROM
 
 @@continue_rom:
-	cmp	dx, 0F600h			; End of ROM space?
+ifdef	ROM_END
+	cmp	dx, ROM_END			; End of ROM space?
+else
+	cmp	dx, 0FE00h
+endif
 	jl	@@find_rom			;  no, continue
 
 	pop	ds
@@ -889,6 +879,17 @@ cold_boot:
 	and	al, 10111100b			;   enable IRQ (0, 1, 6) ints
 	out	21h, al 			; (tod_clock, key, floppy_disk)
 
+ifdef	ROM_DELAY
+	xor	bx, bx
+	cmp	[ds:12h], bl			; Were any expansion ROMs found?
+	je	@@no_roms			;   skip delay if not
+
+	mov	es, bx	
+	mov	bl, ROM_DELAY * 18		; Ticks to pause at 18.2 Hz
+	call	delay_keypress			; Delay after expansion ROM inits
+endif
+
+@@no_roms:
 	mov	ah, 12h				; Test for EGA/VGA
 	mov	bx, 0FF10h
 	int	10h				; Video Get EGA Info
@@ -929,7 +930,7 @@ endif
 
 @@config:
 	mov	si, offset str_banner
-	call	color_print
+	call	title_print
 	mov	si, offset str_banner_2
 	call	print
 
@@ -955,7 +956,7 @@ print_error:
 	jz	@@ignore_error			;   ok, continue
 	cmp	al, 'y' 			; Was it "y"?
 	jz	@@ignore_error			;   ok, continue
-	jmpf	0F000h, cold_boot		; Else cold reset
+	jmpfar	0F000h, cold_boot		; Else cold reset
 @@ignore_error:
 	mov	[byte es:15h], 0		; User wants to ignore error
 	call	clear_screen
@@ -1007,19 +1008,19 @@ print_error:
 	pop	ax				; Equipment byte restore
 	mov	si, offset str_game
 	test	al, 00010000b			; Check for game port
-	jz	@@display_timer			; Skip if none
+	jz	@@display_clock			; Skip if none
 	mov	ax, bx
 	call	locate				; Position cursor
 	call	print				;   and print string
 	inc	bh				;   scroll line
 
-@@display_timer:
-	call	timer_check			; Check for timer device
+@@display_clock:
+	call	clock_check			; Check for clock device
 	jb	@@finish_device_list		; Skip if none
 	mov	ax, bx
 	call	locate				; Position cursor
 	inc	bh
-	mov	si, offset str_timer
+	mov	si, offset str_clock
 	call	print
 
 @@finish_device_list:
@@ -1075,7 +1076,11 @@ print_error:
 	dec	bp
 	jnz	@@mem_count
 	pop	bx
-	pop	es
+	pop	es				; es = BDA seg
+
+	mov	ax, 1Eh				; Flush keyboard buffer in case user
+	mov	[es:1Ah], ax			;   was mashing keys during memory test
+	mov	[es:1Ch], ax
 
 ifdef	WARM_BOOT_BASIC
 do_boot:
@@ -1115,6 +1120,103 @@ endif
 	jmp	print_error
 
 endp	post
+
+
+;--------------------------------------------------------------------------------------------------
+; Display character
+;--------------------------------------------------------------------------------------------------
+proc	out_char	near
+
+	push	bx
+	push	ax
+	mov	ah, 0Eh 			; Teletype print service
+	mov	bl, 7				;   normal intensity
+	int	10h
+	pop	ax
+	pop	bx
+	ret
+
+endp	out_char
+
+
+;--------------------------------------------------------------------------------------------------
+; Display null-terminated string (si)
+;--------------------------------------------------------------------------------------------------
+proc	print	near
+
+@@loop:
+	lodsb					; Print zero terminated string
+	or	al, al				; Terminator in ax?
+	jz	@@done
+	call	out_char			; Print character in ax
+	jmp	@@loop				;   back for more
+@@done:
+	ret
+
+endp	print
+
+
+;--------------------------------------------------------------------------------------------------
+; Positions display cursor
+;--------------------------------------------------------------------------------------------------
+proc	locate	near
+
+	push	dx
+	push	bx
+	mov	dx, ax				; Get position for cursor
+	mov	ah, 2
+	mov	bh, 0				;   page 0
+	int	10h
+	pop	bx
+	pop	dx
+	ret
+
+endp	locate
+
+
+;--------------------------------------------------------------------------------------------------
+; Display value in al as 2-character ASCII hex number
+;--------------------------------------------------------------------------------------------------
+proc	number	near
+
+	push	ax				; Save number
+	mov	cl, 4
+	shr	al, cl
+	call	digit				; Out first digit
+	pop	ax
+	call	digit				; Out second digit
+	ret
+
+endp	number
+
+
+;--------------------------------------------------------------------------------------------------
+; Display value in ax as 3-character ASCII hex number
+;--------------------------------------------------------------------------------------------------
+proc	big_number	near
+
+	push	ax				; Unsigned word
+	mov	al, ah
+	call	digit
+big_number_entry:
+	pop	ax
+	call	number
+	ret
+
+endp	big_number
+
+
+;--------------------------------------------------------------------------------------------------
+; Display value in ax as 4-character ASCII hex number
+;--------------------------------------------------------------------------------------------------
+proc	double_number
+
+	push	ax				; Unsigned word
+	mov	al, ah
+	call	number
+	jmp	big_number_entry
+
+endp	double_number
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -1165,7 +1267,7 @@ proc	print_mem_kb	near
 	call	digit				; Print hex digit
 	mov	al, dl
 	mov	cl, 4
-	ROR	al, cl
+	ror	al, cl
 	call	digit				; Print hex digit
 	mov	al, dl
 	call	digit				; Print hex digit
@@ -1173,55 +1275,6 @@ proc	print_mem_kb	near
 	ret
 
 endp	print_mem_kb
-
-
-;---------------------------------------------------------------------------------------------------
-; Check for presence of hardware timer (cf=0 if timer present)
-;---------------------------------------------------------------------------------------------------
-proc	timer_check	near
-
-	mov	dx, 241h			; Check for timer #2 port
-	cli
-	in	al, dx				;   read BCD seconds/100
-	sti
-	cmp	al, 99h 			; Are BCD digits in range?
-	jbe	@@done				;   yes, port exists
-
-	mov	dx, 341h			; Check for timer #1 port
-	cli
-	in	al, dx				;   read BCD seconds/100
-	sti
-	cmp	al, 99h 			; Are BCD digits in range?
-	jbe	@@done				;   yes, port exists
-
-	stc					; No hardware,	ports 0FFh
-	ret
-@@done:
-	clc					; Found timer(s) answering
-	ret
-
-endp	timer_check
-
-
-;---------------------------------------------------------------------------------------------------
-; Clear display screen
-;---------------------------------------------------------------------------------------------------
-proc	clear_screen	near
-
-	mov	dx, 184Fh			; Lower right corner of scroll
-	xor	cx, cx				; Upper left  corner of scroll
-	mov	ax, 600h			; Blank entire window
-	mov	bh, 7				; Set regular cursor
-	int	10h				; Call video service scroll
-	mov	ah, 2				; Set cursor position
-	xor	dx, dx				;   upper left corner
-	mov	bh, 0				;   page 0
-	int	10h				;   call video service
-	mov	ax, 0500h			; Set active display page zero
-	int	10h
-	ret
-
-endp	clear_screen
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -1245,28 +1298,118 @@ proc	display_cpu	near
 endp	display_cpu
 
 
+;---------------------------------------------------------------------------------------------------
+; Detect if a FPU/NPU (8087) is present
+;---------------------------------------------------------------------------------------------------
+proc	fpu_check	near			; Test for FPU
+
+	fninit					; Try to init FPU
+	mov	si, 0200h
+	mov	[byte si+1], 0			; Clear memory byte
+	fnstcw	[word si]			; Put control word in memory
+	mov	ah, [si+1]
+	cmp	ah, 03h				; If ah is 03h, FPU is present
+	jne	@@no_8087
+	or	[byte ds:10h], 00000010b	; Set FPU in equp list
+	ret
+@@no_8087:
+	and	[byte ds:10h], 11111101b	; Set no FPU in equp list
+	ret
+
+endp	fpu_check
+
+
+;---------------------------------------------------------------------------------------------------
+; Check for presence of hardware clock (cf=0 if clock present)
+;---------------------------------------------------------------------------------------------------
+proc	clock_check	near
+
+	cli
+
+	mov	dx, 2C1h			; Check for clock at base port 2C0h
+	in	al, dx				;   read BCD seconds/100
+	cmp	al, 99h				; Are BCD digits in range?
+	jbe	@@found				;   yes, RTC found
+
+	mov	dl, 41h				; Check for clock at base port 240h
+	in	al, dx				;   read BCD seconds/100
+	cmp	al, 99h				; Are BCD digits in range?
+	jbe	@@found				;   yes, RTC found
+
+	mov	dh, 03h				; Check for clock at base port 340h
+	in	al, dx				;   read BCD seconds/100
+	cmp	al, 99h				; Are BCD digits in range?
+	jbe	@@found				;   yes, RTC found
+
+@@not_found:
+	sti
+	stc
+	ret
+
+@@found:
+	sti
+	clc
+	ret
+
+endp	clock_check
+
+
 ;--------------------------------------------------------------------------------------------------
-; Display value in ax as 4-character ASCII hex number
+; 8-bit checksum
 ;--------------------------------------------------------------------------------------------------
-proc	double_number
+proc	checksum	near
 
-	push	ax				; Unsigned word
-	mov	al, ah
-	call	number
-	jmp	big_number_entry
+	mov	cx, 2000h			; Bytes in 2764 eprom
 
-endp	double_number
+checksum_entry:
+	mov	al, 0				;   zero checksum
+@@loop:
+	add	al, [bx]			; Add byte to checksum
+	inc	bx				;   bx --> next byte
+	loop	@@loop				;   loop until done
+	or	al, al				; Set condition codes
+	ret					;   and return
+
+endp	checksum
 
 
+;--------------------------------------------------------------------------------------------------
+; Give user option to boot ROM BASIC if present, otherwise display "No ROM BASIC" message
+;--------------------------------------------------------------------------------------------------
+proc	boot_basic	near
 
-str_banner_2	db	CR, LF, 'Additions by Ya`akov Miles (1987) and Jon Petrosky (2008-2016)', 0
+	xor	cx, cx
+	mov	es, cx
+	mov	ch, [es:63h]			; Get int 18h (BASIC) segment in cx
 
-str_ram_test	db	'Testing RAM:    K OK', 0
+	xor	bl, bl
+	add	bh, 3
+	mov	ax, bx
+	call	locate				; Locate cursor
 
-str_mono	db	195, ' Mono/Hercules Graphics', 0
+	mov	si, offset str_no_basic		; Assume no BASIC
+	xor	dl, dl
 
-str_insert_disk		db	'Insert BOOT disk in A:', CR, LF
-			db	'Press any key when ready', CR, LF, LF, 0
+	cmp	ch, 0F6h			; If ROM BASIC is present segment will be F600h
+	jne	@@skip				; No BASIC
+
+	mov	si, offset str_boot_basic	; ROM BASIC present
+	inc	dl
+
+@@skip:
+	call	print				; Display "No BASIC" or "Boot BASIC" message
+
+	mov	bx, BOOT_DELAY * 18		; Get ticks to pause at 18.2 Hz
+	call	delay_keypress
+
+	cmp	al, ' '				; Was the keystroke a space?
+	je	@@basic				; Yes, boot BASIC
+	ret					; Otherwise return
+
+@@basic:
+	int	18h				; Boot ROM BASIC
+
+endp	boot_basic
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -1282,7 +1425,7 @@ proc	ipl	near
 	mov	[word ds:78h], offset int_1E	; Get disk parameter table
 	mov	[ds:7Ah], cs			;   save segment
 
-	mov	ax, 6				; Try up to 6 times (4 floppy, 2 hard)
+	mov	al, 6				; Try up to 6 times (4 floppy, 2 hard)
 
 @@retry:
 	push	ax				; Save retry count
@@ -1303,21 +1446,23 @@ proc	ipl	near
 	xor	ax, ax
 	mov	es, ax				; Segment 0
 	mov	ax, 0201h			; One sector read
-
 	mov	bx, 7C00h			;   offset  7C00
 	mov	cl, 1				;   sector 1
 	mov	ch, 0				;   track  0
 	int	13h
+
 	jb	@@failed
-	jmpf	0000h, 7C00h			; Call the boot block
+	jmpfar	0000h, 7C00h			; Call the boot block
 
 @@failed:
 	pop	ax				; Get retries
 	dec	al				;   one less
 	jnz	@@retry
 
+ifndef	RETRY_DISK
 	or	ah, ah				; Disk present?
 	jnz	@@disk_error			;   yes
+endif
 
 @@no_disk:
 	push	cs
@@ -1326,16 +1471,18 @@ proc	ipl	near
 	call	print				;   and print string
 	call	get_key				;   wait for keypress
 
-	mov	ax, 0FF08h			; Reset retry count
+	mov	ax, 0FF06h			; Reset retry count
 	jmp	@@retry				;   and retry
 
+ifndef	RETRY_DISK
 @@disk_error:
 	xor	ax, ax
 	mov	ds, ax
-	mov	ax, [ds:62h]
-	cmp	ax, 0F600h			; Check for valid ROM basic segment
+	mov	al, [ds:63h]
+	cmp	al, 0F6h			; Check for valid ROM basic segment
 	jne	@@no_disk			; No ROM basic found, keep retrying disk
 	int	18h				;   else call ROM basic
+endif
 
 endp	ipl
 
@@ -1408,7 +1555,8 @@ proc	int_9_enhanced	near
 	or	bl, 00000010b			; Set flag to indicate last scan code was E0h
 @@ignore:
 	pop	cx
-	push	offset int_9_end		; Skip the standard Int 9h
+	mov	dx, offset int_9_end		; Skip the standard Int 9h
+	push	dx
 	jmp	short @@done
 
 @@continue:
@@ -1457,7 +1605,8 @@ proc	int_9_enhanced	near
 
 @@stuff:
 	pop	cx
-	push	offset int_9_stuff		; Skip processing and put keystroke in buffer
+	mov	dx, offset int_9_stuff		; Skip processing and put keystroke in buffer
+	push	dx
 
 @@done:
 	mov	[ds:96h], bx			; Write back key flags
@@ -1490,6 +1639,25 @@ endp	int_9_enhanced
 endif
 
 
+;--------------------------------------------------------------------------------------------------
+; Display al as hex digit in ASCII
+;--------------------------------------------------------------------------------------------------
+proc	digit	near
+
+	push	ax				; Print hex digit in al
+	and	al, 0Fh
+	cmp	al, 9
+	jbe	@@low
+	add	al, 'A'-'9'-1
+@@low:
+	add	al, '0' 			; Make ascii digit
+	call	out_char			;   print it
+	pop	ax
+	ret
+
+endp	digit
+
+
 ;---------------------------------------------------------------------------------------------------
 ; Interrupt 19h - Warm Boot
 ;---------------------------------------------------------------------------------------------------
@@ -1501,43 +1669,8 @@ proc	int_19	far
 endp	int_19
 
 
-;---------------------------------------------------------------------------------------------------
-; Detect CPU type (8088 or V20)
-;---------------------------------------------------------------------------------------------------
-proc	cpu_check	near			; Test for 8088 or V20 CPU
-
-	xor	al, al				; Clean out al to set ZF
-	mov	al, 40h				; mul on V20 does not affect the zero flag
-	mul	al				;   but on an 8088 the zero flag is used
-	jz	@@have_v20			; Was zero flag set?
-	mov	si, offset str_8088		;   No, so we have an 8088 CPU
-	ret
-@@have_v20:
-	mov	si, offset str_v20		;   Otherwise we have a V20 CPU
-	ret
-
-endp	cpu_check
-
-
-;---------------------------------------------------------------------------------------------------
-; Detect if a FPU/NPU (8087) is present
-;---------------------------------------------------------------------------------------------------
-proc	fpu_check	near			; Test for FPU
-
-	fninit					; Try to init FPU
-	mov	si, 0200h
-	mov	[byte si+1], 0			; Clear memory byte
-	fnstcw	[word si]			; Put control word in memory
-	mov	ah, [si+1]
-	cmp	ah, 03h				; If ah is 03h, FPU is present
-	jne	@@no_8087
-	or	[byte ds:10h], 00000010b	; Set FPU in equp list
-	ret
-@@no_8087:
-	and	[byte ds:10h], 11111101b	; Set no FPU in equp list
-	ret
-
-endp	fpu_check
+str_insert_disk		db	'Insert BOOT disk in A:', CR, LF
+			db	'Press any key when ready', CR, LF, LF, 0
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -1627,7 +1760,7 @@ proc	int_14	far
 	mov	al, 3
 	mov	bh, 00110000b			; (Data Set Ready, Clear To Send)
 	mov	bl, 00100000b			;   (Data Terminal Ready) wait
-	call	@@wait				; Wait for transmitter to idle
+	call	near @@wait			; Wait for transmitter to idle
 	jnz	@@timeout			;   time-out error
 	sub	dx, 5				;   (xmit) index RS232_BASE
 	pop	cx				; Restore char to cl register
@@ -1647,7 +1780,7 @@ proc	int_14	far
 	mov	al, 1				; Get char. from COM port
 	mov	bh, 00100000b			; Wait on DSR (Data Set Ready)
 	mov	bl, 00000001b			; Wait on DTR (Data Terminal Ready)
-	call	@@wait				;   wait for character
+	call	near @@wait			;   wait for character
 	jnz	@@timeout_2			;   time-out error
 	and	ah, 00011110b			; Mask ah for error bits
 	sub	dx, 5				;   (receiver) index RS232_BASE
@@ -1714,7 +1847,7 @@ proc	int_14	far
 endp	int_14
 
 
-str_error	db	'System Error: ', 0
+str_serial	db	195, ' Serial Port at ', 0
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -1900,9 +2033,11 @@ proc	int_9	far
 	push	si
 	push	di
 	push	ds
+
 	cld
 	mov	ax, 40h
 	mov	ds, ax
+
 	in	al, 60h 			; Read the scan code data
 	push	ax				;   save it
 	in	al, 61h 			; Get control port status
@@ -1923,7 +2058,7 @@ endif
 	cmp	al, 11111111b			;   check for overrun
 	jnz	@@process			;   no, OK
 
-	jmp	@@beep				; Else beep bell on overrun
+	jmp	near @@beep			; Else beep bell on overrun
 
 int_9_end:
 @@end:
@@ -1944,7 +2079,7 @@ int_9_end:
 	and	al, 01111111b			; Valid scan code, no break
 	cmp	al, 46h
 	jbe	@@standard			; Standard key
-	jmp	@@pad				; Numeric keypad key
+	jmp	near @@pad			; Numeric keypad key
 
 @@standard:
 	mov	bx, offset ascii		; Table for ESC thru Scroll Lck
@@ -1966,7 +2101,7 @@ int_9_end:
 @@toggle:
 	test	[byte ds:17h], 00000100b	; Control key pressed?
 	jnz	@@ascii				;   yes, skip
-	test	al, [ds:18h]			; Else check "CAPS, NUM, SCRL"
+	test	[ds:18h], al			; Else check "CAPS, NUM, SCRL"
 	jnz	@@end				;   set, invalid, exit
 	or	[ds:18h], al			; Show set in "flag_1" byte
 	xor	[ds:17h], al			;   flip bits in "flag" byte
@@ -1984,7 +2119,7 @@ int_9_end:
 	mov	[ds:19h], ah			;   zero ALT-keypad character
 	cmp	al, ah				; Was there a valid ALT-keypad?
 	jz	@@end				;   no, ignore, exit
-	jmp	@@null				; Else stuff it in ASCII buffer
+	jmp	near @@null			; Else stuff it in ASCII buffer
 
 @@toggle_up:
 	not	al				; Form complement of toggle key
@@ -2013,24 +2148,24 @@ int_9_end:
 	cmp	al, 1Ah 			; Alphabetic character?
 	ja	@@non_alpha			;   no
 	add	al, 'a'-1			; Else add lower case base
-	jmp	@@common
+	jmp	near @@common
 
 @@non_alpha:
 	mov	bx, offset non_alpha		; Non-alphabetic character
 	sub	al, 20h
 	xlat	[cs:bx] 			;   do the xlate
-	jmp	@@common
+	jmp	near @@common
 
 @@alt:	cmp	al, 1Ah 			; Control key pressed?
 	ja	@@no_ctrl			;   no, skip
 	mov	al, 0				; Else illegal key press
-	jmp	@@buffer
+	jmp	near @@buffer
 
 @@no_ctrl:
 	mov	bx, offset alt_key		; Load ALT key translation
 	sub	al, 20h 			;   bias to printing char
 	xlat	[cs:bx] 			;   do the translation
-	jmp	@@common
+	jmp	near @@common
 
 @@ctrl: cmp	ah, 46h 			; Scroll lock key?
 	jnz	@@ctrl_1			;   no, skip
@@ -2040,7 +2175,7 @@ int_9_end:
 	mov	[ds:1Ah], ax			;   get key head to start
 	int	1Bh				; Issue a "Break" interrupt
 	sub	ax, ax
-	jmp	@@common_2
+	jmp	near @@common_2
 
 @@ctrl_1:
 	cmp	ah, 45h 			; Num lock key?
@@ -2064,7 +2199,7 @@ int_9_end:
 	mov	al, 0				; Else force a null
 
 @@ctrl_4:
-	jmp	@@buffer			;   save in buffer
+	jmp	near @@buffer			;   save in buffer
 
 @@ctrl_3:
 	cmp	al, 1Ah 			; Is it a control character?
@@ -2072,7 +2207,7 @@ int_9_end:
 	mov	bx, offset ctrl_lower		; Else non-ascii control
 	sub	al, 20h 			;   lower case
 	xlat	[cs:bx] 			;   translation
-	jmp	@@common
+	jmp	near @@common
 
 @@shift:
 	cmp	ah, 37h 			; Print_Screen pressed?
@@ -2086,13 +2221,13 @@ int_9_end:
 	cmp	al, 1Ah 			; Alphabetic char?
 	ja	@@shift_3			;   no
 	add	al, 'A'-1			; Yes, add base for alphabet
-	jmp	@@common
+	jmp	near @@common
 
 @@shift_3:
 	mov	bx, offset ctrl_upper		; Non-ascii control
 	sub	al, 20h 			;   upper case
 	xlat	[cs:bx] 			;   translation
-	jmp	@@common
+	jmp	near @@common
 
 @@pad:
 	sub	al, 47h 			; Keypad key, convert origin
@@ -2127,9 +2262,11 @@ reboot:
 
 @@turbo_check:
 ifdef	TURBO_ENABLED
+ifdef	TURBO_HOTKEY
 	cmp	ah, 4Ah 			; Is it a keypad "-" ?
 	jnz	@@alt_num_2			;   no, skip
 	call	toggle_turbo
+endif
 endif
 
 @@alt_num_2:
@@ -2253,7 +2390,7 @@ proc	set_insert_flags	near
 	clc
 	ret
 
-endp
+endp	set_insert_flags
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -2281,53 +2418,12 @@ proc	stuff_keyboard_buffer	near
 	clc					; cf=0, no errors
 	ret
 
-endp
+endp	stuff_keyboard_buffer
 
 
-;---------------------------------------------------------------------------------------------------
-; Toggles TURBO speed and sounds high/low blip on the PC speaker to indicate current speed
-;---------------------------------------------------------------------------------------------------
-ifdef	TURBO_ENABLED
-proc	toggle_turbo	near
-
-	push	ax
-	push	bx
-	push	cx
-	in	al, 61h 			; Read equipment flags
-	xor	al, 00001100b			;   toggle speed
-	out	61h, al 			; Write new flags back
-
-	mov	bx, 0F89h			; low pitch blip
-	and	al, 4				; Is turbo mode set?
-	jz	@@do_beep
-	mov	bx, 52Eh			; high pitch blip
-
-@@do_beep:
-	mov	al, 10110110b			; Timer IC 8253 square waves
-	out	43h, al 			;   channel 2, speaker
-	mov	ax, bx
-	out	42h, al 			;   send low order
-	mov	al, ah				;   load high order
-	out	42h, al 			;   send high order
-	in	al, 61h 			; Read IC 8255 machine status
-	push	ax
-	or	al, 00000011b
-	out	61h, al 			; Turn speaker on
-	mov	cx, 2000h
-@@delay:
-	loop    @@delay
-	pop	ax
-	out	61h, al 			; Turn speaker off
-	pop	cx
-	pop	bx
-	pop	ax
-	ret
-
-endp	toggle_turbo
-endif
-
-
-str_no_basic	db	'No ROM BASIC, booting from disk...', 0
+str_banner_2	db	CR, LF, 'Additions by Ya`akov Miles and Jon Petrosky', 0
+str_8088	db	'8088 CPU (', 0
+str_boot_basic	db	'Press SPACE to boot ROM BASIC...', 0
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -2344,12 +2440,12 @@ proc	int_13	far
 	push	es
 	push	bx
 	mov	di, ax				; Request type in di, for index
-	xor	ax, ax
-	mov	ds, ax
+	xor	bx, bx
+	mov	ds, bx
 	les	si, [dword ds:78h]		; Get disk parameter table
-	mov	ax, 40h
-	mov	ds, ax
-	mov	bx, 5
+	mov	bl, 40h
+	mov	ds, bx
+	mov	bl, 5
 	mov	ax, [es:bx+si]			; Get (Gap Length, DTL) in ax
 	push	ax				;   save it
 	dec	bx
@@ -2404,7 +2500,7 @@ floppy_exec:
 	mov	[byte ds:41h], 1		; Say write protect error
 	retn
 
-@@exec:	jmp	@@service			; Execute legal service
+@@exec:	jmp	near @@service			; Execute legal service
 
 @@status:
 	mov	al, [ds:41h]			; Return NEC status byte
@@ -2438,7 +2534,7 @@ floppy_exec:
 	or	al, 00000100b			; "Reset" in command word
 	out	dx, al				;   send word to controller
 	sti
-	call	@@nec_busy			; Wait for completion
+	call	near @@nec_busy			; Wait for completion
 	call	nec_status			;   read result block
 	mov	al, [ds:42h]
 	cmp	al, 0C0h			; Did the reset work
@@ -2465,9 +2561,9 @@ status_table	db	04h, 10h, 08h, 04h, 03h, 02h, 20h	; Disk status table lookup
 
 @@service:
 	cli					; Normal (non-reset) commands
-	mov	[byte ds:41h], 0		;   reset status
-	mov	al, [bp+1]			; Get command word
 	mov	ah, 0
+	mov	al, [bp+1]			; Get command word
+	mov	[ds:41h], ah			;   reset status
 	mov	di, ax				; Save copy, zero-extended
 	out	0Ch, al 			;   diddle LSB/MSB flip-flop
 	mov	al, [cs:di+dma_table]		; Fetch DMA mode
@@ -2500,7 +2596,7 @@ status_table	db	04h, 10h, 08h, 04h, 03h, 02h, 20h	; Disk status table lookup
 	jnb	@@disable_dma			;   ok
 	sti
 	mov	[byte ds:41h], 9h		; Else wrapped around 64K byte
-	jmp	@@overflow			;   page register
+	jmp	near @@overflow			;   page register
 
 @@disable_dma:
 	mov	al, 2				; Disable floppy disk dma
@@ -2524,20 +2620,20 @@ status_table	db	04h, 10h, 08h, 04h, 03h, 02h, 20h	; Disk status table lookup
 	mov	ah, [es:si+0Ah] 		; Motor start from param blk
 	or	ah, ah
 	jz	@@check_calibration		;   none specified
-	test	ch, [ds:3Fh]			; Was this drive motor running?
+	test	[ds:3Fh], ch			; Was this drive motor running?
 	jnz	@@check_calibration		;   skip if so
-	call	@@wait				; Else delay for motor start
+	call	near @@wait			; Else delay for motor start
 
 @@check_calibration:
 	or	[ds:3Fh], ch			; Show this motor is running
-	test	ch, [ds:3Eh]			; Drive recalibration needed?
+	test	[ds:3Eh], ch			; Drive recalibration needed?
 	jnz	@@seek				;   no, skip
 	or	[ds:3Eh], ch			; Else show recalibrated
 	mov	al, 7				; Send RECAL command
 	call	nec_chip			;   to NEC 765 chip
 	mov	al, bl
 	call	nec_chip			;   drive number
-	call	@@nec_busy			; Wait for completion of RECAL
+	call	near @@nec_busy			; Wait for completion of RECAL
 	call	nec_return			;   dummy call to ret
 
 @@seek: mov	al, 0Fh 			; Request a seek
@@ -2546,7 +2642,7 @@ status_table	db	04h, 10h, 08h, 04h, 03h, 02h, 20h	; Disk status table lookup
 	call	nec_chip			; Drive number
 	mov	al, [bp+3]
 	call	nec_chip			; Cylinder number
-	call	@@nec_busy			;   wait for completion
+	call	near @@nec_busy			;   wait for completion
 	call	nec_status			;   read results
 	mov	al, [es:si+9]			; Get head settle time
 	or	al, al				;   none specified?
@@ -2591,7 +2687,7 @@ status_table	db	04h, 10h, 08h, 04h, 03h, 02h, 20h	; Disk status table lookup
 	loop	@@table_loop			;   also (EOT, GAP, DTL...)
 
 @@completion:
-	call	@@nec_busy			; Wait on floppy I/O completion
+	call	near @@nec_busy			; Wait on floppy I/O completion
 	call	nec_status_alt			;   get NEC status
 	mov	al, [ds:42h]			;   into al
 	and	al, 11000000b			; Isolate errors
@@ -2607,7 +2703,7 @@ status_table	db	04h, 10h, 08h, 04h, 03h, 02h, 20h	; Disk status table lookup
 	xor	bx, bx				; Start at error type 0
 
 @@error_loop:
-	test	al, [cs:bx+error_table]		; Has error type bx occured?
+	test	[cs:bx+error_table], al		; Has error type bx occured?
 	jnz	@@xlat_error			;   yes
 	inc	bx				; Else try next error type
 	loop	@@error_loop			;   until done
@@ -2717,8 +2813,8 @@ proc	video_mem_test	near
 	cmp	al, 7				; Is video mode mono?
 	jz	@@do_test			;   yes, skip
 
-	mov	bp, 10h 			; Else CGA, has 16K memory
-	mov	bx, 0B800h			;   segment in bx
+	mov	bp, 16	 			; Else CGA, has 16K memory
+	mov	bh, 0B8h			;   segment in bx
 
 @@do_test:
 	push	bx				; Load video seg in es
@@ -2807,9 +2903,9 @@ proc	int_E	far
 	sti					; Floppy disk attention
 	push	ds
 	push	ax
-	mov	ax, 40h
+	xor	ax, ax
 	mov	ds, ax
-	or	[byte ds:3Eh], 10000000b	; Raise "attention" flag
+	or	[byte ds:43Eh], 10000000b	; Raise "attention" flag
 	mov	al, 20h 			; Send end_of_interrupt code
 	out	20h, al 			;   to 8259 interrupt chip
 	pop	ax
@@ -3046,7 +3142,7 @@ proc	int_10	far
 	cmp	bl, 00110000b			; Check for monochrome card
 	mov	bx, 0B800h
 	jnz	@@dispatch			;   not there, bx --> CGA
-	mov	bx, 0B000h			; Else bx --> MONO
+	mov	bh, 0B0h			; Else bx --> MONO
 
 @@dispatch:
 	push	bx				; Save video buffer address
@@ -3171,13 +3267,13 @@ proc	int_10_func_0	near
 	mov	es, bx				;   into es segment
 	xor	di, di
 	call	mode_check			; Set flags to mode
-	mov	cx, 2000h			;   assume CGA
+	mov	ch, 20h				;   assume CGA
 	mov	ax, 0				;   and graphics
 	jb	@@fill				;   do graphics fill
 	jnz	@@text				;   Alphanumeric fill
-	mov	cx, 800h			;   mono card
+	mov	ch, 8h				;   mono card
 @@text:	mov	ax, 7*100h+' '			; Word for text fill
-@@fill:	repz	stosw				;   fill regen buffer
+@@fill:	rep	stosw				;   fill regen buffer
 
 	mov	dx, [ds:63h]			; Get the port
 	add	dl, 4
@@ -3197,7 +3293,7 @@ proc	int_10_func_0	near
 	xor	ax, ax
 	mov	[ds:4Eh], ax			; Start at beg. of 1st page
 	mov	[ds:62h], al			;   active page=page 0
-	mov	cx, 8				; Do 8 pages of cursor data
+	mov	cl, 8				; Do 8 pages of cursor data
 	mov	di, 50h 			; Page cursor data at 40:50
 
 @@cursor:
@@ -3365,7 +3461,7 @@ proc	int_10_func_6_7	near
 
 	call	mode_check
 	jnb	@@text
-	jmp	@@graphics			; Graphics scroll
+	jmp	near @@graphics			; Graphics scroll
 
 @@text: cld					; Strings go upward
 	cmp	[byte ds:49h], 2
@@ -3421,7 +3517,7 @@ proc	int_10_func_6_7	near
 	mov	cl, dl				;   load low order word count
 	push	di
 	push	si
-	repz	movsw				; Do the scroll
+	rep	movsw				; Do the scroll
 	pop	si
 	pop	di
 	add	si, bx				; Move one line in direction
@@ -3436,7 +3532,7 @@ proc	int_10_func_6_7	near
 
 @@fill: mov	cl, dl				; Get characters to scroll
 	push	di
-	repz	stosw				;   store fill attr/char
+	rep	stosw				;   store fill attr/char
 	pop	di
 	add	di, bx				; Show row was filled
 	dec	dh
@@ -3511,7 +3607,7 @@ proc	int_10_func_6_7	near
 	mov	cl, dl				;   bytes in row
 	push	si
 	push	di
-	repz	movsb				; Copy one plane
+	rep	movsb				; Copy one plane
 	pop	di
 	pop	si
 	add	si, 2000h			; Load other graphics
@@ -3519,7 +3615,7 @@ proc	int_10_func_6_7	near
 	mov	cl, dl
 	push	si
 	push	di
-	repz	movsb				; Copy other plane
+	rep	movsb				; Copy other plane
 	pop	di
 	pop	si
 	sub	si, bx
@@ -3536,12 +3632,12 @@ proc	int_10_func_6_7	near
 @@gfx_fill:
 	mov	cl, dl				; Get bytes per row
 	push	di
-	repz	stosb				; Load row with fill attribute
+	rep	stosb				; Load row with fill attribute
 	pop	di
 	add	di, 2000h			; Do other graphics video plane
 	mov	cl, dl
 	push	di
-	repz	stosb				; Load row with fill attribute
+	rep	stosb				; Load row with fill attribute
 	pop	di
 	sub	di, bx
 	dec	dh				; Show one less row to blank
@@ -3641,7 +3737,7 @@ proc	int_10_func_8_9_10	near
 @@graphics:
 	cmp	[byte bp+3], 8			; Read graphics char/attr?
 	jnz	@@gfx_write			;   no, must be write
-	jmp	@@gfx_read			; Else read char/attr
+	jmp	near @@gfx_read			; Else read char/attr
 
 @@gfx_write:
 	mov	ax, [ds:50h]			; Get cursor position
@@ -4117,10 +4213,10 @@ endp	dot_offset
 ;---------------------------------------------------------------------------------------------------
 proc	pen_pos	near
 
-	call	@@pen_xy			; Read light pen position high
+	call	near @@pen_xy			; Read light pen position high
 	mov	ch, al				;   save in ch
 	inc	ah
-	call	@@pen_xy			; Read light pen position low
+	call	near @@pen_xy			; Read light pen position low
 	mov	cl, al				;   save in cl
 	ret
 
@@ -4217,90 +4313,67 @@ endp	set_cursor
 
 
 ;--------------------------------------------------------------------------------------------------
-; Slows the system clock rate while accessing the floppy drive
+; Initialize video card
 ;--------------------------------------------------------------------------------------------------
-ifdef	SLOW_FLOPPY				; Run floppy at SLOWEST speed
-proc	floppy_speed	near
+proc	video_init	near
 
-	in	al, 61h 			; Toggle speed on Floppy Disk
-	push	ax				;   save old clock rate
-	and	al, 11110011b			;   load slowest clock rate
-	out	61h, al 			;   slow down to 4.77 mHz
-	call	floppy_exec			; Execute the I/O request
-	pop	ax				;   restore old clock rate
-	out	61h, al 			;   from saved clock byte
+	mov	ah, [ds:10h]			; Get equipment byte
+	and	ah, 00110000b			;   extract CRT
+	mov	al, 0				;   null low
+	cmp	ah, 00110000b			; Monochrome?
+	jz	@@init				;   yes
+	mov	al, 1				; CGA 40 x 25?
+	cmp	ah, 00010000b			;   yes
+	jz	@@init				; CGA 80 x 25?
+	mov	al, 3				;   yes
+@@init:
+	mov	ah, 0				; Setup subfunction
+	int	10h				;   to video
 	ret
 
-endp	floppy_speed
-endif
+endp	video_init
 
 
 ;--------------------------------------------------------------------------------------------------
-; Give user option to boot ROM BASIC if present, otherwise display "No ROM BASIC" message
+; PC speaker beep (length in bl)
 ;--------------------------------------------------------------------------------------------------
-proc	boot_basic	near
+proc	beep	near
 
+	push	ax
+	push	cx
+	mov	al, 10110110b			; Timer IC 8253 square waves
+	out	43h, al 			;   channel 2, speaker
+	mov	ax, 528h			; Get countdown constant word
+	out	42h, al 			;   send low order
+	mov	al, ah				;   load high order
+	out	42h, al 			;   send high order
+	in	al, 61h 			; Read IC 8255 machine status
+	push	ax
+	or	al, 00000011b
+	out	61h, al 			; Turn speaker on
 	xor	cx, cx
-	mov	es, cx
-	mov	cx, [es:62h]			; Get int 18h (BASIC) segment in cx
-
-	xor	bl, bl
-	add	bh, 3
-	mov	ax, bx
-	call	locate				; Locate cursor
-
-	mov	si, offset str_no_basic		; Assume no BASIC
-	xor	dl, dl
-
-	cmp	cx, 0F600h			; If ROM BASIC is present segment will be F600h
-	jne	@@skip				; No BASIC
-
-	mov	si, offset str_boot_basic	; ROM BASIC present
-	inc	dl
-
-@@skip:
-	call	print				; Display "No BASIC" or "Boot BASIC" message
-
-	sti					; Enable interrupts so timer can run
-	mov	bx, BOOT_DELAY * 18		; Get ticks to pause at 18.2 Hz
-	add	bx, [es:46Ch]			; Get current timer ticks (0000:046C = 0040:006C)
-
 @@delay:
-	mov	ah, 01h
-	int	16h				; Check for keypress
-	jnz	@@keypress			; End pause if key pressed
-
-	mov	cx, [es:46Ch]			; Get current ticks
-	sub	cx, bx				; See if pause is up yet
-	jc	@@delay				; Nope
-
-@@done:
-	cli					; Disable interrupts
+	loop	@@delay
+	dec	bl
+	jnz	@@delay
+	pop	ax
+	out	61h, al 			; Turn speaker off
+	pop	cx
+	pop	ax
 	ret
 
-@@keypress:
-	xor	ah, ah
-	int	16h				; Flush keystroke from buffer
-
-	or	dl, dl				; Is ROM BASIC present?
-	jz	@@done				; No so don't even try
-
-	cmp	al, ' '				; Was the keystroke a space?
-	je	@@basic				; Yes, boot BASIC
-	jmp	short @@done			; Otherwise return
-
-@@basic:
-	int	18h				; Boot ROM BASIC
-
-endp	boot_basic
+endp	beep
 
 
-str_system	db	'System ', 194, ' ', 0
-str_8088	db	'8088 CPU (', 0
-str_v20		db	'V20 CPU (', 0
 str_no_fpu	db	'No FPU)', 0
-str_8087	db	'8087 FPU)', 0
-str_boot_basic	db	'Press SPACE to boot ROM BASIC...', 0
+str_mono	db	195, ' Mono/Hercules Graphics', 0
+str_clock	db	195, ' Clock', 0
+
+str_ram_test	db	'Testing RAM:    K OK', 0
+
+str_error	db	'System Error: ', 0
+str_parity_err	db	'Parity error at: ?????', 0
+str_continue	db	CR, LF, 'Continue? ', 0
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -4311,9 +4384,9 @@ proc	int_12	far
 
 	sti					; Kbytes of memory present
 	push	ds
-	mov	ax, 40h
+	xor	ax, ax
 	mov	ds, ax
-	mov	ax, [ds:13h]			; ax = memory size, kilobytes
+	mov	ax, [ds:413h]			; ax = memory size, kilobytes
 	pop	ds
 	iret
 
@@ -4328,9 +4401,9 @@ proc	int_11	far
 
 	sti					; Equipment present
 	push	ds
-	mov	ax, 40h
+	xor	ax, ax
 	mov	ds, ax
-	mov	ax, [ds:10h]			; ax = equipment byte contents
+	mov	ax, [ds:410h]			; ax = equipment byte contents
 	pop	ds
 	iret
 
@@ -4360,7 +4433,7 @@ proc	int_2	far
 	in	al, 62h
 	test	al, 11000000b			; Get cause of interrupt
 	jnz	@@parity			;   parity error
-	jmp	@@end				;   math coprocessor (?)
+	jmp	near @@end			;   math coprocessor (?)
 
 @@parity:
 	push	bx				; Parity error bomb
@@ -4377,7 +4450,7 @@ proc	int_2	far
 	push	ds
 	push	cs				; Point ds at ROM
 	pop	ds
-	mov	si, offset str_parity_error	; si --> Parity message
+	mov	si, offset str_parity_err	; si --> Parity message
 	call	print				;   print
 	pop	ds				;   restore ds
 	mov	ax, 11h 			; Back cursor over ? marks
@@ -4475,236 +4548,22 @@ proc	int_2	far
 endp	int_2
 
 
-lpt_ports	dw	03BCh, 0378h, 0278h	; Possible line printer ports
+;---------------------------------------------------------------------------------------------------
+; Detect CPU type (8088 or V20)
+;---------------------------------------------------------------------------------------------------
+proc	cpu_check	near			; Test for 8088 or V20 CPU
 
-str_serial	db	195, ' Serial Port at ', 0
-
-str_parity_error	db	'Parity error at: ?????', 0
-str_continue		db	CR, LF, 'Continue? ', 0
-
-
-;--------------------------------------------------------------------------------------------------
-; Display al as hex digit in ASCII
-;--------------------------------------------------------------------------------------------------
-proc	digit	near
-
-	push	ax				; Print hex digit in al
-	and	al, 0Fh
-	cmp	al, 9
-	jbe	@@low
-	add	al, 'A'-'9'-1
-@@low:
-	add	al, '0' 			; Make ascii digit
-	call	out_char			;   print it
-	pop	ax
+	xor	al, al				; Clean out al to set ZF
+	mov	al, 40h				; mul on V20 does not affect the zero flag
+	mul	al				;   but on an 8088 the zero flag is used
+	jz	@@have_v20			; Was zero flag set?
+	mov	si, offset str_8088		;   No, so we have an 8088 CPU
+	ret
+@@have_v20:
+	mov	si, offset str_v20		;   Otherwise we have a V20 CPU
 	ret
 
-endp	digit
-
-
-;--------------------------------------------------------------------------------------------------
-; Display value in al as 2-character ASCII hex number
-;--------------------------------------------------------------------------------------------------
-proc	number	near
-
-	push	ax				; Save number
-	mov	cl, 4
-	shr	al, cl
-	call	digit				; Out first digit
-	pop	ax
-	call	digit				; Out second digit
-	ret
-
-endp	number
-
-
-;--------------------------------------------------------------------------------------------------
-; Display value in ax as 3-character ASCII hex number
-;--------------------------------------------------------------------------------------------------
-proc	big_number	near
-
-	push	ax				; Unsigned word
-	mov	al, ah
-	call	digit
-big_number_entry:
-	pop	ax
-	call	number
-	ret
-
-endp	big_number
-
-
-;--------------------------------------------------------------------------------------------------
-; Display character
-;--------------------------------------------------------------------------------------------------
-proc	out_char	near
-
-	push	bx
-	push	ax
-	mov	ah, 0Eh 			; Teletype print service
-	mov	bl, 7				;   normal intensity
-	int	10h
-	pop	ax
-	pop	bx
-	ret
-
-endp	out_char
-
-
-;--------------------------------------------------------------------------------------------------
-; Display null-terminated string (si)
-;--------------------------------------------------------------------------------------------------
-proc	print	near
-
-@@loop:
-	lodsb					; Print zero terminated string
-	or	al, al				; Terminator in ax?
-	jz	@@done
-	call	out_char			; Print character in ax
-	jmp	@@loop				;   back for more
-@@done:
-	ret
-
-endp	print
-
-
-;--------------------------------------------------------------------------------------------------
-; Positions display cursor
-;--------------------------------------------------------------------------------------------------
-proc	locate	near
-
-	push	dx
-	push	bx
-	mov	dx, ax				; Get position for cursor
-	mov	ah, 2
-	mov	bh, 0				;   page 0
-	int	10h
-	pop	bx
-	pop	dx
-	ret
-
-endp	locate
-
-
-;--------------------------------------------------------------------------------------------------
-; Display null-terminated string (si) in color for BIOS title bar
-;--------------------------------------------------------------------------------------------------
-proc	color_print	near
-
-	mov	bx, 0070h			; Mono uses inverse attribute
-	cmp	[byte es:49h], 7		; Get CRT mode
-	je	@@loop				;   monochrome
-	mov	bx, 001Fh			; Color uses white on blue
-
-@@loop:
-	mov	cx, 1
-	lodsb					; Print zero terminated string
-	or	al, al
-	jz	@@done				; Terminator in ax?
-	call	color_out_char			; Print character in ax
-	jmp	@@loop				;   back for more
-
-@@done:
-	mov	cx, 81 - (offset str_banner_end - offset str_banner)	; Extend color bar
-
-color_out_char:
-	mov	ah, 09h 			; Write character and attribute
-	int	10h
-
-	mov	ah, 03h				; Get cursor position
-	int	10h
-
-	mov	ah, 02h				; Set cursor position
-	inc	dl				; Advance cursor 1 space
-	int	10h
-
-	ret
-
-endp	color_print
-
-
-;--------------------------------------------------------------------------------------------------
-; Initialize video card
-;--------------------------------------------------------------------------------------------------
-proc	video_init	near
-
-	mov	ah, [ds:10h]			; Get equipment byte
-	and	ah, 00110000b			;   extract CRT
-	mov	al, 0				;   null low
-	cmp	ah, 00110000b			; Monochrome?
-	jz	@@init				;   yes
-	mov	al, 1				; CGA 40 x 25?
-	cmp	ah, 00010000b			;   yes
-	jz	@@init				; CGA 80 x 25?
-	mov	al, 3				;   yes
-@@init:
-	mov	ah, 0				; Setup subfunction
-	int	10h				;   to video
-	ret
-
-endp	video_init
-
-
-;--------------------------------------------------------------------------------------------------
-; Waits for a keypress and then returns it (ah=scan code, al=ASCII)
-;--------------------------------------------------------------------------------------------------
-proc	get_key	near
-
-	mov	ah, 0				; Read keyboard key
-	int	16h
-	ret
-
-endp	get_key
-
-
-;--------------------------------------------------------------------------------------------------
-; PC speaker beep (length in bl)
-;--------------------------------------------------------------------------------------------------
-proc	beep	near
-
-	push	ax
-	push	cx
-	mov	al, 10110110b			; Timer IC 8253 square waves
-	out	43h, al 			;   channel 2, speaker
-	mov	ax, 528h			; Get countdown constant word
-	out	42h, al 			;   send low order
-	mov	al, ah				;   load high order
-	out	42h, al 			;   send high order
-	in	al, 61h 			; Read IC 8255 machine status
-	push	ax
-	or	al, 00000011b
-	out	61h, al 			; Turn speaker on
-	xor	cx, cx
-@@delay:
-	loop	@@delay
-	dec	bl
-	jnz	@@delay
-	pop	ax
-	out	61h, al 			; Turn speaker off
-	pop	cx
-	pop	ax
-	ret
-
-endp	beep
-
-
-;--------------------------------------------------------------------------------------------------
-; 8-bit checksum
-;--------------------------------------------------------------------------------------------------
-proc	checksum	near
-
-	mov	cx, 2000h			; Bytes in 2764 eprom
-
-checksum_entry:
-	mov	al, 0				;   zero checksum
-@@loop:
-	add	al, [bx]			; Add byte to checksum
-	inc	bx				;   bx --> next byte
-	loop	@@loop				;   loop until done
-	or	al, al				; Set condition codes
-	ret					;   and return
-
-endp	checksum
+endp	cpu_check
 
 
 ;--------------------------------------------------------------------------------------------------
@@ -4712,18 +4571,18 @@ endp	checksum
 ;--------------------------------------------------------------------------------------------------
 proc	mem_test	near
 
-	mov	bx, 0400h			; Load bytes to test
-	mov	al, 55h
+	mov	bx, 0200h			; Load bytes to test
+	mov	ax, 5555h
 
 ifndef	NO_MEM_CHECK
 ifndef	FAST_MEM_CHECK
 @@pattern_1:
 	xor	di, di				; Pattern #1 - 55h bytes
 	mov	cx, bx
-	repz	stosb				; Fill memory,	pattern #1
+	rep	stosw				; Fill memory,	pattern #1
 	xor	di, di
 	mov	cx, bx
-	repz	scasb				; Scan memory for not pattern #1
+	repz	scasw				; Scan memory for not pattern #1
 	jcxz	@@pattern_2
 	stc					; Flunked
 	ret
@@ -4731,11 +4590,11 @@ ifndef	FAST_MEM_CHECK
 @@pattern_2:
 	xor	di, di				; Pattern #2 - AAh bytes
 	mov	cx, bx
-	not	al
-	repz	stosb				; Fill memory,	pattern #2
+	not	ax
+	rep	stosw				; Fill memory,	pattern #2
 	xor	di, di
 	mov	cx, bx
-	repz	scasb				; Scan memory for not pattern #2
+	repz	scasw				; Scan memory for not pattern #2
 	jcxz	@@pattern_3
 	stc					; Flunked
 	ret
@@ -4744,12 +4603,12 @@ endif
 @@pattern_3:
 	xor	di, di				; Pattern #3 - FFh bytes
 	mov	cx, bx
-	xor	al, al
-	not	al
-	repz	stosb				; Fill memory,	pattern #3
+	xor	ax, ax
+	not	ax
+	rep	stosw				; Fill memory,	pattern #3
 	xor	di, di
 	mov	cx, bx
-	repz	scasb				; Scan memory for not pattern #3
+	repz	scasw				; Scan memory for not pattern #3
 	jcxz	@@pattern_4
 	stc					; Flunked
 	ret
@@ -4758,13 +4617,13 @@ endif
 @@pattern_4:
 	xor	di, di				; Pattern #4 - 00h bytes
 	mov	cx, bx
-	xor	al, al
-	repz	stosb				; Fill memory,pattern #4
+	xor	ax, ax
+	rep	stosw				; Fill memory,pattern #4
 
 ifndef	NO_MEM_CHECK
 	xor	di, di
 	mov	cx, bx
-	repz	scasb				; Scan memory for not pattern #4
+	repz	scasw				; Scan memory for not pattern #4
 	jcxz	@@done
 	stc					; Flunked
 	ret
@@ -4777,6 +4636,191 @@ endif
 	ret					; Passed
 
 endp	mem_test
+
+
+;--------------------------------------------------------------------------------------------------
+; Slows the system clock rate while accessing the floppy drive
+;--------------------------------------------------------------------------------------------------
+ifdef	SLOW_FLOPPY				; Run floppy at SLOWEST speed
+proc	floppy_speed	near
+
+	in	al, 61h 			; Toggle speed on Floppy Disk
+	push	ax				;   save old clock rate
+	and	al, 11110011b			;   load slowest clock rate
+	out	61h, al 			;   slow down to 4.77 mHz
+	call	floppy_exec			; Execute the I/O request
+	pop	ax				;   restore old clock rate
+	out	61h, al 			;   from saved clock byte
+	ret
+
+endp	floppy_speed
+endif
+
+
+;---------------------------------------------------------------------------------------------------
+; Toggles TURBO speed and sounds high/low blip on the PC speaker to indicate current speed
+;---------------------------------------------------------------------------------------------------
+ifdef	TURBO_ENABLED
+ifdef	TURBO_HOTKEY
+proc	toggle_turbo	near
+
+	push	ax
+	push	bx
+	push	cx
+	in	al, 61h 			; Read equipment flags
+	xor	al, 00001100b			;   toggle speed
+	out	61h, al 			; Write new flags back
+
+	mov	bx, 0F89h			; low pitch blip
+	and	al, 4				; Is turbo mode set?
+	jz	@@do_beep
+	mov	bx, 52Eh			; high pitch blip
+
+@@do_beep:
+	mov	al, 10110110b			; Timer IC 8253 square waves
+	out	43h, al 			;   channel 2, speaker
+	mov	ax, bx
+	out	42h, al 			;   send low order
+	mov	al, ah				;   load high order
+	out	42h, al 			;   send high order
+	in	al, 61h 			; Read IC 8255 machine status
+	push	ax
+	or	al, 00000011b
+	out	61h, al 			; Turn speaker on
+	mov	cx, 2000h
+@@delay:
+	loop    @@delay
+	pop	ax
+	out	61h, al 			; Turn speaker off
+	pop	cx
+	pop	bx
+	pop	ax
+	ret
+
+endp	toggle_turbo
+endif
+endif
+
+
+;--------------------------------------------------------------------------------------------------
+; Delay number of clock ticks in bx, unless a key is pressed first (return ASCII code in al)
+;--------------------------------------------------------------------------------------------------
+proc	delay_keypress	near
+
+	sti					; Enable interrupts so timer can run
+	add	bx, [es:46Ch]			; Add pause ticks to current timer ticks
+						;   (0000:046C = 0040:006C)
+@@delay:
+	mov	ah, 01h
+	int	16h				; Check for keypress
+	jnz	@@keypress			; End pause if key pressed
+
+	mov	cx, [es:46Ch]			; Get current ticks
+	sub	cx, bx				; See if pause is up yet
+	jc	@@delay				; Nope
+
+@@done:
+	cli					; Disable interrupts
+	ret
+
+@@keypress:
+	xor	ah, ah
+	int	16h				; Flush keystroke from buffer
+	jmp	short @@done
+
+endp	delay_keypress
+
+
+;---------------------------------------------------------------------------------------------------
+; Clear display screen
+;---------------------------------------------------------------------------------------------------
+proc	clear_screen	near
+
+	mov	dx, 184Fh			; Lower right corner of scroll
+	xor	cx, cx				; Upper left  corner of scroll
+	mov	ax, 600h			; Blank entire window
+	mov	bh, 7				; Set regular cursor
+	int	10h				; Call video service scroll
+	mov	ah, 2				; Set cursor position
+	xor	dx, dx				;   upper left corner
+	mov	bh, 0				;   page 0
+	int	10h				;   call video service
+	mov	ax, 500h			; Set active display page zero
+	int	10h
+	ret
+
+endp	clear_screen
+
+
+;--------------------------------------------------------------------------------------------------
+; Display null-terminated string (si) in color for BIOS title bar
+;--------------------------------------------------------------------------------------------------
+proc	title_print	near
+
+	xor	dx, dx				; Cursor starts in upper left corner
+	mov	cx, 1				; Character repeat count
+
+	mov	bx, 0070h			; Mono uses inverse attribute
+	cmp	[byte es:49h], 7		; Get CRT mode
+	je	@@loop				;   monochrome
+	mov	bl, 1Fh				; Color uses white on blue
+
+@@loop:
+	lodsb					; Print zero terminated string
+	or	al, al
+	jz	@@done				; Terminator in ax?
+
+	inc	dl				; New cursor position
+	call	color_out_char			; Print character in ax and advance cursor
+
+	jmp	@@loop				;   back for more
+
+@@done:
+ifndef	TITLE_BAR_FADE
+
+	mov	cl, 81 - (offset str_banner_end - offset str_banner)	; Extend color bar
+else
+	mov	cl, 10				; Repeat trailing space 10 chars
+	add	dl, cl				;   update cursor
+	call	color_out_char			;   extend bar
+
+	sub	bl, 61h				; Change color to white on black
+	jns	@@fade				;   jump if monochrome
+	mov	bl, 001h			;   else use black on blue
+
+@@fade:
+	mov	al, 0B2h			; 75% block
+	add	dl, cl				;   update cursor
+	call	color_out_char			;   extend bar
+
+	mov	al, 0B1h			; 50% block
+	add	dl, cl				;   update cursor
+	call	color_out_char			;   extend bar
+
+	mov	al, 0B0h			; 25% block
+endif
+
+color_out_char:
+	mov	ah, 09h 			; Write character and attribute
+	int	10h
+
+	mov	ah, 02h				; Set cursor position
+	int	10h
+
+	ret
+
+endp	title_print
+
+
+;***************************************************************************************************
+; Free ROM Space Here
+;
+;  57 bytes
+; +34 bytes with FAST_MEM_CHECK enabled, or +64 bytes with NO_MEM_CHECK enabled
+; +14 bytes with SLOW_FLOPPY disabled
+; +50 bytes with TURBO_HOTKEY disabled
+; +28 bytes with TITLE_BAR_FADE disabled
+;***************************************************************************************************
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -4923,7 +4967,7 @@ proc	int_1A	far
 	sti					; User time_of_day BIOS service
 	push	ds
 	push	ax
-	mov	ax, 40h
+	xor	ax, ax
 	mov	ds, ax
 	pop	ax				; Get request type
 	cli					;   pause clock
@@ -4933,26 +4977,29 @@ proc	int_1A	far
 	jnz	@@end				;   invalid request
 
 @@set:
-	mov	[ds:6Ch], dx			; Set time, ah=1
-	mov	[ds:6Eh], cx			;   set time high
-	mov	[byte ds:70h], 0		;   not a new day
+	mov	[ds:46Ch], dx			; Set time, ah=1
+	mov	[ds:46Eh], cx			;   set time high
+	mov	[byte ds:470h], ah		;   not a new day
 	jmp	short @@end
 
 @@read:
-	mov	cx, [ds:6Eh]			; Read low order time
-	mov	dx, [ds:6Ch]			;   high order time
-	call	@@reset				; Read resets overflow
+	mov	cx, [ds:46Eh]			; Read low order time
+	mov	dx, [ds:46Ch]			;   high order time
+	call	near @@reset			; Read resets overflow
 
 @@end:	sti					; Resume clock
 	pop	ds
 	iret
 
 @@reset:
-	mov	al, [ds:70h]			; Zero the overflow and return
-	xor	[ds:70h], al			;   previous status in flags
+	mov	al, [ds:470h]			; Zero the overflow and return
+	xor	[ds:470h], al			;   previous status in flags
 	retn
 
 endp	int_1A
+
+
+str_h		db	'h', 0
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -4965,28 +5012,32 @@ proc	int_8	far
 	push	ds
 	push	dx
 	push	ax
-	mov	ax, 40h
+
+	xor	ax, ax
 	mov	ds, ax
-	dec	[byte ds:40h]			; Decrement motor count
+	dec	[byte ds:440h]			; Decrement motor count
 	jnz	@@increment			;   not time to shut off
-	and	[byte ds:3Fh], 11110000b	; Else show motor off
+
+	and	[byte ds:43Fh], 11110000b	; Else show motor off
 	mov	al, 0Ch 			;   send motor off
 	mov	dx, 3F2h			;   to the floppy
 	out	dx, al				;   disk controller
 
 @@increment:
-	inc	[word ds:6Ch]			; Bump low order time of day
+	inc	[word ds:46Ch]			; Bump low order time of day
 	jnz	@@check_midnight		;   no carry
-	inc	[word ds:6Eh]			; Bump high order time of day
+	inc	[word ds:46Eh]			; Bump high order time of day
 
 @@check_midnight:
-	cmp	[word ds:6Eh], 18h		; Is it midnight yet?
+	cmp	[word ds:46Eh], 18h		; Is it midnight yet?
 	jnz	@@user				;   no
-	cmp	[word ds:6Ch], 0B0h		; Possibly, check low order
+	cmp	[word ds:46Ch], 0B0h		; Possibly, check low order
 	jnz	@@user				;   not midnight
-	mov	[word ds:6Eh], 0		; Midnight, reset high order
-	mov	[word ds:6Ch], 0		;   low order ticks
-	mov	[byte ds:70h], 1		; Show new day since last read
+
+	xor	ax, ax
+	mov	[word ds:46Eh], ax		; Midnight, reset high order
+	mov	[word ds:46Ch], ax		;   low order ticks
+	mov	[byte ds:470h], 1		; Show new day since last read
 
 @@user:
 	int	1Ch				; Execute user clock service
@@ -4998,6 +5049,18 @@ proc	int_8	far
 	iret
 
 endp	int_8
+
+
+;--------------------------------------------------------------------------------------------------
+; Waits for a keypress and then returns it (ah=scan code, al=ASCII)
+;--------------------------------------------------------------------------------------------------
+proc	get_key	near
+
+	mov	ah, 0				; Read keyboard key
+	int	16h
+	ret
+
+endp	get_key
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -5040,12 +5103,15 @@ proc	ignore_int	far
 	push	ds				; Unexpected interrupts go here
 	push	dx
 	push	ax
-	mov	ax, 40h
+
+	xor	ax, ax
 	mov	ds, ax
+
 	mov	al, 0Bh 			; What IRQ caused this?
 	out	20h, al
 	nop
 	in	al, 20h 			;   (read IRQ level)
+
 	mov	ah, al
 	or	al, al
 	jnz	@@hardware
@@ -5060,7 +5126,8 @@ proc	ignore_int	far
 	out	20h, al 			;   to 8259 interrupt chip
 
 @@done:
-	mov	[ds:6Bh], ah			; Save last nonsense interrupt
+	mov	[ds:46Bh], ah			; Save last nonsense interrupt
+
 	pop	ax
 	pop	dx
 	pop	ds
@@ -5069,7 +5136,7 @@ proc	ignore_int	far
 endp	ignore_int
 
 
-str_h		db	'h', 0
+lpt_ports	dw	03BCh, 0378h, 0278h	; Possible line printer ports
 
 
 ;---------------------------------------------------------------------------------------------------
@@ -5096,15 +5163,19 @@ proc	int_5	far				; Print screen service
 	push	bx
 	push	cx
 	push	dx
-	mov	ax, 40h
+
+	xor	ax, ax
 	mov	ds, ax
-	cmp	[byte ds:100h], 1		; Print screen in progress?
+	cmp	[byte ds:500h], 1		; Print screen in progress?
 	jz	@@done				;   yes, ignore
-	mov	[byte ds:100h], 1		; Flag print screen in progress
+
+	mov	[byte ds:500h], 1		; Flag print screen in progress
 	call	print_cr_lf			;   begin new line
+
 	mov	ah, 0Fh
 	int	10h				; Get current video state
 	push	ax				;   save it
+
 	mov	ah, 3
 	int	10h				; Read cursor position
 	pop	ax				;   retrieve video state
@@ -5130,7 +5201,7 @@ proc	int_5	far				; Print screen service
 	pop	dx
 	test	ah, 00100101b			; Successful print
 	jz	@@next_char
-	mov	[byte ds:100h], 0FFh		; No, error in Print Screen
+	mov	[byte ds:500h], 0FFh		; No, error in Print Screen
 	jmp	short @@restore_cursor
 
 @@next_char:
@@ -5142,7 +5213,7 @@ proc	int_5	far				; Print screen service
 	inc	dh				;   add another row
 	cmp	dh, ch				; Done all 25 rows?
 	jnz	@@loop				;   no, continue
-	mov	[byte ds:100h], 0		; Show done Print Screen OK
+	mov	[byte ds:500h], 0		; Show done Print Screen OK
 
 @@restore_cursor:
 	pop	dx				; Get saved cursor position
@@ -5160,7 +5231,7 @@ proc	int_5	far				; Print screen service
 endp	int_5
 
 
-str_timer	db	195, ' Timer', 0
+str_system	db	'System ', 194, ' ', 0
 
 
 ;--------------------------------------------------------------------------------------------------
@@ -5183,19 +5254,8 @@ proc	print_cr_lf	near
 endp	print_cr_lf
 
 
-;--------------------------------------------------------------------------------------------------
-; Sets proper underline cursor shape
-;--------------------------------------------------------------------------------------------------
-proc	set_cursor_size	near
-
-	mov	[word ds:60h], 0607h		; Assume color cursor (line 6-7)
-	cmp	[byte ds:49h], 7		; Mono video?
-	jne	@@done				; Nope, done
-	mov	[word ds:60h], 0B0Ch		; Otherwise use mono cursor (line B-C)
-@@done:
-	ret
-
-endp	set_cursor_size
+str_v20		db	'V20 CPU (', 0
+str_8087	db	'8087 FPU)', 0
 
 
 ;--------------------------------------------------------------------------------------------------
@@ -5204,7 +5264,7 @@ endp	set_cursor_size
 	entry	0FFF0h				; Hardware power reset entry
 proc	power	far				;   CPU begins here on power up
 
-	jmpf	0F000h, warm_boot
+	jmpfar	0F000h, warm_boot
 
 endp	power
 
@@ -5213,7 +5273,7 @@ endp	power
 ; BIOS Release Date and Signature
 ;--------------------------------------------------------------------------------------------------
 	entry	0FFF5h
-	db	"04/18/16"			; Release date (MM/DD/YY)
+date	db	"11/09/16", 0			; Release date (MM/DD/YY)
 						;   originally 08/23/87
 	entry	0FFFEh
 ifdef	IBM_PC
