@@ -114,15 +114,15 @@ uint8_t read86(uint32_t addr32) {
     }
   }
 
-  // bootstraping hacking
+  // bootstraping hackingWW
   if (!didbootstrap) {
-
     // warning this causes landmark test to fail on memory
-
+#if 1
     // ugly hack to make BIOS always believe we have an EGA/VGA card installed
     mem_write_8(0x410, 0x41);
     // the BIOS doesn't have any concept of hard drives, so here's another hack
     mem_write_8(0x475, hdcount);
+#endif
   }
 
   // normal ram read

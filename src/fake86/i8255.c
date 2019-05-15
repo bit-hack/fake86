@@ -76,6 +76,7 @@ static uint8_t i8255_port_read(uint16_t port) {
     return i8255.ctrl_word & 0x02 ?
         i8255.port_in[1] :
         i8255.port_out[1];
+#if 0
   case 0x62:
   {
     uint8_t out = 0;
@@ -89,6 +90,14 @@ static uint8_t i8255_port_read(uint16_t port) {
   }
   case 0x63:
     return i8255.ctrl_word;
+#else
+  // PPI (XT only)
+  case 0x62:
+    return 0;
+  // PPI (XT only) command mode register  (read dipswitches)
+  case 0x63:
+    return (3 << 1) | (2 << 4) | (0 << 6);
+#endif
   }
   return 0;
 }

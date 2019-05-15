@@ -25,41 +25,43 @@
 
 struct i8253_s i8253;
 
-static void i8253_channel_write(const int channel, uint8_t value) {
-  uint8_t curbyte = 0;
+static void i8253_channel_write(struct i8253_channel_t *c,
+                                uint8_t value) {
 
-  const int rl_mode = i8253.rlmode[channel];
+  if (c->inhibit_count > 0) {
+    --c->inhibit_count;
 
-  if ((rl_mode == PIT_RLMODE_LOBYTE) ||
-     ((rl_mode == PIT_RLMODE_TOGGLE) && (i8253.bytetoggle[channel] == 0))) {
-    curbyte = 0;
-  } else if ((rl_mode == PIT_RLMODE_HIBYTE) ||
-            ((rl_mode == PIT_RLMODE_TOGGLE) && (i8253.bytetoggle[channel] == 1))) {
-    curbyte = 1;
+    switch (c->mode_access) {
+    case PIT_RLMODE_LATCH:
+      c->latch_out = c->counter;
+      break;
+    case PIT_RLMODE_LOBYTE:
+      c->rvalue &= 0xFF00;
+      c->rvalue |= value;
+      break;
+    case PIT_RLMODE_HIBYTE:
+      c->rvalue &= 0x00FF;
+      c->rvalue |= value << 8;
+      break;
+    case PIT_RLMODE_TOGGLE:
+      // shift down
+      c->rvalue >>= 8;
+      // shift in high bits
+      c->rvalue |= value << 8;
+      break;
+    }
   }
 
-  if (curbyte == 0) {
-    // update low byte
-    i8253.chandata[channel] &= 0xFF00;
-    i8253.chandata[channel] |= value;
-  } else {
-    // update high byte
-    i8253.chandata[channel] &= 0x00ff;
-    i8253.chandata[channel] |= ((uint16_t)value) << 8;
+  if (c->inhibit_count == 0) {
+    c->counter = c->rvalue;
+    // modes where the timer starts immediately
+    switch (c->mode_op) {
+    case 0: // interupt on terminal count
+    case 2: // rate generator
+    case 3: // square wave generator
+      c->output_active = true;
+    }
   }
-
-  if (i8253.chandata[channel] == 0) {
-    i8253.effectivedata[channel] = 0x10000;
-  } else {
-    i8253.effectivedata[channel] = i8253.chandata[channel];
-  }
-  i8253.active[channel] = 1;
-
-  i8253.chanfreq[channel] =
-      (float)((uint32_t)(
-          ((float)1193182.0 / (float)i8253.effectivedata[channel]) *
-          (float)1000.0)) /
-      (float)1000.0;
 }
 
 static void i8253_mode_write(uint8_t value) {
@@ -92,31 +94,40 @@ static void i8253_mode_write(uint8_t value) {
   // 0              Binary Counter 16bits
   // 1              Binary Coded Decimal Counter (4 decades)
 
+  // save the control word
+  i8253.control = value;
+
+  // decode control word
   const int select = 0x03 & (value >> 6);
   const int mode   = 0x07 & (value >> 1);
   const int rl     = 0x03 & (value >> 4);
   const int bcd    = 0x01 & (value >> 0);
 
+  // skip invalid counter
   if (select == 3) {
     // invalid counter
     return;
   }
 
-  i8253.rlmode[select] = rl;
-  if (i8253.rlmode[select] == PIT_RLMODE_TOGGLE) {
-    i8253.bytetoggle[select] = 0;
-  }
+  // save counter data
+  struct i8253_channel_t *c = &(i8253.channel[select]);
 
-  i8253.mode[select] = mode;
-  i8253.bcd[select] = bcd;
+  c->bcd = bcd;
+  c->mode_access = rl;
+  c->mode_op = mode;
+  // number of writes needed before timer is active again
+  c->inhibit_count = (rl == PIT_RLMODE_LATCH)  ? 0 : (
+                     (rl == PIT_RLMODE_TOGGLE) ? 2 : 1);
 }
 
+// port write
 static void i8253_port_write(uint16_t portnum, uint8_t value) {
+  struct i8253_channel_t *c = &i8253.channel[portnum & 3];
   switch (portnum & 0x03) {
   case 0:
   case 1:
   case 2: // channel data
-    i8253_channel_write(portnum & 0x03, value);
+    i8253_channel_write(c, value);
     break;
   case 3: // mode/command
     i8253_mode_write(value);
@@ -124,36 +135,33 @@ static void i8253_port_write(uint16_t portnum, uint8_t value) {
   }
 }
 
+// port read
 static uint8_t i8253_port_read(uint16_t portnum) {
-  uint8_t curbyte;
   const int channel = portnum & 0x03;
-
-  const int rl_mode = i8253.rlmode[channel];
-  if (portnum & 0x03) {
+  if (channel == 3) {
     // no operation 3 state
     return 0;
   }
 
-  if ((rl_mode == PIT_RLMODE_LATCHCOUNT) ||
-      (rl_mode == PIT_RLMODE_LOBYTE) ||
-     ((rl_mode == PIT_RLMODE_TOGGLE) && (i8253.bytetoggle[channel] == 0))) {
-    curbyte = 0;
-  } else if ((rl_mode == PIT_RLMODE_HIBYTE) ||
-            ((rl_mode == PIT_RLMODE_TOGGLE) && (i8253.bytetoggle[channel] == 1))) {
-    curbyte = 1;
-  }
+  struct i8253_channel_t *c = &i8253.channel[channel];
 
-  if ((rl_mode == 0) ||
-      (rl_mode == PIT_RLMODE_TOGGLE)) {
-    i8253.bytetoggle[channel] ^= 0x01;
-  }
-
-  if (curbyte == 0) {
-    // low byte
-    return ((uint8_t)i8253.counter[channel]);
-  } else {
-    // high byte
-    return ((uint8_t)(i8253.counter[channel] >> 8));
+  switch (c->mode_access) {
+  case PIT_RLMODE_LATCH:
+    {
+      // get high bit
+      const uint8_t out = c->latch_out >> 8;
+      // shift up
+      c->latch_out <<= 8;
+      return out;
+    }
+    break;
+  case PIT_RLMODE_LOBYTE:
+    return c->counter & 0x00ff;
+  case PIT_RLMODE_HIBYTE:
+    return c->counter >> 8;
+  case PIT_RLMODE_TOGGLE:
+    assert(false);
+    break;
   }
 }
 
@@ -167,11 +175,97 @@ void i8253_init() {
 static const int64_t irq0_thresh = CYCLES_PER_SECOND / 182;
 static int64_t irq0_accum  = 0;
 
-
 #if 0
 uint32_t accum = 0;
 uint32_t old_time = 0;
 #endif
+
+static void update_mode_0(struct i8253_channel_t *c, uint32_t cycles) {
+  if (c->inhibit_count > 0) {
+    return;
+  }
+  const bool is_chan_0 = (c == &i8253.channel[0]);
+  // if counter will wrap
+  if (cycles >= c->counter) {
+    // if channel 0
+    if (is_chan_0 && c->output_active) {
+      // move to the 0 counter state
+      cycles -= c->counter;
+      c->counter = 0;
+      i8259_doirq(0);
+    }
+    // this is not a repeating output
+    c->output_active = false;
+  }
+  c->counter -= cycles;
+}
+
+static void update_mode_1(struct i8253_channel_t *c, uint32_t cycles) {
+  // TODO: Wait for posedge of gate signal
+  assert(false);
+}
+
+// rate generator
+static void update_mode_2(struct i8253_channel_t *c, uint32_t cycles) {
+  if (c->inhibit_count > 0) {
+    return;
+  }
+  const bool is_chan_0 = (c == &i8253.channel[0]);
+  while (cycles && c->rvalue) {
+    // if counter will wrap
+    if (cycles >= c->counter) {
+      // reset counter
+      cycles -= c->counter;
+      c->counter = c->rvalue;
+      // if channel 0
+      if (is_chan_0 && c->output_active) {
+        c->output = 1;
+        i8259_doirq(0);
+      }
+    }
+    else {
+      c->counter -= cycles;
+      cycles = 0;
+    }
+  }
+  // on for the last two values
+  c->output = (c->counter <= 2);
+}
+
+// square wave generator
+static void update_mode_3(struct i8253_channel_t *c, uint32_t cycles) {
+  if (c->inhibit_count > 0) {
+    return;
+  }
+  // cycles twice as fast
+  cycles *= 2;
+  const bool is_chan_0 = (c == &i8253.channel[0]);
+  while (cycles && c->rvalue) {
+    // if counter will wrap
+    if (cycles >= c->counter) {
+      // reset counter
+      cycles -= c->counter;
+      c->counter = c->rvalue;
+      // if channel 0
+      if (is_chan_0 && c->output_active) {
+        i8259_doirq(0);
+      }
+      c->output ^= 1;
+    }
+    else {
+      c->counter -= cycles;
+      cycles = 0;
+    }
+  }
+}
+
+static void update_mode_4(struct i8253_channel_t *c, uint32_t cycles) {
+  assert(false);
+}
+
+static void update_mode_5(struct i8253_channel_t *c, uint32_t cycles) {
+  assert(false);
+}
 
 void i8253_tick(uint64_t cycles) {
 
@@ -179,6 +273,7 @@ void i8253_tick(uint64_t cycles) {
   // Convert from the CPU cycles to PIT CLK
   const int64_t pit_cycles = (cycles * 1193182) / CYCLES_PER_SECOND;
 
+#if 0
   // TODO: Remove when channel 0 is working correctly
   // Generate an interupt every 18.2Hz on IRQ0
   irq0_accum += cycles;
@@ -189,6 +284,7 @@ void i8253_tick(uint64_t cycles) {
     accum += 1;
 #endif
   }
+#endif
 
 #if 0
   const uint32_t new_time = SDL_GetTicks();
@@ -203,21 +299,20 @@ void i8253_tick(uint64_t cycles) {
 
   // Channel3 drives the speaker but is gated by the 8255-PB1
 
+#if 1
   // update timer channels
   for (int i=0; i<3; ++i) {
-    switch (i8253.mode[i]) {
-    case 2:
-      // toggle output when the counter flips
-    case 3:
-      // output high and low for half cycle
-    default:
-
-      // timer will wrap
-      if (pit_cycles > i8253.counter[i]) {
-        // do something
-      }
-
-      i8253.counter[i] -= pit_cycles;
+    struct i8253_channel_t *c = &i8253.channel[i];
+    switch (c->mode_op) {
+    case 0: update_mode_0(c, pit_cycles); break;
+    case 1: update_mode_1(c, pit_cycles); break;
+    case 2: update_mode_2(c, pit_cycles); break;
+    case 3: update_mode_3(c, pit_cycles); break;
+    case 4: update_mode_4(c, pit_cycles); break;
+    case 5: update_mode_5(c, pit_cycles); break;
+    case 6: update_mode_2(c, pit_cycles); break;
+    case 7: update_mode_3(c, pit_cycles); break;
     }
   }
+#endif
 }

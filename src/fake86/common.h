@@ -122,22 +122,36 @@ bool i8237_init(void);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8253.c
 enum {
-  PIT_RLMODE_LATCHCOUNT = 0,
-  PIT_RLMODE_LOBYTE     = 1,
-  PIT_RLMODE_HIBYTE     = 2,
-  PIT_RLMODE_TOGGLE     = 3,
+  PIT_RLMODE_LATCH = 0,
+  PIT_RLMODE_LOBYTE = 1,
+  PIT_RLMODE_HIBYTE = 2,
+  PIT_RLMODE_TOGGLE = 3,
+};
+
+struct i8253_channel_t {
+  // reload value
+  uint16_t rvalue;
+  // counter value
+  uint16_t counter;
+  // number of writes needed
+  uint8_t inhibit_count;
+  // binary coded decimal mode
+  bool bcd;
+  // register read/write access mode
+  uint8_t mode_access;
+  // timer operation mode
+  uint8_t mode_op;
+  // latched value output
+  uint16_t latch_out;
+  // output is currently active
+  bool output_active;
+  // 
+  uint8_t output;
 };
 
 struct i8253_s {
-  uint16_t chandata[3];
-  uint8_t rlmode[3];
-  uint8_t mode[3];
-  uint8_t bytetoggle[3];
-  bool bcd[3];
-  uint32_t effectivedata[3];
-  float chanfreq[3];
-  uint8_t active[3];
-  uint16_t counter[3];
+  struct i8253_channel_t channel[3];
+  uint8_t control;
 };
 
 void i8253_init();

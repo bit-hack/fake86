@@ -306,7 +306,7 @@ static void emulate_loop(void) {
       SDL_Delay(1);
     }
 
-#if 1
+#if 0
     // benchmark cps
     if ((get_ticks() - old_bench) > 1000) {
       old_bench += 1000;
