@@ -139,6 +139,8 @@ struct i8253_channel_t {
   bool bcd;
   // register read/write access mode
   uint8_t mode_access;
+  //
+  bool toggle_access;
   // timer operation mode
   uint8_t mode_op;
   // latched value output

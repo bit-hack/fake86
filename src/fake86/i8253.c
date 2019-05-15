@@ -22,45 +22,56 @@
 
 #include "common.h"
 
+#define DEVELOPER 1
+
 
 struct i8253_s i8253;
 
-static void i8253_channel_write(struct i8253_channel_t *c,
+static void i8253_reload(struct i8253_channel_t *c) {
+  c->counter = (c->rvalue == 0 ? 0xffff : c->rvalue);
+}
+
+static void i8253_channel_write(int channel,
+                                struct i8253_channel_t *c,
                                 uint8_t value) {
 
   if (c->inhibit_count > 0) {
     --c->inhibit_count;
-
-    switch (c->mode_access) {
-    case PIT_RLMODE_LATCH:
-      c->latch_out = c->counter;
-      break;
-    case PIT_RLMODE_LOBYTE:
-      c->rvalue &= 0xFF00;
-      c->rvalue |= value;
-      break;
-    case PIT_RLMODE_HIBYTE:
-      c->rvalue &= 0x00FF;
-      c->rvalue |= value << 8;
-      break;
-    case PIT_RLMODE_TOGGLE:
-      // shift down
-      c->rvalue >>= 8;
-      // shift in high bits
-      c->rvalue |= value << 8;
-      break;
-    }
   }
 
-  if (c->inhibit_count == 0) {
-    c->counter = c->rvalue;
-    // modes where the timer starts immediately
-    switch (c->mode_op) {
-    case 0: // interupt on terminal count
-    case 2: // rate generator
-    case 3: // square wave generator
-      c->output_active = true;
-    }
+  switch (c->mode_access) {
+  case PIT_RLMODE_LATCH:
+    c->latch_out = c->counter;
+    break;
+  case PIT_RLMODE_LOBYTE:
+    c->rvalue &= 0xFF00;
+    c->rvalue |= value;
+    break;
+  case PIT_RLMODE_HIBYTE:
+    c->rvalue &= 0x00FF;
+    c->rvalue |= (uint16_t)value << 8;
+    break;
+  case PIT_RLMODE_TOGGLE:
+    UNREACHABLE();
+  }
+
+  if (c->toggle_access) {
+    c->mode_access ^= 0x3;
+  }
+
+  i8253_reload(c);
+
+#if DEVELOPER
+  const uint32_t freq = 1193182 / (c->rvalue == 0 ? 0xffff : c->rvalue);
+  printf("chan %d freq %d\n", channel, freq);
+#endif
+
+  // modes where the timer starts immediately
+  switch (c->mode_op) {
+  case 0: // interupt on terminal count
+  case 2: // rate generator
+  case 3: // square wave generator
+    c->output_active = true;
   }
 }
 
@@ -103,6 +114,10 @@ static void i8253_mode_write(uint8_t value) {
   const int rl     = 0x03 & (value >> 4);
   const int bcd    = 0x01 & (value >> 0);
 
+#if DEVELOPER
+  printf("sel:%d mode:%d, rl:%d bcd:%d\n", select, mode, rl, bcd);
+#endif
+
   // skip invalid counter
   if (select == 3) {
     // invalid counter
@@ -112,8 +127,9 @@ static void i8253_mode_write(uint8_t value) {
   // save counter data
   struct i8253_channel_t *c = &(i8253.channel[select]);
 
+  c->toggle_access = (rl == PIT_RLMODE_TOGGLE);
   c->bcd = bcd;
-  c->mode_access = rl;
+  c->mode_access = (c->toggle_access ? PIT_RLMODE_LOBYTE : rl);
   c->mode_op = mode;
   // number of writes needed before timer is active again
   c->inhibit_count = (rl == PIT_RLMODE_LATCH)  ? 0 : (
@@ -122,12 +138,17 @@ static void i8253_mode_write(uint8_t value) {
 
 // port write
 static void i8253_port_write(uint16_t portnum, uint8_t value) {
+
+#if DEVELOPER
+  printf("%02x <- %02x\n", portnum, value);
+#endif
+
   struct i8253_channel_t *c = &i8253.channel[portnum & 3];
   switch (portnum & 0x03) {
   case 0:
   case 1:
   case 2: // channel data
-    i8253_channel_write(c, value);
+    i8253_channel_write(portnum & 3, c, value);
     break;
   case 3: // mode/command
     i8253_mode_write(value);
@@ -137,6 +158,11 @@ static void i8253_port_write(uint16_t portnum, uint8_t value) {
 
 // port read
 static uint8_t i8253_port_read(uint16_t portnum) {
+
+#if DEVELOPER
+  printf("%02x -> \n", portnum);
+#endif
+
   const int channel = portnum & 0x03;
   if (channel == 3) {
     // no operation 3 state
@@ -163,6 +189,7 @@ static uint8_t i8253_port_read(uint16_t portnum) {
     assert(false);
     break;
   }
+  UNREACHABLE();
 }
 
 void i8253_init() {
@@ -211,12 +238,12 @@ static void update_mode_2(struct i8253_channel_t *c, uint32_t cycles) {
     return;
   }
   const bool is_chan_0 = (c == &i8253.channel[0]);
-  while (cycles && c->rvalue) {
+  while (cycles) {
     // if counter will wrap
     if (cycles >= c->counter) {
       // reset counter
       cycles -= c->counter;
-      c->counter = c->rvalue;
+      i8253_reload(c);
       // if channel 0
       if (is_chan_0 && c->output_active) {
         c->output = 1;
@@ -240,14 +267,14 @@ static void update_mode_3(struct i8253_channel_t *c, uint32_t cycles) {
   // cycles twice as fast
   cycles *= 2;
   const bool is_chan_0 = (c == &i8253.channel[0]);
-  while (cycles && c->rvalue) {
+  while (cycles) {
     // if counter will wrap
     if (cycles >= c->counter) {
       // reset counter
       cycles -= c->counter;
-      c->counter = c->rvalue;
+      i8253_reload(c);
       // if channel 0
-      if (is_chan_0 && c->output_active) {
+      if (is_chan_0 && c->output_active && c->output) {
         i8259_doirq(0);
       }
       c->output ^= 1;
@@ -304,14 +331,14 @@ void i8253_tick(uint64_t cycles) {
   for (int i=0; i<3; ++i) {
     struct i8253_channel_t *c = &i8253.channel[i];
     switch (c->mode_op) {
-    case 0: update_mode_0(c, pit_cycles); break;
-    case 1: update_mode_1(c, pit_cycles); break;
-    case 2: update_mode_2(c, pit_cycles); break;
-    case 3: update_mode_3(c, pit_cycles); break;
-    case 4: update_mode_4(c, pit_cycles); break;
-    case 5: update_mode_5(c, pit_cycles); break;
-    case 6: update_mode_2(c, pit_cycles); break;
-    case 7: update_mode_3(c, pit_cycles); break;
+    case 0: update_mode_0(c, (uint32_t)pit_cycles); break;
+    case 1: update_mode_1(c, (uint32_t)pit_cycles); break;
+    case 2: update_mode_2(c, (uint32_t)pit_cycles); break;
+    case 3: update_mode_3(c, (uint32_t)pit_cycles); break;
+    case 4: update_mode_4(c, (uint32_t)pit_cycles); break;
+    case 5: update_mode_5(c, (uint32_t)pit_cycles); break;
+    case 6: update_mode_2(c, (uint32_t)pit_cycles); break;
+    case 7: update_mode_3(c, (uint32_t)pit_cycles); break;
     }
   }
 #endif

@@ -72,6 +72,7 @@ static uint8_t i8255_port_read(uint16_t port) {
     return i8255.ctrl_word & 0x10 ?
         i8255.port_in[0] :
         i8255.port_out[0];
+  // Machine flags?
   case 0x61:
     return i8255.ctrl_word & 0x02 ?
         i8255.port_in[1] :
@@ -93,6 +94,14 @@ static uint8_t i8255_port_read(uint16_t port) {
 #else
   // PPI (XT only)
   case 0x62:
+    // bit 7 = 1  RAM parity check
+    // bit 6 = 1  I/O channel check
+    // bit 5 = 1  timer 2 channel out
+    // bit 4      reserved 
+    // bit 3 = 1  system board RAM size type 1
+    // bit 2 = 1  system board RAM size type 2
+    // bit 1 = 1  coprocessor installed
+    // bit 0 = 1  loop in POST
     return 0;
   // PPI (XT only) command mode register  (read dipswitches)
   case 0x63:

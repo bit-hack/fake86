@@ -24,6 +24,8 @@
 #include "common.h"
 
 
+#if 0
+
 #ifdef NETWORKING_ENABLED
 #define HAVE_REMOTE
 #define WPCAP
@@ -187,6 +189,8 @@ void dispatch() {
 void sendpkt(uint8_t *src, uint16_t len) {
   pcap_sendpacket(adhandle, src, len);
 }
+#endif
+
 #endif
 
 #endif
