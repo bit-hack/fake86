@@ -41,7 +41,7 @@ static void i8253_channel_write(int channel,
 
   switch (c->mode_access) {
   case PIT_RLMODE_LATCH:
-    c->latch_out = c->counter;
+    assert(!"This would be weird");
     break;
   case PIT_RLMODE_LOBYTE:
     c->rvalue &= 0xFF00;
@@ -126,6 +126,11 @@ static void i8253_mode_write(uint8_t value) {
 
   // save counter data
   struct i8253_channel_t *c = &(i8253.channel[select]);
+
+  if (mode == PIT_RLMODE_LATCH) {
+    c->latch_out = c->counter;
+    return;
+  }
 
   c->toggle_access = (rl == PIT_RLMODE_TOGGLE);
   c->bcd = bcd;
