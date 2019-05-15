@@ -1,6 +1,6 @@
 ;===================================================================================================
 ;                  Super PC/Turbo XT BIOS for Intel 8088 or NEC "V20" Motherboards
-;           Additions by Ya`akov Miles (1987) and Jon Petrosky <Plasma> (2008, 2011-2012)
+;           Additions by Ya`akov Miles (1987) and Jon Petrosky <Plasma> (2008, 2011-2012, 2016)
 ;                                     http://www.phatcode.net/
 ;---------------------------------------------------------------------------------------------------
 ; This is a modification of the widely-distributed "(c) Anonymous Generic Turbo XT Anonymous" BIOS,
@@ -21,7 +21,8 @@
 ; toggled, the PC speaker will sound a high/low pitched blip to indicate the system speed selected.
 ;---------------------------------------------------------------------------------------------------
 ;    File: PCXTBIOS.ASM
-; Updated: v2.5 05-02-2012
+; Updated: v2.6 04-18-2016
+;          v2.5 05-02-2012
 ;          v2.4 04-23-2012
 ;          v2.3 03-13-2012
 ;          v2.2 03-05-2012
@@ -82,6 +83,13 @@ error_rom	equ	20h		; Bad ROM in expansion area, bad checksum
 ;---------------------------------------------------------------------------------------------------
 ; Changes by Plasma
 ;---------------------------------------------------------------------------------------------------
+; Version 2.6 Changes:
+;
+; Bug Fixed:
+;  * Fixed bug preventing programs from performing warm boot by setting 0040:0072 to 1234h and
+;    jumping to F000:FFF0 or F000:E05B (previously would always cold boot). This bug was also
+;    present in the original BIOS.
+;
 ; Version 2.5 Changes:
 ;
 ; Added:
@@ -437,15 +445,15 @@ segment	code
 
 ifdef	IBM_PC
 ifdef	TURBO_ENABLED
-	str_banner	db	'Turbo PC BIOS v2.5 for 8088/V20', 0
+	str_banner	db	'Turbo PC BIOS v2.6 for 8088/V20', 0
 else
-	str_banner	db	'Super PC BIOS v2.5 for 8088/V20', 0
+	str_banner	db	'Super PC BIOS v2.6 for 8088/V20', 0
 endif
 else
 ifdef	TURBO_ENABLED
-	str_banner	db	'Turbo XT BIOS v2.5 for 8088/V20', 0
+	str_banner	db	'Turbo XT BIOS v2.6 for 8088/V20', 0
 else
-	str_banner	db	'Super XT BIOS v2.5 for 8088/V20', 0
+	str_banner	db	'Super XT BIOS v2.6 for 8088/V20', 0
 endif
 endif
 str_banner_end:
@@ -461,12 +469,7 @@ str_game	db	195, ' Game Port at 201h', 0
 	entry	0E05Bh				; IBM restart entry point
 proc	post	near
 
-cold_boot:
-	mov	ax, 40h 			; Entered by POWER_ON/RESET
-	mov	ds, ax
-	mov	[word ds:72h], 0		; Show data areas not init
-
-warm_boot:
+warm_boot:					; Entered by POWER_ON/RESET
 	cli					; Disable interrupts
 ifdef	TEST_CPU
 	jmp	cpu_test			; Test CPU
@@ -831,6 +834,12 @@ endif
 @@find_rom:
 	mov	ds, dx				; Load ROM segment
 	jmp	short @@continue		; Jump over old int 2 location
+
+cold_boot:
+	mov	ax, 40h 			; Force cold boot
+	mov	ds, ax
+	mov	[word ds:72h], 0		; Show data areas not init
+	jmp	warm_boot
 
 ;-----------------------------------------------
 ; IBM PC 5150 offset for int 2 (NMI)
@@ -1250,7 +1259,7 @@ endp	double_number
 
 
 
-str_banner_2	db	CR, LF, 'Additions by Ya`akov Miles (1987) and Jon Petrosky (2008-2012)', 0
+str_banner_2	db	CR, LF, 'Additions by Ya`akov Miles (1987) and Jon Petrosky (2008-2016)', 0
 
 str_ram_test	db	'Testing RAM:    K OK', 0
 
@@ -5195,7 +5204,7 @@ endp	set_cursor_size
 	entry	0FFF0h				; Hardware power reset entry
 proc	power	far				;   CPU begins here on power up
 
-	jmpf	0F000h, cold_boot
+	jmpf	0F000h, warm_boot
 
 endp	power
 
@@ -5204,7 +5213,7 @@ endp	power
 ; BIOS Release Date and Signature
 ;--------------------------------------------------------------------------------------------------
 	entry	0FFF5h
-	db	"05/02/12"			; Release date (MM/DD/YY)
+	db	"04/18/16"			; Release date (MM/DD/YY)
 						;   originally 08/23/87
 	entry	0FFFEh
 ifdef	IBM_PC
