@@ -172,23 +172,14 @@ void i8255_reset();
 void i8255_tick(uint64_t cycles);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
+bool disk_is_inserted(int num);
 bool disk_insert(uint8_t drivenum, const char *filename);
-
+bool disk_insert_mem(uint8_t drivenum, const void *src, uint32_t size);
 void disk_eject(uint8_t drivenum);
-
-void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
-              uint16_t sect, uint16_t head, uint16_t sectcount);
-
-void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
-               uint16_t sect, uint16_t head, uint16_t sectcount);
-
 void disk_int_handler(int intnum);
-
 void disk_bootstrap(int intnum);
 
 extern uint8_t bootdrive, hdcount;
-
-bool disk_is_inserted(int num);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- log.c
 enum {

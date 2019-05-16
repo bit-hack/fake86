@@ -25,30 +25,50 @@
 //   -fd0 dos-boot.img -hd0 \\.\PhysicalDrive2 -boot 0
 //   -fd0 dos-boot.img -hd0 \\.\X: -boot 0
 
-#include "common.h"
-
 #if DISK_PASS_THROUGH
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <winioctl.h>
 #endif
 
+#include "common.h"
+
 #include "../80x86/cpu.h"
 
 
-struct struct_drive {
+enum disk_type_t {
+  // disk not inserted
+  disk_type_none = 0,
+  // floppy disk from file
+  disk_type_fdd_file,
+  // floppy disk in memory
+  disk_type_fdd_mem,
+  // hard disk from file
+  disk_type_hdd_file,
+  // hard disk pass through
+  disk_type_hdd_direct,
+};
 
-  // one or the other
+struct struct_drive {
+  // disk drive type
+  enum disk_type_t type;
+  // disk is inserted
+  bool inserted;
 #if DISK_PASS_THROUGH
+  // direct disk access handle
   HANDLE *handle;
 #endif
+  // file handle
   FILE *diskfile;
-
+  // in memory data
+  uint8_t *memory;
+  uint32_t index;
+  // file size of on disk backing
   uint32_t filesize;
+  // disk size
   uint32_t cyls;
   uint32_t sects;
   uint32_t heads;
-  uint8_t inserted;
 };
 
 uint8_t bootdrive = 128;
@@ -58,37 +78,77 @@ static struct struct_drive disk[256];
 
 
 bool disk_is_inserted(int num) {
-  return disk[num].inserted != 0;
+#if 0
+  return disk[num].inserted;
+#else
+  return disk[num].type != disk_type_none;
+#endif
 }
 
-static bool disk_insert_image(uint8_t drivenum, const char *filename) {
+bool disk_insert_mem(uint8_t drivenum, const void *src, uint32_t size) {
   struct struct_drive* d = &disk[drivenum];
-  if (d->inserted) {
-    fclose(d->diskfile);
+  disk_eject(drivenum);
+  // set disk layout
+  d->cyls = 80;
+  d->sects = 18;
+  d->heads = 2;
+  // calculate disk size
+  d->filesize = 512 * d->sects * d->cyls * d->heads;
+  // allocate disk
+  d->memory = malloc(d->filesize);
+  if (!d->memory) {
+    return false;
   }
-  else {
-    d->inserted = 1;
-  }
+  // blank the disk
+  memset(d->memory, 0x41, d->filesize);
+  // add boot signature
+  d->memory[510] = 0x55;
+  d->memory[511] = 0xAA;
+  // add HLT instruction
+  d->memory[0] = 0xF4;
+  // load disk data
+  memcpy(d->memory, src, SDL_min(size, d->filesize));
+  // success
+  return true;
+}
+
+static bool disk_insert_file(uint8_t drivenum, const char *filename) {
+  struct struct_drive* d = &disk[drivenum];
+
+  disk_eject(drivenum);
+
   d->diskfile = fopen(filename, "r+b");
   if (d->diskfile == NULL) {
     log_printf(LOG_CHAN_DISK, "fopen failed");
-    d->inserted = 0;
+    d->inserted = false;
     return false;
   }
+  // get the disk file size
   fseek(d->diskfile, 0L, SEEK_END);
   d->filesize = ftell(d->diskfile);
   fseek(d->diskfile, 0L, SEEK_SET);
   // it's a hard disk image
   if (drivenum >= 0x80) {
+    d->type = disk_type_hdd_file;
     d->sects = 63;
     d->heads = 16;
     d->cyls = d->filesize / (d->sects * d->heads * 512);
     hdcount++;
   // it's a floppy image
   } else {
+    d->type = disk_type_fdd_file;
     d->cyls = 80;
     d->sects = 18;
     d->heads = 2;
+    if (d->filesize <= 1474560) {
+      d->cyls = 80;
+      d->sects = 18;
+      d->heads = 2;
+    }
+    else {
+      log_printf(LOG_CHAN_DISK, "floppy disk image too large");
+      return false;
+    }
     if (d->filesize <= 1228800) {
       d->sects = 15;
     }
@@ -105,6 +165,7 @@ static bool disk_insert_image(uint8_t drivenum, const char *filename) {
       d->heads = 1;
     }
   }
+  d->inserted = true;
   return true;
 }
 
@@ -112,10 +173,7 @@ static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
 #if DISK_PASS_THROUGH
   struct struct_drive* d = &disk[drivenum];
 
-  if (d->handle) {
-    CloseHandle(d->handle);
-    d->inserted = 0;
-  }
+  disk_eject(drivenum);
 
   const DWORD attribs =
     FILE_FLAG_WRITE_THROUGH |
@@ -137,6 +195,7 @@ static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
                           attribs,
                           NULL);
   if (INVALID_HANDLE_VALUE == d->handle) {
+    d->handle = NULL;
     DWORD error = GetLastError();
     log_printf(LOG_CHAN_DISK, "CreateFileA failed (%d)", error);
     return false;
@@ -176,7 +235,8 @@ static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
   // Calculate drive size
   d->filesize = geo.BytesPerSector * geo.SectorsPerTrack * geo.TracksPerCylinder * geo.Cylinders.LowPart;
 
-  d->inserted = 1;
+  d->inserted = true;
+  d->type = disk_type_hdd_direct;
 
   if (drivenum >= 0x80) {
     ++hdcount;
@@ -191,94 +251,149 @@ static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
 bool disk_insert(uint8_t drivenum, const char *filename) {
 #if DISK_PASS_THROUGH
   if (filename[0] == '\\' && filename[1] == '\\') {
-#else
-  if (false) {
-#endif
     log_printf(LOG_CHAN_DISK, "mapping raw disk '%s' (%d)", filename, (int)drivenum);
     return disk_insert_raw(drivenum, filename);
   }
-  else {
+  else
+#endif // DISK_PASS_THROUGH
+  {
     log_printf(LOG_CHAN_DISK, "inserting disk '%s' (%d)", filename, (int)drivenum);
-    return disk_insert_image(drivenum, filename);
+    return disk_insert_file(drivenum, filename);
   }
 }
 
 void disk_eject(uint8_t drivenum) {
   struct struct_drive* d = &disk[drivenum];
-  d->inserted = 0;
-  // standard disk image
-  if (d->diskfile) {
+  switch (d->type) {
+  case disk_type_none:
+    // disk is already closed nothing to do here
+    return;
+  case disk_type_fdd_file:
+  case disk_type_hdd_file:
+    // decrement hard drive count
+    hdcount -= (drivenum >= 0x80);
+    // standard disk image
     assert(d->diskfile);
     fclose(d->diskfile);
     d->diskfile = NULL;
-  }
+    break;
+  case disk_type_fdd_mem:
+    assert(d->memory && d->filesize);
+    free(d->memory);
+    d->memory = NULL;
+    d->index = 0;
+    d->filesize = 0;
+    break;
 #if DISK_PASS_THROUGH
-  // raw disk access
-  if (d->handle) {
+  case disk_type_hdd_direct:
+    // raw disk access
+    assert(d->handle);
     CloseHandle(d->handle);
     d->handle = NULL;
-  }
+    break;
 #endif
-#if 1
-  if (drivenum >= 0x80) {
-    --hdcount;
+  default:
+    UNREACHABLE();
   }
-#endif
+  // mark as ejected
+  d->inserted = false;
+  d->type = disk_type_none;
+  d->filesize = 0;
 }
 
 static bool _disk_seek(struct struct_drive* d, uint32_t offset) {
-  if (d->diskfile) {
-    if (fseek(d->diskfile, offset, SEEK_SET)) {
+  switch (d->type) {
+  case disk_type_fdd_file:
+  case disk_type_hdd_file:
+    assert(d->diskfile);
+    if (fseek(d->diskfile, offset, SEEK_SET))
       return false;
-    }
-    return true;
-  }
+    break;
 #if DISK_PASS_THROUGH
-  if (d->handle) {
-    return INVALID_SET_FILE_POINTER != SetFilePointer(d->handle, offset, NULL, FILE_BEGIN);
-  }
+  case disk_type_hdd_direct:
+    assert(d->handle);
+    if (INVALID_SET_FILE_POINTER ==
+        SetFilePointer(d->handle, offset, NULL, FILE_BEGIN))
+      return false;
+    break;
 #endif
-  return false;
+  case disk_type_fdd_mem:
+    assert(d->memory && d->filesize);
+    if (offset >= d->filesize)
+      return false;
+    d->index = offset;
+    break;
+  default:
+    UNREACHABLE();
+  }
+  return true;
 }
 
 static bool _disk_read(struct struct_drive* d, uint8_t *dst, uint32_t size) {
-  if (d->diskfile) {
-    if (fread(dst, 1, 512, d->diskfile) < 512) {
+  switch (d->type) {
+  case disk_type_fdd_file:
+  case disk_type_hdd_file:
+    assert(d->diskfile);
+    if (fread(dst, 1, 512, d->diskfile) < 512)
       return false;
-    }
-    return true;
-  }
+    break;
 #if DISK_PASS_THROUGH
-  if (d->handle) {
-    DWORD read = 0;
-    if (FALSE == ReadFile(d->handle, dst, size, &read, NULL)) {
-      return false;
+  case disk_type_hdd_direct:
+    if (d->handle) {
+      DWORD read = 0;
+      if (FALSE == ReadFile(d->handle, dst, size, &read, NULL)) {
+        return false;
+      }
+      return read == size;
     }
-    return read == size;
-  }
+    return false;
 #endif
-  return false;
+  case disk_type_fdd_mem:
+    assert(d->memory && d->filesize);
+    if (d->index + size > d->filesize)
+      return false;
+    memcpy(dst, d->memory + d->index, size);
+    d->index += size;
+    break;
+  default:
+    UNREACHABLE();
+  }
+  return true;
 }
 
 static bool _disk_write(struct struct_drive* d, const uint8_t *src, uint32_t size) {
-  if (d->diskfile) {
-    if (fwrite(src, 1, size, d->diskfile) < size) {
+  switch (d->type) {
+  case disk_type_fdd_file:
+  case disk_type_hdd_file:
+    assert(d->diskfile);
+    if (fwrite(src, 1, size, d->diskfile) < size)
       return true;
-    }
-  }
+    break;
 #if DISK_PASS_THROUGH
-  if (d->handle) {
-    DWORD written = 0;
-    if (FALSE == WriteFile(d->handle, src, size, &written, NULL)) {
-      return false;
+  case disk_type_hdd_direct:
+    assert(d->handle);
+    {
+      DWORD written = 0;
+      if (FALSE == WriteFile(d->handle, src, size, &written, NULL)) {
+        return false;
+      }
+      if (!FlushFileBuffers(d->handle)) {
+        // error flushing buffers
+      }
+      return written == size;
     }
-    if (!FlushFileBuffers(d->handle)) {
-      // error flushing buffers
-    }
-    return written == size;
-  }
 #endif
-  return false;
+  case disk_type_fdd_mem:
+    assert(d->memory && d->filesize);
+    if (d->index + size > d->filesize)
+      return false;
+    memcpy(d->memory + d->index, src, size);
+    d->index += size;
+    break;
+  default:
+    UNREACHABLE();
+  }
+  return true;
 }
 
 void disk_read(uint8_t drivenum,
