@@ -43,10 +43,10 @@ extern uint8_t updatedscreen;
 const char *biosfile = "pcxtbios.bin";
 
 uint8_t *verbose = 0, cgaonly = 0, useconsole = 0;
+extern uint8_t bootdrive;
 
 extern uint8_t insertdisk(uint8_t drivenum, char *filename);
 extern void ejectdisk(uint8_t drivenum);
-extern uint8_t bootdrive, ethif, net_enabled;
 extern void doirq(uint8_t irqnum);
 
 extern bool cl_parse(int argc, char *argv[]);

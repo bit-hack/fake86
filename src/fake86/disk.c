@@ -51,7 +51,8 @@ struct struct_drive {
   uint8_t inserted;
 };
 
-uint8_t bootdrive = 0, hdcount = 0;
+uint8_t bootdrive = 128;
+uint8_t hdcount = 0;
 
 static struct struct_drive disk[256];
 
@@ -191,7 +192,7 @@ bool disk_insert(uint8_t drivenum, const char *filename) {
 #if DISK_PASS_THROUGH
   if (filename[0] == '\\' && filename[1] == '\\') {
 #else
-  if (true) {
+  if (false) {
 #endif
     log_printf(LOG_CHAN_DISK, "mapping raw disk '%s' (%d)", filename, (int)drivenum);
     return disk_insert_raw(drivenum, filename);
@@ -419,7 +420,7 @@ void disk_int_handler(int intnum) {
           cpu_regs.cl + (disk[cpu_regs.dl].cyls / 256) * 64;
       cpu_regs.dh = disk[cpu_regs.dl].heads - 1;
       if (cpu_regs.dl < 0x80) {
-        cpu_regs.bl = 4; // else cpu_regs.bl] = 0;
+        cpu_regs.bl = 4;
         cpu_regs.dl = 2;
       } else
         cpu_regs.dl = hdcount;
@@ -434,16 +435,24 @@ void disk_int_handler(int intnum) {
   lastdiskah[cpu_regs.dl] = cpu_regs.ah;
   lastdiskcf[cpu_regs.dl] = cpu_flags.cf;
   if (cpu_regs.dl & 0x80) {
-    //    RAM[0x474] = cpu_regs.ah];
+    // todo: raw write?
     write86(0x474, cpu_regs.ah);
   }
 }
 
 void disk_bootstrap(int intnum) {
   didbootstrap = 1;
-#ifdef BENCHMARK_BIOS
-  running = 0;
-#endif
+
+  // auto detect boot drive
+  if (!disk[bootdrive].inserted) {
+    if (disk[0].inserted) {
+      bootdrive = 0;
+    }
+    if (disk[128].inserted) {
+      bootdrive = 128;
+    }
+  }
+
   // read first sector of boot drive into 07C0:0000 and execute it
   if (bootdrive < 255) {
     log_printf(LOG_CHAN_DISK, "booting from disk %d", bootdrive);

@@ -136,21 +136,6 @@ void render_check_for_mode_change(void) {
     log_printf(LOG_CHAN_SDL, "new video mode [%d, %d]", screen->w, screen->h);
   }
 
-#if 0
-  if (usefullscreen) {
-    SDL_WM_GrabInput(
-      SDL_GRAB_ON); // always have mouse grab turned on for full screen mode
-  } else {
-    SDL_WM_GrabInput(usegrabmode);
-  }
-  SDL_ShowCursor(SDL_DISABLE);
-  if (!usefullscreen) {
-    if (usegrabmode == SDL_GRAB_ON)
-      setwindowtitle(" (press Ctrl + Alt to release mouse)");
-    else
-      setwindowtitle("");
-  }
-#endif
   scrmodechange = false;
 }
 
@@ -334,13 +319,12 @@ static void draw_mode_6(void) {
 }
 
 static void draw_mode_127(void) {
-  uint32_t color, chary, charx, vidptr, curpixel;
+  uint32_t color, charx, vidptr, curpixel;
   nw = 720;
   nh = 348;
   for (uint32_t y = 0; y < 348; y++) {
     for (uint32_t x = 0; x < 720; x++) {
       charx = x;
-      chary = y >> 1;
       vidptr = videobase + ((y & 3) << 13) + (y >> 2) * 90 + (x >> 3);
       curpixel = (RAM[vidptr] >> (7 - (charx & 7))) & 1;
 #ifdef __BIG_ENDIAN__
@@ -459,8 +443,7 @@ static void render_redraw(void) {
   case 0x12:
     nw = 640;
     nh = 480;
-    vgapage = ((uint32_t)VGA_CRTC[0xC] << 8) + (uint32_t)VGA_CRTC[0xD];
-    for (uint32_t y = 0; y < nh; y++)
+    for (uint32_t y = 0; y < nh; y++) {
       for (uint32_t x = 0; x < nw; x++) {
         vidptr = y * 80 + (x / 8);
         color = (VRAM[vidptr] >> (~x & 7)) & 1;
@@ -469,6 +452,7 @@ static void render_redraw(void) {
         color |= ((VRAM[vidptr + 0x30000] >> (~x & 7)) & 1) << 3;
         prestretch[y][x] = palettevga[color];
       }
+    }
     break;
   case 0x13:
     if (vtotal == 11) { // ugly hack to show Flashback at the proper resolution

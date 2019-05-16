@@ -166,7 +166,6 @@ uint8_t oper1b, oper2b, res8, disp8, temp8, nestlev, addrbyte;
 uint32_t temp1, temp2, temp3, temp4, temp5, temp32, ea;
 int32_t result;
 uint8_t running = 0, debugmode, showcsip, verbose, mouseemu, didbootstrap = 0;
-uint8_t ethif;
 
 extern uint8_t verbose;
 
@@ -648,7 +647,7 @@ static uint8_t op_grp2_8(uint8_t cnt) {
   uint16_t msb;
 
   uint16_t s = oper1b;
-  oldcf = cpu_flags.cf;
+//  oldcf = cpu_flags.cf;
 #ifdef CPU_LIMIT_SHIFT_COUNT
   cnt &= 0x1F;
 #endif
@@ -775,7 +774,7 @@ static uint16_t op_grp2_16(uint8_t cnt) {
   uint32_t msb;
 
   s = oper1;
-  oldcf = cpu_flags.cf;
+//  oldcf = cpu_flags.cf;
 #ifdef CPU_LIMIT_SHIFT_COUNT
   cnt &= 0x1F;
 #endif

@@ -25,7 +25,7 @@
 
 extern const char *biosfile;
 
-extern uint8_t bootdrive, ethif, verbose, cgaonly, usessource, renderbenchmark, useconsole, doaudio;
+extern uint8_t bootdrive, verbose, cgaonly, usessource, renderbenchmark, useconsole, doaudio;
 extern uint32_t framedelay, textbase, usefullscreen, speed;
 extern int32_t usesamplerate, latency;
 uint16_t constantw = 0, constanth = 0;
@@ -139,9 +139,7 @@ static inline bool strpcmp(const char *a, const char *b) {
 
 static void _cl_defaults() {
   biosfile = "pcxtbios.bin";
-  bootdrive = 255;
   textbase = 0xB8000;
-  ethif = 254;
   usefullscreen = 0;
 }
 
