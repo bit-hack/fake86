@@ -139,7 +139,7 @@ static inline bool strpcmp(const char *a, const char *b) {
 
 static void _cl_defaults() {
   biosfile = "pcxtbios.bin";
-  bootdrive = 254;
+  bootdrive = 255;
   textbase = 0xB8000;
   ethif = 254;
   usefullscreen = 0;

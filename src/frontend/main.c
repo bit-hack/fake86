@@ -60,25 +60,9 @@ extern void initVideoPorts();
 extern void killaudio();
 extern void initsermouse(uint16_t baseport, uint8_t irq);
 
-extern void initadlib(uint16_t baseport);
-extern void initsoundsource();
-extern void isa_ne2000_init(uint16_t baseport, uint8_t irq);
-extern void initBlaster(uint16_t baseport, uint8_t irq);
-
 uint8_t dohardreset = 0;
-uint8_t audiobufferfilled();
-uint8_t usessource = 0;
-
-#ifdef NETWORKING_ENABLED
-extern void initpcap();
-extern void dispatch();
-#endif
 
 static void inithardware() {
-#ifdef NETWORKING_ENABLED
-  if (ethif != 254)
-    initpcap();
-#endif
   printf("Initializing emulated hardware:\n");
 
   printf("  - Intel 8253 timer: ");
@@ -99,43 +83,9 @@ static void inithardware() {
 
   initVideoPorts();
 
-#if 0
-  if (usessource) {
-    printf("  - Disney Sound Source: ");
-    initsoundsource();
-    printf("OK\n");
-  }
-#endif
-
-#if !defined(NETWORKING_OLDCARD) && 0
-  printf("  - Novell NE2000 ethernet adapter: ");
-  isa_ne2000_init(0x300, 6);
-  printf("OK\n");
-#endif
-
-#if 0
-  printf("  - Adlib FM music card: ");
-  initadlib(0x388);
-  printf("OK\n");
-
-  printf("  - Creative Labs Sound Blaster 2.0: ");
-  initBlaster(0x220, 7);
-  printf("OK\n");
-#endif
-
   printf("  - Serial mouse (Microsoft compatible): ");
   mouse_init(0x3F8, 4);
   printf("OK\n");
-
-#if 0
-  if (doaudio) {
-    initaudio();
-  }
-#endif
-
-#if 0
-  inittiming();
-#endif
 
   render_init();
 }
@@ -205,8 +155,8 @@ static void tick_cga(uint64_t cycles) {
 
   cga_accum = (cga_accum + cycles) % cycles_per_frame;
 
-  const vpos = cga_accum;
-  const hpos = cga_accum % cycles_per_line;
+  const uint64_t vpos = cga_accum;
+  const uint64_t hpos = cga_accum % cycles_per_line;
 
   // set hblank bit
   if (hpos < ((cycles_per_line * 20) / 100)) {
@@ -314,11 +264,6 @@ static void emulate_loop(void) {
       bench_acc = 0;
     }
 #endif
-
-#ifdef NETWORKING_ENABLED
-    if (ethif < 254)
-      dispatch();
-#endif
   }
 }
 
@@ -356,10 +301,6 @@ int main(int argc, char *argv[]) {
 
   // enter the emulation loop
   emulate_loop();
-
-#if 0
-  killaudio();
-#endif
 
   return 0;
 }

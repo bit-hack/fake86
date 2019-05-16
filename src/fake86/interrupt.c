@@ -22,6 +22,7 @@
 
 #include "../80x86/cpu.h"
 
+
 bool video_int_handler(int intnum);
 
 void intcall86(uint8_t intnum) {
@@ -33,7 +34,6 @@ void intcall86(uint8_t intnum) {
       return;
     }
     break;
-#ifndef DISK_CONTROLLER_ATA
   // Bootstrap loader interupt
   case 0x19:
     disk_bootstrap(intnum);
@@ -43,14 +43,6 @@ void intcall86(uint8_t intnum) {
   case 0xFD:
     disk_int_handler(intnum);
     return;
-#endif
-#ifdef NETWORKING_OLDCARD
-  case 0xFC:
-#ifdef NETWORKING_ENABLED
-    nethandler();
-#endif
-    return;
-#endif
   }
 
   // prepare an interupt?

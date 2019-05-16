@@ -61,7 +61,7 @@ void log_printf(int channel, const char *fmt, ...) {
   if (log_fd) {
     va_list vargs;
     va_start(vargs, fmt);
-    fprintf(log_fd, channel_name[channel]);
+    fprintf(log_fd, "%s", channel_name[channel]);
     vfprintf(log_fd, fmt, vargs);
     fputc('\n', log_fd);
     va_end(vargs);

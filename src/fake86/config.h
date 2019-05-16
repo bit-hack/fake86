@@ -29,8 +29,8 @@
 // be sure to only define ONE of the CPU_* options at any given time, or
 // you will likely get some unexpected/bad results!
 //#define CPU_8086
-//#define CPU_186
 //#define CPU_V20
+//#define CPU_186
 #define CPU_286
 
 #if defined(CPU_8086)
@@ -52,29 +52,6 @@
 #endif
 
 #define TIMING_INTERVAL 15
-
-// when USE_PREFETCH_QUEUE is defined, Fake86's CPU emulator uses a 6-byte
-// read-ahead cache for opcode fetches just as a real 8086/8088 does.
-// by default, i just leave this disabled because it wastes a very very
-// small amount of CPU power. however, for the sake of more accurate
-// emulation, it can be enabled by uncommenting the line below and recompiling.
-//#define USE_PREFETCH_QUEUE
-
-// when compiled with network support, fake86 needs libpcap/winpcap.
-// if it is disabled, the ethernet card is still emulated, but no actual
-// communication is possible -- as if the ethernet cable was unplugged.
-#define NETWORKING_OLDCARD // planning to support an NE2000 in the future
-
-// when DISK_CONTROLLER_ATA is defined, fake86 will emulate a true IDE/ATA1
-// controller
-// card. if it is disabled, emulated disk access is handled by directly
-// intercepting
-// calls to interrupt 13h.
-//*WARNING* - the ATA controller is not currently complete. do not use!
-//#define DISK_CONTROLLER_ATA
-
-#define AUDIO_DEFAULT_SAMPLE_RATE 48000
-#define AUDIO_DEFAULT_LATENCY 100
 
 #ifdef _MSC_VER
 #define DISK_PASS_THROUGH 1
