@@ -22,8 +22,8 @@
 
 #include "common.h"
 
-#define DEVELOPER 1
 
+#define DEVELOPER 0
 
 struct i8253_s i8253;
 
@@ -138,7 +138,7 @@ static void i8253_mode_write(uint8_t value) {
   c->mode_op = mode;
   // number of writes needed before timer is active again
   c->inhibit_count = (rl == PIT_RLMODE_LATCH)  ? 0 : (
-                     (rl == PIT_RLMODE_TOGGLE) ? 2 : 1);
+                     (rl == PIT_RLMODE_TOGGLE) ? 1 : 1);
 }
 
 // port write
@@ -176,25 +176,31 @@ static uint8_t i8253_port_read(uint16_t portnum) {
 
   struct i8253_channel_t *c = &i8253.channel[channel];
 
+  uint8_t out = 0;
+
   switch (c->mode_access) {
   case PIT_RLMODE_LATCH:
-    {
-      // get high bit
-      const uint8_t out = c->latch_out >> 8;
-      // shift up
-      c->latch_out <<= 8;
-      return out;
-    }
+    // get low byte
+    out = c->latch_out & 0x00ff;
+    // shift down
+    c->latch_out >>= 8;
     break;
   case PIT_RLMODE_LOBYTE:
-    return c->counter & 0x00ff;
+    out = c->counter & 0x00ff;
+    break;
   case PIT_RLMODE_HIBYTE:
-    return c->counter >> 8;
+    out = c->counter >> 8;
+    break;
   case PIT_RLMODE_TOGGLE:
     assert(false);
     break;
   }
-  UNREACHABLE();
+
+  if (c->toggle_access) {
+    c->mode_access ^= 0x3;
+  }
+
+  return out;
 }
 
 void i8253_init() {
@@ -251,7 +257,7 @@ static void update_mode_2(struct i8253_channel_t *c, uint32_t cycles) {
       i8253_reload(c);
       // if channel 0
       if (is_chan_0 && c->output_active) {
-        c->output = 1;
+        c->output = 2;
         i8259_doirq(0);
       }
     }
@@ -279,7 +285,7 @@ static void update_mode_3(struct i8253_channel_t *c, uint32_t cycles) {
       cycles -= c->counter;
       i8253_reload(c);
       // if channel 0
-      if (is_chan_0 && c->output_active && c->output) {
+      if (is_chan_0 && c->output_active && !c->output) {
         i8259_doirq(0);
       }
       c->output ^= 1;

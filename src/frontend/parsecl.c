@@ -86,6 +86,10 @@ static const struct cl_entry_t _cl_list[] = {
   {"-fd*", 1, _cl_do_fd, "Specify a floppy disk image (* = 0..3)",
     "   -fd0 [image file path]\n"
     "   -fd0 disk_image.img\n"
+    "   (prepend * for memory backed binary loading)"
+    "   -fd0 *[image file path]\n"
+    "   (to insert blank disk)\n"
+    "   -fd0 *\n"
   },
   {"-hd*", 1, _cl_do_hd, "Specify a hard disk image (* = 0..3)",
     "   -hd0 [image file path]\n"

@@ -174,7 +174,7 @@ void i8255_tick(uint64_t cycles);
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
 bool disk_is_inserted(int num);
 bool disk_insert(uint8_t drivenum, const char *filename);
-bool disk_insert_mem(uint8_t drivenum, const void *src, uint32_t size);
+bool disk_insert_mem(uint8_t drivenum, const char *filename);
 void disk_eject(uint8_t drivenum);
 void disk_int_handler(int intnum);
 void disk_bootstrap(int intnum);

@@ -18,20 +18,23 @@
   USA.
 */
 
-/* disk.c: disk emulation routines for Fake86. works at the BIOS interrupt 13h
- * level. */
+// disk emulation routines, working at the BIOS interrupt 13h level
 
 // Use hard disk pass through as follows:
 //   -fd0 dos-boot.img -hd0 \\.\PhysicalDrive2 -boot 0
 //   -fd0 dos-boot.img -hd0 \\.\X: -boot 0
+
+// Use memory backed floppy disk as follows:
+//   -fd0 *disk.img
+//   -fd0 *
+
+#include "common.h"
 
 #if DISK_PASS_THROUGH
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <winioctl.h>
 #endif
-
-#include "common.h"
 
 #include "../80x86/cpu.h"
 
@@ -85,7 +88,7 @@ bool disk_is_inserted(int num) {
 #endif
 }
 
-bool disk_insert_mem(uint8_t drivenum, const void *src, uint32_t size) {
+bool disk_insert_mem(uint8_t drivenum, const char *filename) {
   struct struct_drive* d = &disk[drivenum];
   disk_eject(drivenum);
   // set disk layout
@@ -99,6 +102,8 @@ bool disk_insert_mem(uint8_t drivenum, const void *src, uint32_t size) {
   if (!d->memory) {
     return false;
   }
+  // reset the index pointer
+  d->index = 0;
   // blank the disk
   memset(d->memory, 0x41, d->filesize);
   // add boot signature
@@ -107,9 +112,62 @@ bool disk_insert_mem(uint8_t drivenum, const void *src, uint32_t size) {
   // add HLT instruction
   d->memory[0] = 0xF4;
   // load disk data
-  memcpy(d->memory, src, SDL_min(size, d->filesize));
+  if (filename && filename[0] != '\0') {
+    FILE *fd = fopen(filename, "rb");
+    if (fd) {
+      int num_bytes = fread(d->memory, 1, d->filesize, fd);
+      log_printf(LOG_CHAN_DISK, "loaded %d bytes to disk", num_bytes);
+      fclose(fd);
+    }
+  }
   // success
+  d->type = disk_type_fdd_mem;
+  d->inserted = true;
   return true;
+}
+
+static bool _insert_floppy_disk(struct struct_drive *d) {
+
+  struct disk_type_t {
+    uint32_t cyls, sects, heads;
+  };
+
+  const struct disk_type_t types[] = {
+
+    // https://en.wikipedia.org/wiki/List_of_floppy_disk_formats
+
+    {80, 18, 2},  // 1.44Mb 3.5"
+    {80, 15, 2},  // 1200Kb 5.25"
+    {80,  9, 2},  //  720Kb 3.5"
+    {80,  8, 2},  //  640Kb 3.5"
+    {40,  9, 2},  //  360Kb 5.25"
+    {40,  8, 1},  //  160Kb 5.25"
+
+    { 0,  0, 0}
+  };
+
+  for (int i = 0; types[i].cyls; ++i) {
+    const struct disk_type_t *t = types + i;
+    const uint32_t size = 512 * t->sects * t->cyls * t->heads;
+
+    if (size == d->filesize) {
+      d->cyls = t->cyls;
+      d->sects = t->sects;
+      d->heads = t->heads;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static bool _insert_hard_disk(struct struct_drive *d) {
+  assert(d);
+  d->type = disk_type_hdd_file;
+  d->sects = 63;
+  d->heads = 16;
+  d->cyls = d->filesize / (d->sects * d->heads * 512);
+  hdcount++;
 }
 
 static bool disk_insert_file(uint8_t drivenum, const char *filename) {
@@ -129,41 +187,16 @@ static bool disk_insert_file(uint8_t drivenum, const char *filename) {
   fseek(d->diskfile, 0L, SEEK_SET);
   // it's a hard disk image
   if (drivenum >= 0x80) {
-    d->type = disk_type_hdd_file;
-    d->sects = 63;
-    d->heads = 16;
-    d->cyls = d->filesize / (d->sects * d->heads * 512);
-    hdcount++;
-  // it's a floppy image
-  } else {
-    d->type = disk_type_fdd_file;
-    d->cyls = 80;
-    d->sects = 18;
-    d->heads = 2;
-    if (d->filesize <= 1474560) {
-      d->cyls = 80;
-      d->sects = 18;
-      d->heads = 2;
-    }
-    else {
-      log_printf(LOG_CHAN_DISK, "floppy disk image too large");
+    if (!_insert_hard_disk(d)) {
       return false;
     }
-    if (d->filesize <= 1228800) {
-      d->sects = 15;
+    d->type = disk_type_hdd_file;
+  // it's a floppy image
+  } else {
+    if (!_insert_floppy_disk(d)) {
+      return false;
     }
-    if (d->filesize <= 737280) {
-      d->sects = 9;
-    }
-    if (d->filesize <= 368640) {
-      d->cyls = 40;
-      d->sects = 9;
-    }
-    if (d->filesize <= 163840) {
-      d->cyls = 40;
-      d->sects = 8;
-      d->heads = 1;
-    }
+    d->type = disk_type_fdd_file;
   }
   d->inserted = true;
   return true;
@@ -256,6 +289,11 @@ bool disk_insert(uint8_t drivenum, const char *filename) {
   }
   else
 #endif // DISK_PASS_THROUGH
+  if (filename[0] == '*') {
+    log_printf(LOG_CHAN_DISK, "Inserting binary '%s' (%d)", filename + 1, (int)drivenum);
+    return disk_insert_mem(drivenum, filename + 1);
+  }
+  else
   {
     log_printf(LOG_CHAN_DISK, "inserting disk '%s' (%d)", filename, (int)drivenum);
     return disk_insert_file(drivenum, filename);
@@ -407,7 +445,7 @@ void disk_read(uint8_t drivenum,
   struct struct_drive* d = &disk[drivenum];
   uint8_t sectorbuffer[512];
 
-  if (!sect || !d->inserted) {
+  if (!sect || !disk_is_inserted(drivenum)) {
     return;
   }
   const uint32_t lba = ((uint32_t)cyl * (uint32_t)d->heads +
@@ -477,6 +515,7 @@ void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl
   cpu_regs.ah = 0;
 }
 
+// BIOS disk services
 void disk_int_handler(int intnum) {
   static uint8_t lastdiskah[256], lastdiskcf[256];
   switch (cpu_regs.ah) {
