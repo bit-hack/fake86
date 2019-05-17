@@ -50,6 +50,11 @@
   #endif
 #endif
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- audio.c
+bool audio_init(uint32_t sample_rate);
+void audio_close(void);
+uint32_t audio_callback(int16_t *samples, uint32_t num_samples);
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8259.c
 struct structpic {
   // mask register
@@ -156,7 +161,8 @@ struct i8253_s {
   uint8_t control;
 };
 
-void i8253_init();
+uint8_t i8253_channel2_out(void);
+void i8253_init(void);
 void i8253_tick(uint64_t cycles);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8255.c
@@ -167,9 +173,10 @@ struct i8255_t {
 };
 extern struct i8255_t i8255;
 
-bool i8255_init();
-void i8255_reset();
+bool i8255_init(void);
+void i8255_reset(void);
 void i8255_tick(uint64_t cycles);
+bool i8255_speaker_on(void);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
 bool disk_is_inserted(int num);

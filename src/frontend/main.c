@@ -30,37 +30,20 @@
 
 extern uint8_t running, renderbenchmark;
 
-void exec86(uint32_t execloops);
 bool render_init(void);
 void tick_events(void);
 void handlevideo();
 
 extern bool cursorvisible;
-extern volatile bool scrmodechange;
 extern uint8_t doaudio;
 extern uint8_t updatedscreen;
 
 const char *biosfile = "pcxtbios.bin";
 
-uint8_t *verbose = 0, cgaonly = 0, useconsole = 0;
-extern uint8_t bootdrive;
-
-extern uint8_t insertdisk(uint8_t drivenum, char *filename);
-extern void ejectdisk(uint8_t drivenum);
-extern void doirq(uint8_t irqnum);
-
 extern bool cl_parse(int argc, char *argv[]);
-
-void timing();
-void tickaudio();
-void inittiming();
-void initaudio();
-
 extern void initVideoPorts();
 extern void killaudio();
 extern void initsermouse(uint16_t baseport, uint8_t irq);
-
-uint8_t dohardreset = 0;
 
 static void inithardware() {
   printf("Initializing emulated hardware:\n");
@@ -98,10 +81,6 @@ void render_update(void);
 void render_check_for_mode_change(void);
 
 static int64_t tick_cpu(int64_t num_cycles) {
-  if (dohardreset) {
-    cpu_reset();
-    dohardreset = 0;
-  }
   return cpu_exec86((int32_t)num_cycles);
 }
 
@@ -283,10 +262,6 @@ int main(int argc, char *argv[]) {
   const uint32_t biossize = mem_loadbios(biosfile);
   if (!biossize)
     return -1;
-#ifdef DISK_CONTROLLER_ATA
-  if (!mem_loadrom(0xD0000UL, PATH_DATAFILES "ide_xt.bin", 1))
-    return (-1);
-#endif
   // load other roms
   if (biossize <= (1024 * 8)) {
     mem_loadrom(0xF6000UL, PATH_DATAFILES "rombasic.bin", 0);

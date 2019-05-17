@@ -23,7 +23,61 @@
 #include "common.h"
 
 
+// PORTA
+//
+//   Keyboard scancode
+// or
+//   0 IPL 5.25 Diskette drive
+//   1 reserved
+//   2 Sys. Brd. R/W memory size*
+//   3 Sys. Brd. R/W memory size*
+//   4 +Display type**
+//   5 +Display type**
+//   6 No. of 5.25 drives
+//   7 No. of 5.25 drives
+//
+//  * 00 16k    01 32k    10 48k    11 64k
+// ** 00 Reserved
+// ** 01 40x25 cga
+// ** 10 80x25 cga
+// ** 11 MDA
+
+// PORTB
+//
+//   0 Speaker Gate
+//   1 Speaker Data
+//   2 Read R/W memory size or SW2-5
+//   3 Cassette motor Off
+//   4 Enable R/W memory
+//   5 Enable I/O CH CK
+//   6 Hold KBD CLK Low
+//   7 Enable KBD or Enable Sense SW (PortA)
+
+// PORTC
+//
+//   0 SW2-1 or SW2-5 (PORTB-2)
+//   1 SW2-2
+//   2 SW2-3
+//   3 SW2-4
+//   4 Cassette Data In
+//   5 Timer Channel 2 Out
+//   6 I/O Channel Check
+//   7 R/W Memory Pck
+
+// Motherboard switch 2
+//   bit 7 = 1  RAM parity check
+//   bit 6 = 1  I/O channel check
+//   bit 5 = 1  timer 2 channel out
+//   bit 4      reserved
+//   bit 3 = 1  system board RAM size type 1
+//   bit 2 = 1  system board RAM size type 2
+//   bit 1 = 1  coprocessor installed
+//   bit 0 = 1  loop in POST
+
 struct i8255_t i8255;
+
+static uint8_t _SW1 = (3 << 2) | (3 << 4);
+static uint8_t _SW2 = 0x0C;
 
 static void write_ctrl_word(uint8_t value) {
 
@@ -40,8 +94,16 @@ static void write_ctrl_word(uint8_t value) {
 
 static void i8255_port_write(uint16_t port, uint8_t value) {
   switch (port) {
-  // PORTA/B
+  // PORTA
   case 0x60:
+    if ((i8255.port_out[1] & 0x80) == 0) {
+      // write to keyboard (may only be possible on AT)
+      // i8255.port_out[port & 0x3] = value;
+    }
+    else {
+      // write to switches?
+    }
+  // PORTB
   case 0x61:
     i8255.port_out[port & 0x3] = value;
     break;
@@ -69,10 +131,16 @@ static void i8255_port_write(uint16_t port, uint8_t value) {
 static uint8_t i8255_port_read(uint16_t port) {
   switch (port) {
   case 0x60:
-    return i8255.ctrl_word & 0x10 ?
-        i8255.port_in[0] :
-        i8255.port_out[0];
-  // Machine flags?
+    if ((i8255.port_out[1] & 0x80) == 0) {
+      // return keyboard scan code
+      return i8255.ctrl_word & 0x10 ?
+          i8255.port_in[0] :
+          i8255.port_out[0];
+    }
+    else {
+      // return switch 1
+      return _SW1;
+    }
   case 0x61:
     return i8255.ctrl_word & 0x02 ?
         i8255.port_in[1] :
@@ -92,33 +160,36 @@ static uint8_t i8255_port_read(uint16_t port) {
   case 0x63:
     return i8255.ctrl_word;
 #else
-  // PPI (XT only)
   case 0x62:
-    // bit 7 = 1  RAM parity check
-    // bit 6 = 1  I/O channel check
-    // bit 5 = 1  timer 2 channel out
-    // bit 4      reserved 
-    // bit 3 = 1  system board RAM size type 1
-    // bit 2 = 1  system board RAM size type 2
-    // bit 1 = 1  coprocessor installed
-    // bit 0 = 1  loop in POST
-    return 0;
-  // PPI (XT only) command mode register  (read dipswitches)
+    if (i8255.port_out[1] & 0x2) {
+      uint8_t out = 0;
+      // return SW2 bits 1-4
+      out |= _SW2 & 0x0f;
+      // Timer2 channel out
+      out |=  i8253_channel2_out() << 5;
+    }
+    else {
+      // return SW2 bit 5
+#if 1
+      return (_SW2 >> 5) & 1;
+#endif
+    }
   case 0x63:
-    return (3 << 1) | (2 << 4) | (0 << 6);
+    // cmd/mode register
+    return 0x99;
 #endif
   }
   return 0;
 }
 
-bool i8255_init() {
+bool i8255_init(void) {
   i8255_reset();
   set_port_write_redirector(0x60, 0x63, i8255_port_write);
   set_port_read_redirector(0x60, 0x63, i8255_port_read);
   return true;
 }
 
-void i8255_reset() {
+void i8255_reset(void) {
   memset(&i8255, 0, sizeof(i8255));
   // PORTA is input
   i8255.ctrl_word |= 0x10;
@@ -126,4 +197,8 @@ void i8255_reset() {
 
 void i8255_tick(uint64_t cycles) {
   (void)cycles;
+}
+
+bool i8255_speaker_on(void) {
+  return i8255.port_out[1] & 0x1;
 }

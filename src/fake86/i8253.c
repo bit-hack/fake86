@@ -27,6 +27,11 @@
 
 struct i8253_s i8253;
 
+
+uint8_t i8253_channel2_out(void) {
+  return i8253.channel[2].output;
+}
+
 static void i8253_reload(struct i8253_channel_t *c) {
   c->counter = (c->rvalue == 0 ? 0xffff : c->rvalue);
 }
@@ -71,7 +76,7 @@ static void i8253_channel_write(int channel,
   case 0: // interupt on terminal count
   case 2: // rate generator
   case 3: // square wave generator
-    c->output_active = true;
+    c->output_active = (c->inhibit_count == 0);
   }
 }
 
@@ -132,13 +137,14 @@ static void i8253_mode_write(uint8_t value) {
     return;
   }
 
+  c->output = 0;
   c->toggle_access = (rl == PIT_RLMODE_TOGGLE);
   c->bcd = bcd;
   c->mode_access = (c->toggle_access ? PIT_RLMODE_LOBYTE : rl);
   c->mode_op = mode;
   // number of writes needed before timer is active again
   c->inhibit_count = (rl == PIT_RLMODE_LATCH)  ? 0 : (
-                     (rl == PIT_RLMODE_TOGGLE) ? 1 : 1);
+                     (rl == PIT_RLMODE_TOGGLE) ? 2 : 1);
 }
 
 // port write
@@ -226,14 +232,13 @@ static void update_mode_0(struct i8253_channel_t *c, uint32_t cycles) {
   // if counter will wrap
   if (cycles >= c->counter) {
     // if channel 0
-    if (is_chan_0 && c->output_active) {
+    if (is_chan_0 && c->output == 0) {
+      c->output = 1;
       // move to the 0 counter state
       cycles -= c->counter;
       c->counter = 0;
       i8259_doirq(0);
     }
-    // this is not a repeating output
-    c->output_active = false;
   }
   c->counter -= cycles;
 }
@@ -257,7 +262,7 @@ static void update_mode_2(struct i8253_channel_t *c, uint32_t cycles) {
       i8253_reload(c);
       // if channel 0
       if (is_chan_0 && c->output_active) {
-        c->output = 2;
+        c->counter = 2;
         i8259_doirq(0);
       }
     }

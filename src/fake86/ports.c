@@ -28,6 +28,18 @@
 #include "common.h"
 
 
+// IBM 5150 technical reference 2-25
+//   00-0F  DMA CHIP 8237-2
+//   20-21  Interrupt 8259A
+//   40-43  Timer 8253-5
+//   60-63  PPI 8255A-5
+//   80-83  DMA Page Registers
+//  *AX     NMI Mask Reg
+
+//   write 80h to I/O address A0h (enable NMI)
+//   write 00h to I/O address A0h (disable DMI)
+
+
 static const bool _notify_unknown_ports = true;
 
 uint8_t portram[0x10000];
