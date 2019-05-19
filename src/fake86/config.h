@@ -68,3 +68,6 @@
 // cpu speed selection
 // 2Mhz cps
 #define CYCLES_PER_SECOND (2000000)
+
+// use new video emulator
+#define USE_VIDEO_NEO 0

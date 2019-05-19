@@ -21,16 +21,42 @@
 #include "common.h"
 
 
-bool audio_init(uint32_t sample_rate) {
-  return true;
+static uint32_t sample_rate = 0;
+static uint32_t accum = 0;
+static uint32_t delta = 0;
+
+void audio_init(uint32_t rate) {
+  sample_rate = rate;
 }
 
 void audio_close(void) {
-  // dummy
 }
 
 uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
+
   // two channels interleaved
   memset(samples, 0, num_samples * 2);
+
+  if (sample_rate == 0) {
+    return num_samples;
+  }
+
+  if (!i8255_speaker_on()) {
+    return num_samples;
+  }
+
+  const uint32_t freq = i8253_frequency(2);
+
+  uint32_t delta = ((uint64_t)freq * (uint64_t)0xffffffff / (uint64_t)sample_rate);
+
+  for (uint32_t i = 0; i < num_samples; i += 2) {
+
+    const int16_t out = (accum & 0x80000000) ? -0x7000 : 0x7000;
+    accum += delta;
+
+    samples[i + 0] = out;
+    samples[i + 1] = out;
+  }
+
   return num_samples;
 }

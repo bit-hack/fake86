@@ -66,4 +66,15 @@ void log_printf(int channel, const char *fmt, ...) {
     fputc('\n', log_fd);
     va_end(vargs);
   }
+#if 1
+  // mirror to stdout
+  {
+    va_list vargs;
+    va_start(vargs, fmt);
+    fprintf(stdout, "%s", channel_name[channel]);
+    vfprintf(stdout, fmt, vargs);
+    fputc('\n', stdout);
+    va_end(vargs);
+  }
+#endif
 }

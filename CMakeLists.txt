@@ -18,4 +18,3 @@ file(GLOB SOURCE_FRONTEND src/frontend/*.h src/frontend/*.c)
 add_executable(fake86 ${SOURCE_FRONTEND})
 
 target_link_libraries(fake86 lib_fake86 lib_80x86 ${SDL_LIBRARY})
-

@@ -25,8 +25,55 @@
 
 #define DEVELOPER 0
 
+enum {
+  PIT_RLMODE_LATCH = 0,
+  PIT_RLMODE_LOBYTE = 1,
+  PIT_RLMODE_HIBYTE = 2,
+  PIT_RLMODE_TOGGLE = 3,
+};
+
+struct i8253_channel_t {
+  // reload value
+  uint16_t rvalue;
+  // counter value
+  uint16_t counter;
+  // number of writes needed
+  uint8_t inhibit_count;
+  // binary coded decimal mode
+  bool bcd;
+  // register read/write access mode
+  uint8_t mode_access;
+  //
+  bool toggle_access;
+  // timer operation mode
+  uint8_t mode_op;
+  // latched value output
+  uint16_t latch_out;
+  // output is currently active
+  bool output_active;
+  // current output state
+  uint8_t output;
+  // effective output frequency
+  uint32_t frequency;
+};
+
+struct i8253_s {
+  struct i8253_channel_t channel[3];
+  uint8_t control;
+};
+
 struct i8253_s i8253;
 
+uint32_t i8253_frequency(int channel) {
+  switch (channel) {
+  case 1:
+  case 2:
+  case 3:
+    return i8253.channel[channel].frequency;
+  default:
+    return 0;
+  }
+}
 
 uint8_t i8253_channel2_out(void) {
   return i8253.channel[2].output;
@@ -66,9 +113,11 @@ static void i8253_channel_write(int channel,
 
   i8253_reload(c);
 
+  // calculate frequency in Hz
+  c->frequency = 1193182 / (c->rvalue == 0 ? 0xffff : c->rvalue);
+
 #if DEVELOPER
-  const uint32_t freq = 1193182 / (c->rvalue == 0 ? 0xffff : c->rvalue);
-  printf("chan %d freq %d\n", channel, freq);
+  printf("chan %d freq %d\n", channel, c->frequency);
 #endif
 
   // modes where the timer starts immediately
@@ -219,11 +268,6 @@ void i8253_init() {
 static const int64_t irq0_thresh = CYCLES_PER_SECOND / 182;
 static int64_t irq0_accum  = 0;
 
-#if 0
-uint32_t accum = 0;
-uint32_t old_time = 0;
-#endif
-
 static void update_mode_0(struct i8253_channel_t *c, uint32_t cycles) {
   if (c->inhibit_count > 0) {
     return;
@@ -237,7 +281,7 @@ static void update_mode_0(struct i8253_channel_t *c, uint32_t cycles) {
       // move to the 0 counter state
       cycles -= c->counter;
       c->counter = 0;
-      i8259_doirq(0);
+//      i8259_doirq(0);
     }
   }
   c->counter -= cycles;
@@ -310,13 +354,18 @@ static void update_mode_5(struct i8253_channel_t *c, uint32_t cycles) {
   assert(false);
 }
 
+#if 1
+static uint32_t accum = 0;
+static uint32_t old_time = 0;
+#endif
+
 void i8253_tick(uint64_t cycles) {
 
   // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
   // Convert from the CPU cycles to PIT CLK
   const int64_t pit_cycles = (cycles * 1193182) / CYCLES_PER_SECOND;
 
-#if 0
+#if 1
   // TODO: Remove when channel 0 is working correctly
   // Generate an interupt every 18.2Hz on IRQ0
   irq0_accum += cycles;

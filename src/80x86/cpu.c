@@ -24,14 +24,60 @@
 #include "../fake86/common.h"
 
 #include "cpu.h"
-#include "modregrm.h"
 
 struct cpu_regs_t cpu_regs;
 union cpu_flags_t cpu_flags;
 
-extern struct i8253_s i8253;
 extern struct structpic i8259;
-uint64_t curtimer, lasttimer, timerfreq;
+
+uint8_t opcode, segoverride, reptype, hltstate = 0;
+uint16_t segregs[4], savecs, saveip, ip, useseg, oldsp;
+uint8_t mode, reg, rm;
+uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
+uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
+uint32_t temp1, temp2, temp3, temp32, ea;
+uint8_t running = 0, didbootstrap = 0;
+
+static uint64_t totalexec;
+
+#define modregrm()                                                             \
+  {                                                                            \
+    addrbyte = getmem8(cpu_regs.cs, ip);                                       \
+    StepIP(1);                                                                 \
+    mode = addrbyte >> 6;                                                      \
+    reg = (addrbyte >> 3) & 7;                                                 \
+    rm = addrbyte & 7;                                                         \
+    switch (mode) {                                                            \
+    case 0:                                                                    \
+      if (rm == 6) {                                                           \
+        disp16 = getmem16(cpu_regs.cs, ip);                                    \
+        StepIP(2);                                                             \
+      }                                                                        \
+      if (((rm == 2) || (rm == 3)) && !segoverride) {                          \
+        useseg = cpu_regs.ss;                                                  \
+      }                                                                        \
+      break;                                                                   \
+                                                                               \
+    case 1:                                                                    \
+      disp16 = signext(getmem8(cpu_regs.cs, ip));                              \
+      StepIP(1);                                                               \
+      if (((rm == 2) || (rm == 3) || (rm == 6)) && !segoverride) {             \
+        useseg = cpu_regs.ss;                                                  \
+      }                                                                        \
+      break;                                                                   \
+                                                                               \
+    case 2:                                                                    \
+      disp16 = getmem16(cpu_regs.cs, ip);                                      \
+      StepIP(2);                                                               \
+      if (((rm == 2) || (rm == 3) || (rm == 6)) && !segoverride) {             \
+        useseg = cpu_regs.ss;                                                  \
+      }                                                                        \
+      break;                                                                   \
+                                                                               \
+    default:                                                                   \
+      disp16 = 0;                                                              \
+    }                                                                          \
+  }
 
 static void _default_intcall_handler(const int16_t intnum) {
   assert(!"Error");
@@ -157,20 +203,6 @@ static const uint8_t parity[0x100] = {
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1,
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1};
-
-uint8_t opcode, segoverride, reptype, hltstate = 0;
-uint16_t segregs[4], savecs, saveip, ip, useseg, oldsp;
-uint8_t mode, reg, rm;
-uint16_t oper1, oper2, res16, disp16, temp16, dummy, stacksize, frametemp;
-uint8_t oper1b, oper2b, res8, disp8, temp8, nestlev, addrbyte;
-uint32_t temp1, temp2, temp3, temp4, temp5, temp32, ea;
-int32_t result;
-uint8_t running = 0, debugmode, showcsip, verbose, mouseemu, didbootstrap = 0;
-
-extern uint8_t verbose;
-
-static uint64_t totalexec;
-
 
 static inline uint16_t makeflagsword(void) {
   return 2 |
@@ -1184,34 +1216,6 @@ static void op_grp5() {
   }
 }
 
-uint8_t dolog = 0;
-FILE *logout;
-uint8_t printops = 0;
-
-#ifdef NETWORKING_ENABLED
-extern void nethandler();
-#endif
-
-#if defined(NETWORKING_ENABLED)
-extern struct netstruct {
-  uint8_t enabled;
-  uint8_t canrecv;
-  uint16_t pktlen;
-} net;
-#endif
-uint64_t frametimer = 0, didwhen = 0, didticks = 0;
-uint32_t makeupticks = 0;
-extern float timercomp;
-uint64_t timerticks = 0, realticks = 0;
-uint64_t lastcountertimer = 0, counterticks = 10000;
-extern void timing();
-
-#ifdef USE_PREFETCH_QUEUE
-uint8_t prefetch[6];
-uint32_t prefetch_base = 0;
-#endif
-
-
 // cycles is target cycles
 // return executed cycles
 int32_t cpu_exec86(int32_t cycle_target) {
@@ -1220,14 +1224,12 @@ int32_t cpu_exec86(int32_t cycle_target) {
   static uint16_t firstip;
   static uint16_t trap_toggle = 0;
 
-  counterticks = (uint64_t)((double)timerfreq / (double)65536.0);
-
   int32_t cycles = cycle_target;
   while (running && cycles > 0) {
     --cycles;
 
     if (totalexec > TIMING_INTERVAL) {
-      timing(totalexec);
+      tick_hardware_fast(totalexec);
       totalexec = 0;
     }
 
@@ -2073,7 +2075,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
       cpu_regs.di = cpu_pop();
       cpu_regs.si = cpu_pop();
       cpu_regs.bp = cpu_pop();
-      dummy = cpu_pop();
+      cpu_pop();
       cpu_regs.bx = cpu_pop();
       cpu_regs.dx = cpu_pop();
       cpu_regs.cx = cpu_pop();

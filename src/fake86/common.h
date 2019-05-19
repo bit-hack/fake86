@@ -50,8 +50,11 @@
   #endif
 #endif
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- main.c
+void tick_hardware_fast(uint64_t cycles);
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- audio.c
-bool audio_init(uint32_t sample_rate);
+void audio_init(uint32_t sample_rate);
 void audio_close(void);
 uint32_t audio_callback(int16_t *samples, uint32_t num_samples);
 
@@ -83,6 +86,11 @@ void i8259_tick(uint64_t cycles);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video.c
 bool video_int_handler(int intnum);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video_neo.c
+uint8_t neo_mem_read(uint32_t addr32);
+void neo_mem_write(uint32_t addr, uint8_t value);
+bool neo_init(void);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- sermouse.c
 struct sermouse_s {
@@ -126,44 +134,10 @@ void i8237_tick(uint64_t cycles);
 bool i8237_init(void);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8253.c
-enum {
-  PIT_RLMODE_LATCH = 0,
-  PIT_RLMODE_LOBYTE = 1,
-  PIT_RLMODE_HIBYTE = 2,
-  PIT_RLMODE_TOGGLE = 3,
-};
-
-struct i8253_channel_t {
-  // reload value
-  uint16_t rvalue;
-  // counter value
-  uint16_t counter;
-  // number of writes needed
-  uint8_t inhibit_count;
-  // binary coded decimal mode
-  bool bcd;
-  // register read/write access mode
-  uint8_t mode_access;
-  //
-  bool toggle_access;
-  // timer operation mode
-  uint8_t mode_op;
-  // latched value output
-  uint16_t latch_out;
-  // output is currently active
-  bool output_active;
-  // 
-  uint8_t output;
-};
-
-struct i8253_s {
-  struct i8253_channel_t channel[3];
-  uint8_t control;
-};
-
-uint8_t i8253_channel2_out(void);
 void i8253_init(void);
 void i8253_tick(uint64_t cycles);
+uint32_t i8253_frequency(int channel);
+uint8_t i8253_channel2_out(void);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8255.c
 struct i8255_t {

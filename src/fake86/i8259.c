@@ -25,7 +25,8 @@
 
 struct structpic i8259;
 
-extern uint32_t makeupticks;
+// seems to be redundant even in the original code base
+static uint32_t makeupticks;
 
 static uint8_t i8259_port_read(uint16_t portnum) {
   switch (portnum & 1) {

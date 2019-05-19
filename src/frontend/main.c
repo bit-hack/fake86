@@ -45,40 +45,12 @@ extern void initVideoPorts();
 extern void killaudio();
 extern void initsermouse(uint16_t baseport, uint8_t irq);
 
-static void inithardware() {
-  printf("Initializing emulated hardware:\n");
-
-  printf("  - Intel 8253 timer: ");
-  i8253_init();
-  printf("OK\n");
-
-  printf("  - Intel 8259 interrupt controller: ");
-  i8259_init();
-  printf("OK\n");
-
-  printf("  - Intel 8237 DMA controller: ");
-  i8237_init();
-  printf("OK\n");
-
-  printf("  - Intel 8255 peripheral interface adapter: ");
-  i8255_init();
-  printf("OK\n");
-
-  initVideoPorts();
-
-  printf("  - Serial mouse (Microsoft compatible): ");
-  mouse_init(0x3F8, 4);
-  printf("OK\n");
-
-  render_init();
-}
+void render_update(void);
+void render_check_for_mode_change(void);
 
 static void exit_handler(void) {
   log_close();
 }
-
-void render_update(void);
-void render_check_for_mode_change(void);
 
 static int64_t tick_cpu(int64_t num_cycles) {
   return cpu_exec86((int32_t)num_cycles);
@@ -165,7 +137,7 @@ static void tick_hardware(uint64_t cycles) {
 }
 
 // fine grained timing
-void timing(uint64_t cycles) {
+void tick_hardware_fast(uint64_t cycles) {
   // PIT timer
   i8253_tick(cycles);
   // CGA status register
@@ -246,9 +218,75 @@ static void emulate_loop(void) {
   }
 }
 
-int main(int argc, char *argv[]) {
+static void sdl_audio_callback(void *userdata, Uint8 *stream, int len) {
+  int16_t *samples = (int16_t*)stream;
+  audio_callback(samples, len / 2);
+}
 
-  // setup out exit handler
+static bool sdl_audio_init(void) {
+  SDL_AudioSpec desired, obtained;
+  memset(&desired, 0, sizeof(desired));
+
+  desired.channels = 2;
+  desired.freq = 22050;
+  desired.callback = sdl_audio_callback;
+  desired.format = AUDIO_S16;
+  desired.samples = 1024;
+
+  if (SDL_OpenAudio(&desired, &obtained)) {
+    log_printf(LOG_CHAN_AUDIO, "SDL_OpenAudio failed");
+    doaudio = false;
+    return false;
+  }
+
+  if (obtained.channels != desired.channels) {
+    return false;
+  }
+  if (obtained.format != desired.format) {
+    return false;
+  }
+
+  audio_init(obtained.freq);
+  return true;
+}
+
+static bool emulate_init() {
+  // initialize memory
+  mem_init();
+  // initalize the cpu
+  cpu_reset();
+  cpu_set_intcall_handler(intcall86);
+  // initalize hardware
+  i8253_init();
+  i8259_init();
+  i8237_init();
+  i8255_init();
+  initVideoPorts();
+  mouse_init(0x3F8, 4);
+  render_init();
+  return true;
+}
+
+static bool load_roms(void) {
+  // load bios
+  const uint32_t biossize = mem_loadbios(biosfile);
+  if (!biossize) {
+    return false;
+  }
+  // load other roms
+  if (biossize <= (1024 * 8)) {
+    if (!mem_loadrom(0xF6000UL, PATH_DATAFILES "rombasic.bin", 0)) {
+      return false;
+    }
+    if (!mem_loadrom(0xC0000UL, PATH_DATAFILES "videorom.bin", 1)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int main(int argc, char *argv[]) {
+  // setup exit handler
   atexit(exit_handler);
   // initialize the log file
   log_init();
@@ -256,26 +294,39 @@ int main(int argc, char *argv[]) {
   if (!cl_parse(argc, argv)) {
     return 1;
   }
-  // initialize memory
-  mem_init();
-  // load bios
-  const uint32_t biossize = mem_loadbios(biosfile);
-  if (!biossize)
-    return -1;
-  // load other roms
-  if (biossize <= (1024 * 8)) {
-    mem_loadrom(0xF6000UL, PATH_DATAFILES "rombasic.bin", 0);
-    if (!mem_loadrom(0xC0000UL, PATH_DATAFILES "videorom.bin", 1))
-      return (-1);
+  // initalize SDL
+  const int flags = SDL_INIT_VIDEO | (doaudio ? SDL_INIT_AUDIO : 0);
+  if (SDL_Init(flags)) {
+    log_printf(LOG_CHAN_SDL, "unable to init sdl");
+    return 1;
   }
-  running = 1;
-  cpu_reset();
-  cpu_set_intcall_handler(intcall86);
-
-  inithardware();
-
+  else {
+    log_printf(LOG_CHAN_SDL, "initalized sdl");
+  }
+  // initalize the audio stream
+  if (doaudio) {
+    if (!sdl_audio_init()) {
+      return 1;
+    }
+  }
+  // init the emulator
+  if (!emulate_init()) {
+    return -1;
+  }
+  // load roms needed by the emulator
+  if (!load_roms()) {
+    return -1;
+  }
   // enter the emulation loop
+  SDL_PauseAudio(0);
+  running = 1;
   emulate_loop();
 
+  //
+  if (doaudio) {
+    SDL_CloseAudio();
+  }
+
+  SDL_Quit();
   return 0;
 }

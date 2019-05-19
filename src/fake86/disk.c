@@ -115,7 +115,7 @@ bool disk_insert_mem(uint8_t drivenum, const char *filename) {
   if (filename && filename[0] != '\0') {
     FILE *fd = fopen(filename, "rb");
     if (fd) {
-      int num_bytes = fread(d->memory, 1, d->filesize, fd);
+      int32_t num_bytes = (int32_t)fread(d->memory, 1, d->filesize, fd);
       log_printf(LOG_CHAN_DISK, "loaded %d bytes to disk", num_bytes);
       fclose(fd);
     }
@@ -168,6 +168,7 @@ static bool _insert_hard_disk(struct struct_drive *d) {
   d->heads = 16;
   d->cyls = d->filesize / (d->sects * d->heads * 512);
   hdcount++;
+  return true;
 }
 
 static bool disk_insert_file(uint8_t drivenum, const char *filename) {

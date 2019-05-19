@@ -73,16 +73,6 @@ void set_window_title(uint8_t *extra) {
 
 bool render_init(void) {
 
-  uint32_t init_flags = SDL_INIT_VIDEO | SDL_INIT_TIMER;
-  if (doaudio) {
-    init_flags |= SDL_INIT_AUDIO;
-  }
-
-  if (SDL_Init(init_flags)) {
-    return false;
-  }
-  log_printf(LOG_CHAN_SDL, "initalized SDL");
-
   screen = SDL_SetVideoMode(640, 400, 32, window_flags);
   if (!screen) {
     return false;

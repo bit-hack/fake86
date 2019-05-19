@@ -66,29 +66,32 @@ void write86(uint32_t addr32, uint8_t value) {
   if (readonly[addr32] || (addr32 >= 0xC0000)) {
     return;
   }
+#if USE_VIDEO_NEO
+  mem_write_8(addr32, value);
+  // pass write on to video neo
+#else
   if ((addr32 >= 0xA0000) && (addr32 <= 0xBFFFF)) {
     if ((vidmode != 0x13) && (vidmode != 0x12) && (vidmode != 0xD) &&
         (vidmode != 0x10)) {
       mem_write_8(addr32, value);
-      updatedscreen = 1;
     } else {
       if (((VGA_SC[4] & 6) == 0) && (vidmode != 0xD) && (vidmode != 0x10) &&
           (vidmode != 0x12)) {
         mem_write_8(addr32, value);
-        updatedscreen = 1;
       } else {
         writeVGA(addr32 - 0xA0000, value);
       }
     }
     updatedscreen = 1;
-  } else {
-    mem_write_8(addr32, value);
+    return;
   }
+#endif
+  mem_write_8(addr32, value);
 }
 
 void writew86(uint32_t addr32, uint16_t value) {
   addr32 &= 0xFFFFF;
-  write86(addr32, (uint8_t)value);
+  write86(addr32 + 0, (uint8_t)(value >> 0));
   write86(addr32 + 1, (uint8_t)(value >> 8));
 }
 
@@ -97,6 +100,10 @@ uint8_t read86(uint32_t addr32) {
   // wrap address pointer
   addr32 &= 0xFFFFF;
 
+#if USE_VIDEO_NEO
+  // invoke video neo if in right address range
+  return mem_read_8(addr32);
+#else
   // VRAM read
   static const uint32_t VRAM_ADDR = 0xA0000;
   static const uint32_t VRAM_END  = 0xC0000;
@@ -113,6 +120,7 @@ uint8_t read86(uint32_t addr32) {
       }
     }
   }
+#endif
 
   // bootstraping hackingWW
   if (!didbootstrap) {

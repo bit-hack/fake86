@@ -27,18 +27,27 @@
 #include "../80x86/cpu.h"
 
 
-extern uint8_t verbose;
 extern volatile bool scrmodechange;
 
 static uint16_t lastint10ax;
 uint16_t vtotal = 0;
-uint8_t VRAM[0x40000], vidmode, cgabg, blankattr, vidgfxmode, vidcolor;
-uint16_t cursx, cursy, cols = 80, rows = 25, vgapage, cursorposition,
-                       cursorvisible;
+
+// video ram at base address 0xA0000
+uint8_t VRAM[0x40000];
+// text mode size
+uint16_t cols = 80, rows = 25;
+// current BIOS video mode
+uint8_t vidmode;
+// cursor variables
+uint16_t cursorposition, cursorvisible;
+
+uint8_t cgabg, blankattr, vidgfxmode, vidcolor;
+uint16_t cursx, cursy, vgapage;
 uint8_t updatedscreen, clocksafe, port3da;
 uint16_t VGA_SC[0x100], VGA_CRTC[0x100], VGA_ATTR[0x100], VGA_GC[0x100];
 uint32_t videobase = 0xB8000, textbase = 0xB8000, x, y;
-uint8_t fontcga[32768];
+
+uint8_t fontcga[0x8000];
 
 uint8_t readmode;
 uint32_t readmap;
@@ -614,22 +623,20 @@ void writeVGA(uint32_t addr32, uint8_t value) {
 
 // read from video memory base address 0xA0000
 uint8_t readVGA(uint32_t addr32) {
-  uint32_t planesize;
-  planesize = 0x10000;
-
-  VGA_latch[0] = VRAM[addr32];
-  VGA_latch[1] = VRAM[addr32 + planesize];
+  const uint32_t planesize = 0x10000;
+  VGA_latch[0] = VRAM[addr32 + planesize * 0];
+  VGA_latch[1] = VRAM[addr32 + planesize * 1];
   VGA_latch[2] = VRAM[addr32 + planesize * 2];
   VGA_latch[3] = VRAM[addr32 + planesize * 3];
   if (VGA_SC[2] & 1)
-    return VRAM[addr32];
+    return VRAM[addr32 + planesize * 0];
   if (VGA_SC[2] & 2)
-    return VRAM[addr32 + planesize];
+    return VRAM[addr32 + planesize * 1];
   if (VGA_SC[2] & 4)
     return VRAM[addr32 + planesize * 2];
   if (VGA_SC[2] & 8)
     return VRAM[addr32 + planesize * 3];
-  UNREACHABLE();
+  return 0;
 }
 
 void initVideoPorts() {
