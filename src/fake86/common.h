@@ -160,7 +160,7 @@ void disk_eject(uint8_t drivenum);
 void disk_int_handler(int intnum);
 void disk_bootstrap(int intnum);
 
-extern uint8_t bootdrive, hdcount;
+extern uint8_t bootdrive, hdcount, fdcount;
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- log.c
 enum {
@@ -203,3 +203,6 @@ void set_port_read_redirector_16(uint16_t startport, uint16_t endport,
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- interrupt.c
 extern void intcall86(uint8_t intnum);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- rom.c
+bool rom_insert();

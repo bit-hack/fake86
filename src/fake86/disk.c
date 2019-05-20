@@ -76,6 +76,7 @@ struct struct_drive {
 
 uint8_t bootdrive = 128;
 uint8_t hdcount = 0;
+uint8_t fdcount = 0;
 
 static struct struct_drive disk[256];
 
@@ -154,6 +155,8 @@ static bool _insert_floppy_disk(struct struct_drive *d) {
       d->cyls = t->cyls;
       d->sects = t->sects;
       d->heads = t->heads;
+
+      fdcount++;
       return true;
     }
   }
@@ -596,7 +599,6 @@ void disk_int_handler(int intnum) {
 }
 
 void disk_bootstrap(int intnum) {
-  didbootstrap = 1;
 
   // auto detect boot drive
   if (!disk[bootdrive].inserted) {

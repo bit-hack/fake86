@@ -36,7 +36,7 @@ uint8_t mode, reg, rm;
 uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
 uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
 uint32_t temp1, temp2, temp3, temp32, ea;
-uint8_t running = 0, didbootstrap = 0;
+uint8_t running = 0;
 
 static uint64_t totalexec;
 
@@ -1226,7 +1226,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
 
   int32_t cycles = cycle_target;
   while (running && cycles > 0) {
-    --cycles;
 
     if (totalexec > TIMING_INTERVAL) {
       tick_hardware_fast(totalexec);
@@ -1251,11 +1250,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
     }
 
     if (hltstate) {
-#if 0
-      goto skipexecution;
-#else
-      continue;
-#endif
+      break;
     }
 
     reptype = 0;
@@ -1263,10 +1258,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
     useseg = cpu_regs.ds;
     docontinue = 0;
     firstip = ip;
-
-    if ((cpu_regs.cs == 0xF000) && (ip == 0xE066))
-      didbootstrap = 0; // detect if we hit the BIOS entry point to clear
-                        // didbootstrap because we've rebooted
 
     while (!docontinue) {
       cpu_regs.cs = cpu_regs.cs & 0xFFFF;
@@ -1322,6 +1313,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
       }
     } // while
 
+    --cycles;
     totalexec++;
 
     switch (opcode) {
@@ -1374,6 +1366,9 @@ int32_t cpu_exec86(int32_t cycle_target) {
       break;
 
     case 0x6: /* 06 PUSH cpu_regs.es */
+      if (cpu_regs.cs == 0xD800) {
+        __debugbreak();
+      }
       cpu_push(cpu_regs.es);
       break;
 
@@ -3441,8 +3436,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         (getmem8(savecs, saveip + 2) >> 3) & 7,
         savecs,
         saveip);
-
-
 
 #ifndef NDEBUG
       __debugbreak();

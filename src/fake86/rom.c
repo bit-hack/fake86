@@ -18,14 +18,25 @@
   USA.
 */
 
+// custom option rom
+
+// currently this is used to set the number of hard disks attached
+// and set the video mode to something we expect.
+
+// info on bios data area:
+// http://stanislavs.org/helppc/bios_data_area.html
+
+// option rom info:
+// http://etherboot.sourceforge.net/doc/html/devman/extension.html
+
 #include "common.h"
 
 
 extern uint8_t hdcount;
 
 // D4000 -> EC000
-static int rom_addr = 0xD4000;
-static int rom_size = 0x04000;
+static int rom_addr = 0xD8000;
+static int rom_size = 0x02000;
 
 bool rom_insert() {
   // fill with int3
@@ -38,31 +49,51 @@ bool rom_insert() {
   // add rom size
   ptr[2] = rom_size / 512;
 
+  uint8_t elist1 = 0;
+  elist1 |= 0x01;  // floppy drives present
+  elist1 |= 0x0C;  // +64kb ram
+  elist1 |= 0x00;  // 'reserved' video mode (vga/ega)
+  elist1 |= (fdcount & 0x3) << 6;
+
+  uint8_t elist2 = 0;
+  elist2 |= 0x01;  // dma hardware present
+
   // if the BIOS is happy execution will be given to 0xD4003
   const uint8_t code[] = {
+#if 0
+    0xF4,                   // halt
+#endif
+    // prologue
                             // org  4800h
     0x60,                   // pusha
 
+    // set ds to bios data area
     0xB8, 0x40, 0x00,       // mov ax, 40h
     0x8E, 0xD8,             // mov ds, ax
 
+    // set equipment list
     0xBE, 0x10, 0x00,       // mov si, 10h
-    0xC6, 0x04, 0x41,       // mov byte [si], 41h
+    0xC6, 0x04, elist1,     // mov byte [si], 41h
+    0xBE, 0x11, 0x00,       // mov si, 11h
+    0xC6, 0x04, elist2,     // mov byte [si], 41h
 
+    // set number of hard disks
     0xBE, 0x75, 0x00,       // mov si, 75h
     0xC6, 0x04, hdcount,    // mov byte [si], hdcount
 
+    // epilogue
     0x61,                   // popa
-    0xC3,                   // ret
+    0xCB,                   // far ret
   };
   memcpy(RAM + rom_addr + 3, code, sizeof(code));
 
   // add checksum to the end of the rom
-  uint8_t byte_sum = ptr[0];
-  for (int i=1; i<rom_size; ++i) {
+  ptr[rom_size - 1] = 0;
+  uint8_t byte_sum = 0;
+  for (int i=0; i<rom_size; ++i) {
     byte_sum += ptr[i];
   }
-  ptr[rom_size - 1] = ~byte_sum;
+  ptr[rom_size - 1] = 0x100 - byte_sum;
 
   return true;
 }

@@ -253,6 +253,8 @@ static bool sdl_audio_init(void) {
 static bool emulate_init() {
   // initialize memory
   mem_init();
+  // insert our option rom
+  rom_insert();
   // initalize the cpu
   cpu_reset();
   cpu_set_intcall_handler(intcall86);

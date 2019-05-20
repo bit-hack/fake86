@@ -49,8 +49,6 @@ void cpu_set_intcall_handler(cpu_intcall_t handler);
 
 extern uint16_t segregs[4];
 
-extern uint8_t didbootstrap;
-
 // cpu instruction pointer
 extern uint16_t ip;
 

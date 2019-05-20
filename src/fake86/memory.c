@@ -21,18 +21,12 @@
 #include "common.h"
 
 
-// ?.c
-extern uint8_t vidmode;
-extern uint8_t updatedscreen;
-extern uint16_t VGA_SC[0x100];
-
-// cpu.c
-extern uint8_t didbootstrap;
-extern uint8_t hdcount;
-
 // video.c
 void writeVGA(uint32_t addr32, uint8_t value);
 uint8_t readVGA(uint32_t addr32);
+extern uint8_t vidmode;
+extern uint8_t updatedscreen;
+extern uint16_t VGA_SC[0x100];
 
 uint8_t RAM[0x100000];
 uint8_t readonly[0x100000];
@@ -74,7 +68,9 @@ void write86(uint32_t addr32, uint8_t value) {
     return;
   }
   if ((addr32 >= 0xA0000) && (addr32 <= 0xBFFFF)) {
-    if ((vidmode != 0x13) && (vidmode != 0x12) && (vidmode != 0xD) &&
+    if ((vidmode != 0x13) &&
+        (vidmode != 0x12) &&
+        (vidmode != 0x0D) &&
         (vidmode != 0x10)) {
       mem_write_8(addr32, value);
     } else {
@@ -83,9 +79,9 @@ void write86(uint32_t addr32, uint8_t value) {
         mem_write_8(addr32, value);
       } else {
         writeVGA(addr32 - 0xA0000, value);
+        updatedscreen = 1;
       }
     }
-    updatedscreen = 1;
     return;
   }
 #endif
@@ -126,28 +122,6 @@ uint8_t read86(uint32_t addr32) {
     }
   }
 #endif
-
-  // why not do this after we have boot strapped?
-  // bootstraping hacking
-  if (!didbootstrap) {
-    // warning this causes landmark test to fail on memory
-#if 1
-    // todo: add a fake roms to set these values!
-    //
-    // http://stanislavs.org/helppc/bios_data_area.html
-    //
-    // ugly hack to make BIOS always believe we have an EGA/VGA card installed
-    //
-    // 40:10  2 bytes  Equipment list flags
-    //  0x40 = initial video mode
-    //  0x01 = IPL diskette installed
-    mem_write_8(0x410, 0x41);
-    // the BIOS doesn't have any concept of hard drives, so here's another hack
-    // 
-    // 40:75  1 bytes  Number of hard disks attached
-    mem_write_8(0x475, hdcount);
-#endif
-  }
 
   // normal ram read
   return mem_read_8(addr32);
