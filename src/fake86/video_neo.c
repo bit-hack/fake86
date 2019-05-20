@@ -20,21 +20,82 @@
 
 #include "../fake86/common.h"
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-uint8_t neo_mem_read(uint32_t addr32) {
+uint8_t neo_mem_read_A0000(uint32_t addr32) {
   return 0;
 }
 
-void neo_mem_write(uint32_t addr, uint8_t value) {
+void neo_mem_write_A0000(uint32_t addr, uint8_t value) {
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// MDA
+uint8_t neo_mem_read_B0000(uint32_t addr32) {
+  return 0;
+}
+
+// MDA
+void neo_mem_write_B0000(uint32_t addr, uint8_t value) {
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// CGA
+uint8_t neo_mem_read_B8000(uint32_t addr32) {
+  return 0;
+}
+
+// CGA
+void neo_mem_write_B8000(uint32_t addr, uint8_t value) {
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// EGA
+uint8_t neo_mem_read_C0000(uint32_t addr32) {
+  return 0;
+}
+
+// EGA
+void neo_mem_write_C0000(uint32_t addr, uint8_t value) {
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// Professional Graphics
+uint8_t neo_mem_read_C6000(uint32_t addr32) {
+  return 0;
+}
+
+// Professional Graphics
+void neo_mem_write_C6000(uint32_t addr, uint8_t value) {
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// 8bit port read
 static uint8_t neo_port_read(uint16_t portnum) {
   return 0;
 }
 
+// 8bit port write
 static void neo_port_write(uint16_t portnum, uint8_t value) {
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// initalize neo display adapter
 bool neo_init(void) {
   return true;
+}
+// update neo display adapter
+void neo_tick(uint64_t cycles) {
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// BIOS int 10h Video Services handler
+void neo_int10_handler() {
 }

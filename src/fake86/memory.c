@@ -63,13 +63,16 @@ static void mem_write_16(uint32_t addr, uint16_t data) {
 void write86(uint32_t addr32, uint8_t value) {
   addr32 &= 0xFFFFF;
 
+#if USE_VIDEO_NEO
+  if (addr32 >= 0xA0000 && addr32 < 0xC0000) {
+    // pass write on to video neo
+    neo_mem_write(addr32, value);
+    return;
+  }
+#else
   if (readonly[addr32] || (addr32 >= 0xC0000)) {
     return;
   }
-#if USE_VIDEO_NEO
-  mem_write_8(addr32, value);
-  // pass write on to video neo
-#else
   if ((addr32 >= 0xA0000) && (addr32 <= 0xBFFFF)) {
     if ((vidmode != 0x13) && (vidmode != 0x12) && (vidmode != 0xD) &&
         (vidmode != 0x10)) {
@@ -101,8 +104,10 @@ uint8_t read86(uint32_t addr32) {
   addr32 &= 0xFFFFF;
 
 #if USE_VIDEO_NEO
-  // invoke video neo if in right address range
-  return mem_read_8(addr32);
+  if (addr32 >= 0xA0000 && addr32 < 0xC0000) {
+    // invoke video neo if in right address range
+    return neo_mem_read(addr32);
+  }
 #else
   // VRAM read
   static const uint32_t VRAM_ADDR = 0xA0000;
@@ -122,13 +127,24 @@ uint8_t read86(uint32_t addr32) {
   }
 #endif
 
-  // bootstraping hackingWW
+  // why not do this after we have boot strapped?
+  // bootstraping hacking
   if (!didbootstrap) {
     // warning this causes landmark test to fail on memory
 #if 1
+    // todo: add a fake roms to set these values!
+    //
+    // http://stanislavs.org/helppc/bios_data_area.html
+    //
     // ugly hack to make BIOS always believe we have an EGA/VGA card installed
+    //
+    // 40:10  2 bytes  Equipment list flags
+    //  0x40 = initial video mode
+    //  0x01 = IPL diskette installed
     mem_write_8(0x410, 0x41);
     // the BIOS doesn't have any concept of hard drives, so here's another hack
+    // 
+    // 40:75  1 bytes  Number of hard disks attached
     mem_write_8(0x475, hdcount);
 #endif
   }
