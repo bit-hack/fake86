@@ -151,6 +151,8 @@ bool i8255_init(void);
 void i8255_reset(void);
 void i8255_tick(uint64_t cycles);
 bool i8255_speaker_on(void);
+void i8255_key_required(void);
+void i8255_key_push(uint8_t key);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
 bool disk_is_inserted(int num);

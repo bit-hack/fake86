@@ -79,6 +79,27 @@ struct i8255_t i8255;
 static uint8_t _SW1 = (3 << 2) | (3 << 4);
 static uint8_t _SW2 = 0x0C;
 
+
+static uint8_t _keys[256];
+static uint8_t _key_index = 0;
+
+void i8255_key_push(uint8_t key) {
+  printf("pushing key %d\n", key);
+  if (USE_KEY_BUFFER) {
+    if (_key_index >= sizeof(_keys)) {
+      // key buffer overflow
+      __debugbreak();
+    }
+    // push key into the buffer
+    _keys[_key_index] = key;
+    // advance _key_index
+    _key_index += (_key_index < sizeof(_keys));
+  }
+  else {
+    i8255.port_in[0] = key;
+  }
+}
+
 static void write_ctrl_word(uint8_t value) {
 
   const int mode_set    = 1 & (value >> 7);
@@ -201,4 +222,19 @@ void i8255_tick(uint64_t cycles) {
 
 bool i8255_speaker_on(void) {
   return i8255.port_out[1] & 0x1;
+}
+
+// called just prior to servicing an int9
+void i8255_key_required(void) {
+  if (USE_KEY_BUFFER) {
+    // pull out the next item from the key buffer
+    i8255.port_in[0] = _keys[0];
+    // shift the key buffer down
+    for (int i=0; i<_key_index; ++i) {
+      _keys[i] = _keys[i + 1];
+    }
+    // decrement key index
+    _key_index -= (_key_index > 0);
+  }
+  printf("popping key %d\n", i8255.port_in[0]);
 }

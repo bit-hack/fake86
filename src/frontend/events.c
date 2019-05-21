@@ -49,7 +49,7 @@ static void on_key_down(const SDL_Event *event) {
   // convert scancode
   const uint8_t scancode = translate_scancode(event->key.keysym.sym);
 
-  i8255.port_in[0] = scancode;
+  i8255_key_push(scancode);
   i8259_doirq(1);
 
   const uint8_t *keys = SDL_GetKeyState(NULL);

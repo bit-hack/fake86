@@ -71,3 +71,6 @@
 
 // use new video emulator
 #define USE_VIDEO_NEO 0
+
+// buffer keyboard strokes
+#define USE_KEY_BUFFER 0
