@@ -184,7 +184,7 @@ static void video_int_set_mode_handler() {
         }
       portram[0x3D8] = portram[0x3D8] & 0xFE;
       break;
-    case 0xD: // 320x200 16-color
+    case 0xD:  // 320x200 16-color
     case 0x12: // 640x480 16-color
     case 0x13: // 320x200 256-color
       videobase = 0xA0000;
@@ -288,14 +288,15 @@ static void port_write_mda(uint16_t portnum, uint8_t value) {
       video_int_set_mode_handler();
       cpu_regs.ax = ax;
     }
-    if (value & 0x80)
+    if (value & 0x80) {
       videobase = 0xB8000;
-    else
+    } else {
       videobase = 0xB0000;
+    }
     break;
   default:
     portram[portnum] = value;
-//    UNREACHABLE();
+    //    UNREACHABLE();
   }
   updatedscreen = 1;
 }
@@ -682,7 +683,7 @@ static bool handle_int_10h() {
   // Video Display Combination (1A)
   if ((cpu_regs.ah == 0x1A) &&
       (lastint10ax != 0x0100)) { // the 0x0100 is a cheap hack to make it not
-                                  // do this if DOS EDIT/QBASIC
+                                 // do this if DOS EDIT/QBASIC
 
     // http://stanislavs.org/helppc/int_10-1a.html
 

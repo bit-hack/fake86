@@ -266,7 +266,7 @@ void i8253_init() {
 
 // 182Hz threshold
 static const int64_t irq0_thresh = CYCLES_PER_SECOND / 182;
-static int64_t irq0_accum  = 0;
+static int64_t irq0_accum = 0;
 
 static void update_mode_0(struct i8253_channel_t *c, uint32_t cycles) {
   if (c->inhibit_count > 0) {
@@ -281,7 +281,7 @@ static void update_mode_0(struct i8253_channel_t *c, uint32_t cycles) {
       // move to the 0 counter state
       cycles -= c->counter;
       c->counter = 0;
-//      i8259_doirq(0);
+      //      i8259_doirq(0);
     }
   }
   c->counter -= cycles;
@@ -309,8 +309,7 @@ static void update_mode_2(struct i8253_channel_t *c, uint32_t cycles) {
         c->counter = 2;
         i8259_doirq(0);
       }
-    }
-    else {
+    } else {
       c->counter -= cycles;
       cycles = 0;
     }
@@ -338,8 +337,7 @@ static void update_mode_3(struct i8253_channel_t *c, uint32_t cycles) {
         i8259_doirq(0);
       }
       c->output ^= 1;
-    }
-    else {
+    } else {
       c->counter -= cycles;
       cycles = 0;
     }
@@ -393,7 +391,7 @@ void i8253_tick(uint64_t cycles) {
 
 #if 1
   // update timer channels
-  for (int i=0; i<3; ++i) {
+  for (int i = 0; i < 3; ++i) {
     struct i8253_channel_t *c = &i8253.channel[i];
     switch (c->mode_op) {
     case 0: update_mode_0(c, (uint32_t)pit_cycles); break;

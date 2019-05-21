@@ -90,7 +90,7 @@ bool disk_is_inserted(int num) {
 }
 
 bool disk_insert_mem(uint8_t drivenum, const char *filename) {
-  struct struct_drive* d = &disk[drivenum];
+  struct struct_drive *d = &disk[drivenum];
   disk_eject(drivenum);
   // set disk layout
   d->cyls = 80;
@@ -135,17 +135,16 @@ static bool _insert_floppy_disk(struct struct_drive *d) {
 
   const struct disk_type_t types[] = {
 
-    // https://en.wikipedia.org/wiki/List_of_floppy_disk_formats
+      // https://en.wikipedia.org/wiki/List_of_floppy_disk_formats
 
-    {80, 18, 2},  // 1.44Mb 3.5"
-    {80, 15, 2},  // 1200Kb 5.25"
-    {80,  9, 2},  //  720Kb 3.5"
-    {80,  8, 2},  //  640Kb 3.5"
-    {40,  9, 2},  //  360Kb 5.25"
-    {40,  8, 1},  //  160Kb 5.25"
+      {80, 18, 2}, // 1.44Mb 3.5"
+      {80, 15, 2}, // 1200Kb 5.25"
+      {80, 9, 2},  //  720Kb 3.5"
+      {80, 8, 2},  //  640Kb 3.5"
+      {40, 9, 2},  //  360Kb 5.25"
+      {40, 8, 1},  //  160Kb 5.25"
 
-    { 0,  0, 0}
-  };
+      {0, 0, 0}};
 
   for (int i = 0; types[i].cyls; ++i) {
     const struct disk_type_t *t = types + i;
@@ -175,7 +174,7 @@ static bool _insert_hard_disk(struct struct_drive *d) {
 }
 
 static bool disk_insert_file(uint8_t drivenum, const char *filename) {
-  struct struct_drive* d = &disk[drivenum];
+  struct struct_drive *d = &disk[drivenum];
 
   disk_eject(drivenum);
 
@@ -241,22 +240,23 @@ static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
   DWORD dwRet = 0;
 
   if (!read_only) {
-    if (FALSE == DeviceIoControl(d->handle, FSCTL_ALLOW_EXTENDED_DASD_IO,
-                                 NULL, 0, NULL, 0, &dwRet, NULL)) {
+    if (FALSE == DeviceIoControl(d->handle, FSCTL_ALLOW_EXTENDED_DASD_IO, NULL,
+                                 0, NULL, 0, &dwRet, NULL)) {
       log_printf(LOG_CHAN_DISK, "set FSCTL_ALLOW_EXTENDED_DASD_IO failed");
     }
   }
 
   DISK_GEOMETRY geo;
   memset(&geo, 0, sizeof(geo));
-  if (FALSE == DeviceIoControl(d->handle, IOCTL_DISK_GET_DRIVE_GEOMETRY,
-                               NULL, 0, &geo, sizeof(geo), &dwRet, NULL)) {
+  if (FALSE == DeviceIoControl(d->handle, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL,
+                               0, &geo, sizeof(geo), &dwRet, NULL)) {
     log_printf(LOG_CHAN_DISK, "IOCTL_DISK_GET_DRIVE_GEOMETRY failed");
     return false;
   }
 
   if (geo.BytesPerSector != 512) {
-    log_printf(LOG_CHAN_DISK, "sector size of %d is unsuitable", geo.BytesPerSector);
+    log_printf(LOG_CHAN_DISK, "sector size of %d is unsuitable",
+               geo.BytesPerSector);
     return false;
   }
 
@@ -270,7 +270,8 @@ static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
   }
 
   // Calculate drive size
-  d->filesize = geo.BytesPerSector * geo.SectorsPerTrack * geo.TracksPerCylinder * geo.Cylinders.LowPart;
+  d->filesize = geo.BytesPerSector * geo.SectorsPerTrack *
+                geo.TracksPerCylinder * geo.Cylinders.LowPart;
 
   d->inserted = true;
   d->type = disk_type_hdd_direct;
@@ -288,24 +289,24 @@ static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
 bool disk_insert(uint8_t drivenum, const char *filename) {
 #if DISK_PASS_THROUGH
   if (filename[0] == '\\' && filename[1] == '\\') {
-    log_printf(LOG_CHAN_DISK, "mapping raw disk '%s' (%d)", filename, (int)drivenum);
+    log_printf(LOG_CHAN_DISK, "mapping raw disk '%s' (%d)", filename,
+               (int)drivenum);
     return disk_insert_raw(drivenum, filename);
-  }
-  else
+  } else
 #endif // DISK_PASS_THROUGH
-  if (filename[0] == '*') {
-    log_printf(LOG_CHAN_DISK, "Inserting binary '%s' (%d)", filename + 1, (int)drivenum);
+      if (filename[0] == '*') {
+    log_printf(LOG_CHAN_DISK, "Inserting binary '%s' (%d)", filename + 1,
+               (int)drivenum);
     return disk_insert_mem(drivenum, filename + 1);
-  }
-  else
-  {
-    log_printf(LOG_CHAN_DISK, "inserting disk '%s' (%d)", filename, (int)drivenum);
+  } else {
+    log_printf(LOG_CHAN_DISK, "inserting disk '%s' (%d)", filename,
+               (int)drivenum);
     return disk_insert_file(drivenum, filename);
   }
 }
 
 void disk_eject(uint8_t drivenum) {
-  struct struct_drive* d = &disk[drivenum];
+  struct struct_drive *d = &disk[drivenum];
   switch (d->type) {
   case disk_type_none:
     // disk is already closed nothing to do here
@@ -343,7 +344,7 @@ void disk_eject(uint8_t drivenum) {
   d->filesize = 0;
 }
 
-static bool _disk_seek(struct struct_drive* d, uint32_t offset) {
+static bool _disk_seek(struct struct_drive *d, uint32_t offset) {
   switch (d->type) {
   case disk_type_fdd_file:
   case disk_type_hdd_file:
@@ -371,7 +372,7 @@ static bool _disk_seek(struct struct_drive* d, uint32_t offset) {
   return true;
 }
 
-static bool _disk_read(struct struct_drive* d, uint8_t *dst, uint32_t size) {
+static bool _disk_read(struct struct_drive *d, uint8_t *dst, uint32_t size) {
   switch (d->type) {
   case disk_type_fdd_file:
   case disk_type_hdd_file:
@@ -403,7 +404,8 @@ static bool _disk_read(struct struct_drive* d, uint8_t *dst, uint32_t size) {
   return true;
 }
 
-static bool _disk_write(struct struct_drive* d, const uint8_t *src, uint32_t size) {
+static bool _disk_write(struct struct_drive *d, const uint8_t *src,
+                        uint32_t size) {
   switch (d->type) {
   case disk_type_fdd_file:
   case disk_type_hdd_file:
@@ -438,22 +440,17 @@ static bool _disk_write(struct struct_drive* d, const uint8_t *src, uint32_t siz
   return true;
 }
 
-void disk_read(uint8_t drivenum,
-               uint16_t dstseg,
-               uint16_t dstoff,
-               uint16_t cyl,
-               uint16_t sect,
-               uint16_t head,
-               uint16_t sectcount) {
+void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
+               uint16_t sect, uint16_t head, uint16_t sectcount) {
 
-  struct struct_drive* d = &disk[drivenum];
+  struct struct_drive *d = &disk[drivenum];
   uint8_t sectorbuffer[512];
 
   if (!sect || !disk_is_inserted(drivenum)) {
     return;
   }
-  const uint32_t lba = ((uint32_t)cyl * (uint32_t)d->heads +
-                       (uint32_t)head) * (uint32_t)d->sects +
+  const uint32_t lba = ((uint32_t)cyl * (uint32_t)d->heads + (uint32_t)head) *
+                           (uint32_t)d->sects +
                        (uint32_t)sect - 1;
   const uint32_t fileoffset = lba * 512;
   if (fileoffset > d->filesize) {
@@ -483,10 +480,11 @@ void disk_read(uint8_t drivenum,
   cpu_regs.ah = 0;
 }
 
-void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
-                uint16_t sect, uint16_t head, uint16_t sectcount) {
+void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff,
+                uint16_t cyl, uint16_t sect, uint16_t head,
+                uint16_t sectcount) {
 
-  struct struct_drive* d = &disk[drivenum];
+  struct struct_drive *d = &disk[drivenum];
   uint8_t sectorbuffer[512];
 
   uint32_t memdest, lba, fileoffset, cursect, sectoffset;
@@ -525,7 +523,8 @@ void disk_int_handler(int intnum) {
   switch (cpu_regs.ah) {
   case 0: // reset disk system
     cpu_regs.ah = 0;
-    cpu_flags.cf = 0; // useless function in an emulator. say success and return.
+    cpu_flags.cf =
+        0; // useless function in an emulator. say success and return.
     break;
   case 1: // return last status
     cpu_regs.ah = lastdiskah[cpu_regs.dl];
@@ -574,8 +573,7 @@ void disk_int_handler(int intnum) {
       cpu_regs.ah = 0;
       cpu_regs.ch = disk[cpu_regs.dl].cyls - 1;
       cpu_regs.cl = disk[cpu_regs.dl].sects & 63;
-      cpu_regs.cl =
-          cpu_regs.cl + (disk[cpu_regs.dl].cyls / 256) * 64;
+      cpu_regs.cl = cpu_regs.cl + (disk[cpu_regs.dl].cyls / 256) * 64;
       cpu_regs.dh = disk[cpu_regs.dl].heads - 1;
       if (cpu_regs.dl < 0x80) {
         cpu_regs.bl = 4;

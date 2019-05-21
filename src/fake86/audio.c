@@ -47,7 +47,8 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
 
   const uint32_t freq = i8253_frequency(2);
 
-  uint32_t delta = ((uint64_t)freq * (uint64_t)0xffffffff / (uint64_t)sample_rate);
+  uint32_t delta =
+      ((uint64_t)freq * (uint64_t)0xffffffff / (uint64_t)sample_rate);
 
   for (uint32_t i = 0; i < num_samples; i += 2) {
 

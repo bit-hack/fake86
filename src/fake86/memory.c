@@ -107,7 +107,7 @@ uint8_t read86(uint32_t addr32) {
 #else
   // VRAM read
   static const uint32_t VRAM_ADDR = 0xA0000;
-  static const uint32_t VRAM_END  = 0xC0000;
+  static const uint32_t VRAM_END = 0xC0000;
   if ((addr32 >= VRAM_ADDR) && (addr32 < VRAM_END)) {
     switch (vidmode) {
     case 0x0D:
@@ -152,7 +152,8 @@ uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag) {
   return (readsize);
 }
 
-uint32_t mem_loadrom(uint32_t addr32, const char *filename, uint8_t failure_fatal) {
+uint32_t mem_loadrom(uint32_t addr32, const char *filename,
+                     uint8_t failure_fatal) {
   uint32_t readsize;
   readsize = mem_loadbinary(addr32, filename, 1);
   if (!readsize) {

@@ -23,13 +23,6 @@
 
 #include "common.h"
 
-
-extern void set_port_write_redirector(uint16_t startport, uint16_t endport,
-                                      void *callback);
-
-extern void set_port_read_redirector(uint16_t startport, uint16_t endport,
-                                     void *callback);
-
 struct sermouse_s sermouse;
 
 // buffer some serial mouse data
@@ -51,9 +44,9 @@ void mouse_port_write(uint16_t portnum, uint8_t value) {
   oldreg = sermouse.reg[portnum];
   sermouse.reg[portnum] = value;
   switch (portnum) {
-  case 4: // modem control register
+  case 4:                              // modem control register
     if ((value & 1) != (oldreg & 1)) { // software toggling of this register
-      sermouse.bufptr = 0; // causes the mouse to reset and fill the buffer
+      sermouse.bufptr = 0;  // causes the mouse to reset and fill the buffer
       bufsermousedata('M'); // with a bunch of ASCII 'M' characters.
       bufsermousedata('M'); // this is intended to be a way for
       bufsermousedata('M'); // drivers to verify that there is

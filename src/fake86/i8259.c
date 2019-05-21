@@ -85,7 +85,7 @@ static void i8259_port_write(uint16_t portnum, uint8_t value) {
 uint8_t i8259_nextintr() {
   uint8_t output = 0;
   // XOR request register with inverted mask register
-  const uint8_t tmpirr = i8259.irr & (~i8259.imr); 
+  const uint8_t tmpirr = i8259.irr & (~i8259.imr);
   for (uint8_t i = 0; i < 8; i++) {
     if ((tmpirr >> i) & 1) {
       i8259.irr ^= (1 << i);
@@ -99,7 +99,7 @@ uint8_t i8259_nextintr() {
     i8255_key_required();
   }
   // return the next interrupt number
-  return output; 
+  return output;
 }
 
 void i8259_doirq(uint8_t irqnum) {

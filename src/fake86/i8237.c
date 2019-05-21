@@ -74,7 +74,7 @@ static void i8237_port_write(uint16_t addr, uint8_t value) {
     break;
   case 0xB: // write mode register
     dmachan[channel].direction = (value >> 5) & 1;
-    dmachan[channel].autoinit  = (value >> 4) & 1;
+    dmachan[channel].autoinit = (value >> 4) & 1;
     dmachan[channel].writemode = (value >> 2) & 1; // not quite accurate
     break;
   case 0xC: // clear byte pointer flip-flop
@@ -90,14 +90,15 @@ static void i8237_port_write(uint16_t addr, uint8_t value) {
 uint8_t i8237_port_read(uint16_t addr) {
   if (addr & 0x80) {
     // this is a DMA page register
-  }
-  else {
+  } else {
     switch (addr) {
     case 3:
-      if (flipflop == 1)
+      if (flipflop == 1) {
         return dmachan[1].reload >> 8;
-      else
+      }
+      else {
         return dmachan[1].reload;
+      }
       flipflop = ~flipflop & 1;
       break;
     }

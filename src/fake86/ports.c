@@ -72,8 +72,7 @@ void portout(uint16_t portnum, uint8_t value) {
   port_write_b_t cb = port_write_callback[portnum];
   if (cb) {
     cb(portnum, value);
-  }
-  else {
+  } else {
     // notify of unhandled port access
     if (_notify_unknown_ports && !_port_ignore[portnum]) {
       log_printf(LOG_CHAN_PORT, "byte write to unknown port %03xh", portnum);
@@ -105,8 +104,7 @@ void portout16(uint16_t portnum, uint16_t value) {
   port_write_w_t cb = port_write_callback16[portnum];
   if (cb) {
     cb(portnum, value);
-  }
-  else {
+  } else {
     portout(portnum, (uint8_t)value);
     portout(portnum + 1, (uint8_t)(value >> 8));
   }
@@ -117,8 +115,7 @@ uint16_t portin16(uint16_t portnum) {
   port_read_w_t cb = port_read_callback16[portnum];
   if (cb) {
     return cb(portnum);
-  }
-  else {
+  } else {
     // do dual 8bit read
     const uint16_t lo = (uint16_t)portin(portnum + 0);
     const uint16_t hi = (uint16_t)portin(portnum + 1);

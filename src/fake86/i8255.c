@@ -120,8 +120,7 @@ static void i8255_port_write(uint16_t port, uint8_t value) {
     if ((i8255.port_out[1] & 0x80) == 0) {
       // write to keyboard (may only be possible on AT)
       // i8255.port_out[port & 0x3] = value;
-    }
-    else {
+    } else {
       // write to switches?
     }
   // PORTB
@@ -134,12 +133,10 @@ static void i8255_port_write(uint16_t port, uint8_t value) {
       const uint8_t bit = 1 << ((value >> 1) & 0x0f);
       if (value & 0x01) {
         i8255.port_out[2] &= ~bit;
-      }
-      else {
+      } else {
         i8255.port_out[2] |= bit;
       }
-    }
-    else {
+    } else {
       i8255.port_out[2] &= 0xf0;
       i8255.port_out[2] |= value & 0x0f;
     }
@@ -154,18 +151,13 @@ static uint8_t i8255_port_read(uint16_t port) {
   case 0x60:
     if ((i8255.port_out[1] & 0x80) == 0) {
       // return keyboard scan code
-      return i8255.ctrl_word & 0x10 ?
-          i8255.port_in[0] :
-          i8255.port_out[0];
-    }
-    else {
+      return i8255.ctrl_word & 0x10 ? i8255.port_in[0] : i8255.port_out[0];
+    } else {
       // return switch 1
       return _SW1;
     }
   case 0x61:
-    return i8255.ctrl_word & 0x02 ?
-        i8255.port_in[1] :
-        i8255.port_out[1];
+    return i8255.ctrl_word & 0x02 ? i8255.port_in[1] : i8255.port_out[1];
 #if 0
   case 0x62:
   {
@@ -187,9 +179,8 @@ static uint8_t i8255_port_read(uint16_t port) {
       // return SW2 bits 1-4
       out |= _SW2 & 0x0f;
       // Timer2 channel out
-      out |=  i8253_channel2_out() << 5;
-    }
-    else {
+      out |= i8253_channel2_out() << 5;
+    } else {
       // return SW2 bit 5
 #if 1
       return (_SW2 >> 5) & 1;
@@ -230,7 +221,7 @@ void i8255_key_required(void) {
     // pull out the next item from the key buffer
     i8255.port_in[0] = _keys[0];
     // shift the key buffer down
-    for (int i=0; i<_key_index; ++i) {
+    for (int i = 0; i < _key_index; ++i) {
       _keys[i] = _keys[i + 1];
     }
     // decrement key index
