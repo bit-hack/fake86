@@ -24,6 +24,7 @@
 
 
 bool video_int_handler(int intnum);
+void neo_int10_handler(void);
 
 void intcall86(uint8_t intnum) {
 

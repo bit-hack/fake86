@@ -34,6 +34,9 @@ bool render_init(void);
 void tick_events(void);
 void handlevideo();
 
+bool neo_render_init();
+void neo_render_tick();
+
 extern bool cursorvisible;
 extern uint8_t doaudio;
 extern uint8_t updatedscreen;
@@ -42,7 +45,6 @@ const char *biosfile = "pcxtbios.bin";
 
 extern bool cl_parse(int argc, char *argv[]);
 extern void initVideoPorts();
-extern void killaudio();
 extern void initsermouse(uint16_t baseport, uint8_t irq);
 
 void render_update(void);
@@ -57,9 +59,13 @@ static int64_t tick_cpu(int64_t num_cycles) {
 }
 
 static void tick_render() {
+#if USE_VIDEO_NEO
+  neo_render_tick();
+#else
   updatedscreen = 1;
   render_check_for_mode_change();
   render_update();
+#endif
 }
 
 static uint64_t get_ticks() {
@@ -265,7 +271,15 @@ static bool emulate_init() {
   i8255_init();
   initVideoPorts();
   mouse_init(0x3F8, 4);
-  render_init();
+#if USE_VIDEO_NEO
+  if (!neo_render_init()) {
+    return false;
+  }
+#else
+  if (!render_init()) {
+    return false;
+  }
+#endif
   return true;
 }
 

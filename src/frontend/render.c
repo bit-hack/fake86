@@ -31,9 +31,7 @@ SDL_Surface *screen = NULL;
 uint32_t usefullscreen = 0;
 uint32_t usegrabmode = SDL_GRAB_OFF;
 
-extern uint8_t RAM[0x100000], portram[0x10000];
 extern uint8_t VRAM[262144], vidmode, cgabg, blankattr, vidgfxmode, vidcolor;
-extern uint8_t running;
 extern uint16_t cursx, cursy, cols, rows, vgapage, cursorposition;
 extern bool cursorvisible;
 extern uint8_t updatedscreen;

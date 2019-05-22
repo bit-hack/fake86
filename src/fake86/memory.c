@@ -31,6 +31,7 @@ extern uint16_t VGA_SC[0x100];
 uint8_t RAM[0x100000];
 uint8_t readonly[0x100000];
 
+
 void mem_init(void) {
   // its static so not required
   memset(readonly, 0, sizeof(readonly));
@@ -54,38 +55,53 @@ static void mem_write_16(uint32_t addr, uint16_t data) {
   RAM[addr + 1] = (0xff00 & data) >> 8;
 }
 
-void write86(uint32_t addr32, uint8_t value) {
-  addr32 &= 0xFFFFF;
+void write86(uint32_t addr, uint8_t value) {
+  addr &= 0xFFFFF;
 
 #if USE_VIDEO_NEO
-  if (addr32 >= 0xA0000 && addr32 < 0xC0000) {
-    // pass write on to video neo
-    neo_mem_write(addr32, value);
+  if (addr >= 0xC0000) {
     return;
+  }
+  if (addr >= 0xA0000) {
+    if (addr >= 0xB8000) {
+      neo_mem_write_B8000(addr, value); // cga
+      return;
+    }
+    if (addr >= 0xB0000) {
+      neo_mem_write_B0000(addr, value); // mda
+      return;
+    }
+    if (addr >= 0xA0000) {
+      neo_mem_write_A0000(addr, value); // vga/ega
+      return;
+    }
+  }
+  else {
+    mem_write_8(addr, value);
   }
 #else
-  if (readonly[addr32] || (addr32 >= 0xC0000)) {
+  if (readonly[addr] || (addr >= 0xC0000)) {
     return;
   }
-  if ((addr32 >= 0xA0000) && (addr32 <= 0xBFFFF)) {
+  if ((addr >= 0xA0000) && (addr <= 0xBFFFF)) {
     if ((vidmode != 0x13) &&
         (vidmode != 0x12) &&
         (vidmode != 0x0D) &&
         (vidmode != 0x10)) {
-      mem_write_8(addr32, value);
+      mem_write_8(addr, value);
     } else {
       if (((VGA_SC[4] & 6) == 0) && (vidmode != 0xD) && (vidmode != 0x10) &&
           (vidmode != 0x12)) {
-        mem_write_8(addr32, value);
+        mem_write_8(addr, value);
       } else {
-        writeVGA(addr32 - 0xA0000, value);
+        writeVGA(addr - 0xA0000, value);
         updatedscreen = 1;
       }
     }
     return;
   }
+  mem_write_8(addr, value);
 #endif
-  mem_write_8(addr32, value);
 }
 
 void writew86(uint32_t addr32, uint16_t value) {
@@ -94,37 +110,41 @@ void writew86(uint32_t addr32, uint16_t value) {
   write86(addr32 + 1, (uint8_t)(value >> 8));
 }
 
-uint8_t read86(uint32_t addr32) {
-
-  // wrap address pointer
-  addr32 &= 0xFFFFF;
+uint8_t read86(uint32_t addr) {
+  addr &= 0xFFFFF;
 
 #if USE_VIDEO_NEO
-  if (addr32 >= 0xA0000 && addr32 < 0xC0000) {
-    // invoke video neo if in right address range
-    return neo_mem_read(addr32);
+  if (addr >= 0xA0000 && addr <= 0xC0000) {
+    if (addr >= 0xB8000) {
+      return neo_mem_read_B8000(addr); // cga
+    }
+    if (addr >= 0xB0000) {
+      return neo_mem_read_B0000(addr); // mda
+    }
+    return neo_mem_read_A0000(addr); // vga/ega
+  }
+  else {
+    return mem_read_8(addr);
   }
 #else
   // VRAM read
   static const uint32_t VRAM_ADDR = 0xA0000;
   static const uint32_t VRAM_END = 0xC0000;
-  if ((addr32 >= VRAM_ADDR) && (addr32 < VRAM_END)) {
+  if ((addr >= VRAM_ADDR) && (addr < VRAM_END)) {
     switch (vidmode) {
     case 0x0D:
     case 0x0E:
     case 0x10:
     case 0x12:
-      return readVGA(addr32 - VRAM_ADDR);
+      return readVGA(addr - VRAM_ADDR);
     case 0x13:
       if ((VGA_SC[4] & 6) != 0) {
-        return readVGA(addr32 - VRAM_ADDR);
+        return readVGA(addr - VRAM_ADDR);
       }
     }
   }
+  return mem_read_8(addr);
 #endif
-
-  // normal ram read
-  return mem_read_8(addr32);
 }
 
 uint16_t readw86(uint32_t addr32) {

@@ -19,3 +19,34 @@
 */
 
 #include "../fake86/common.h"
+
+static SDL_Surface *_surface;
+
+// hack for just now
+extern SDL_Surface *screen;
+
+
+bool neo_render_init() {
+
+  _surface = SDL_SetVideoMode(640, 480, 32, 0);
+  if (!_surface) {
+    log_printf(LOG_CHAN_VIDEO, "SDL_SetVideoMode failed");
+    return false;
+  }
+
+  SDL_WM_SetCaption(BUILD_STRING, NULL);
+
+  // hack for now
+  screen = _surface;
+
+  return true;
+}
+
+void neo_render_tick() {
+
+  // 12C000 bytes max
+
+  memcpy(_surface->pixels, RAM + 0xA0000, 0xC0000);
+
+  SDL_Flip(_surface);
+}

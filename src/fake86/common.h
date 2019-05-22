@@ -208,3 +208,17 @@ extern void intcall86(uint8_t intnum);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- rom.c
 bool rom_insert();
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video_neo.c
+
+// memory access for video cards
+uint8_t neo_mem_read_A0000(uint32_t addr);
+uint8_t neo_mem_read_B0000(uint32_t addr);
+uint8_t neo_mem_read_B8000(uint32_t addr);
+void neo_mem_write_A0000(uint32_t addr, uint8_t value);
+void neo_mem_write_B0000(uint32_t addr, uint8_t value);
+void neo_mem_write_B8000(uint32_t addr, uint8_t value);
+
+bool neo_init(void);
+void neo_int10_handler();
+void neo_tick(uint64_t cycles);
