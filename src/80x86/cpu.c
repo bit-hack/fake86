@@ -38,7 +38,12 @@ uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
 uint32_t temp1, temp2, temp3, temp32, ea;
 uint8_t running = 0;
 
-static uint64_t totalexec;
+static uint64_t _totalexec;
+static uint64_t _cycles;
+
+uint64_t cpu_slice_ticks(void) {
+  return _cycles;
+}
 
 #define modregrm()                                                             \
   {                                                                            \
@@ -1220,18 +1225,19 @@ static void op_grp5() {
 // return executed cycles
 int32_t cpu_exec86(int32_t cycle_target) {
 
-  uint8_t docontinue;
   static uint16_t firstip;
   static uint16_t trap_toggle = 0;
 
-  int32_t cycles = cycle_target;
-  while (running && cycles > 0) {
+  _cycles = 0;
 
-    if (totalexec > TIMING_INTERVAL) {
-      tick_hardware_fast(totalexec);
-      totalexec = 0;
+  while (running && _cycles < cycle_target) {
+
+    if (_totalexec > TIMING_INTERVAL) {
+      tick_hardware_fast(_totalexec);
+      _totalexec = 0;
     }
 
+    // if trap is asserted
     if (trap_toggle) {
       _intcall_handler(1);
     }
@@ -1242,7 +1248,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
       trap_toggle = 0;
     }
 
-    if (!trap_toggle && (cpu_flags.ifl && (i8259.irr & (~i8259.imr)))) {
+    const bool pending_irq = cpu_flags.ifl && (i8259.irr & (~i8259.imr));
+    if (!trap_toggle && pending_irq) {
       hltstate = 0;
       const int next_int = i8259_nextintr();
       // get next interrupt from the i8259, if any
@@ -1256,7 +1263,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
     reptype = 0;
     segoverride = 0;
     useseg = cpu_regs.ds;
-    docontinue = 0;
+    uint8_t docontinue = 0;
     firstip = ip;
 
     while (!docontinue) {
@@ -1313,8 +1320,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
       }
     } // while
 
-    --cycles;
-    totalexec++;
+    ++_cycles;
+    ++_totalexec;
 
     switch (opcode) {
     case 0x0: /* 00 ADD Eb Gb */
@@ -2166,8 +2173,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      --_cycles;
       if (!reptype) {
         break;
       }
@@ -2193,8 +2200,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      --_cycles;
       if (!reptype) {
         break;
       }
@@ -2220,8 +2227,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      --_cycles;
       if (!reptype) {
         break;
       }
@@ -2247,8 +2254,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2676,8 +2683,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2704,8 +2711,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2739,8 +2746,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         break;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2776,8 +2783,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         break;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2815,8 +2822,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2840,8 +2847,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2865,8 +2872,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2891,8 +2898,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2924,8 +2931,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         break;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2957,8 +2964,8 @@ int32_t cpu_exec86(int32_t cycle_target) {
         break;
       }
 
-      ++totalexec;
-      --cycles;
+      ++_totalexec;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -3444,7 +3451,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
     }
   }
   // retired cycles
-  return cycle_target - cycles;
+  return (uint32_t)_cycles;
 }
 
 void cpu_prep_interupt(uint16_t intnum) {

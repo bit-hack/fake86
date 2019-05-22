@@ -86,52 +86,6 @@ static void tick_cursor(uint64_t cycles) {
   cursorvisible = cursor_accum > (CYCLES_PER_SECOND / 2);
 }
 
-extern uint8_t port3da;
-uint64_t cga_accum = 0;
-
-static void tick_cga(uint64_t cycles) {
-
-  // 1000000us in a second
-
-  // for (640×480 "60 Hz" non-interlaced) and (320×200 @ 70 Hz)
-  //   total htime 31.778us
-  //   hblank for   6.356us
-  //   total vtime 16.683ms
-  //   vblank for   1.430ms
-
-  // hblank for 20.0012587325% of line
-  // vblank for 8.57159983216% of frame
-
-  double total_htime =    31.778;
-  double total_vtime = 16683.0;
-
-  uint64_t num_lines = (uint64_t)(total_vtime / total_htime);
-
-  const uint64_t cycles_per_frame = CYCLES_PER_SECOND / 60;
-  const uint64_t cycles_per_line = cycles_per_frame / num_lines;
-
-  cga_accum = (cga_accum + cycles) % cycles_per_frame;
-
-  const uint64_t vpos = cga_accum;
-  const uint64_t hpos = cga_accum % cycles_per_line;
-
-  // set hblank bit
-  if (hpos < ((cycles_per_line * 20) / 100)) {
-    port3da |= 0x01;
-  }
-  else {
-    port3da &= 0xFE;
-  }
-
-  // set vblank bit
-  if (vpos > ((cycles_per_frame * 91) / 100)) {
-    port3da |= 0x08;
-  }
-  else {
-    port3da &= 0xF7;
-  }
-}
-
 static void tick_hardware(uint64_t cycles) {
   tick_cursor(cycles);
   // dma controller
@@ -140,20 +94,18 @@ static void tick_hardware(uint64_t cycles) {
   i8259_tick(cycles);
   // PIA
   i8255_tick(cycles);
+  // 
+  vga_timing_advance(cycles);
 }
 
 // fine grained timing
 void tick_hardware_fast(uint64_t cycles) {
   // PIT timer
   i8253_tick(cycles);
-  // CGA status register
-  tick_cga(cycles);
 }
 
 static void emulate_loop(void) {
 
-#define TICK_SLICES (100)
-#define CYCLES_PER_SLICE (CYCLES_PER_SECOND / TICK_SLICES)
 #define CYCLES_PER_REFRESH (CYCLES_PER_SECOND / 30)
 #define MSTOCYCLES(X) ((X) * (CYCLES_PER_SECOND / 1000))
 
@@ -271,6 +223,7 @@ static bool emulate_init() {
   i8255_init();
   initVideoPorts();
   mouse_init(0x3F8, 4);
+  vga_timing_init();
 #if USE_VIDEO_NEO
   if (!neo_render_init()) {
     return false;
@@ -333,12 +286,13 @@ int main(int argc, char *argv[]) {
   if (!load_roms()) {
     return -1;
   }
+
   // enter the emulation loop
   SDL_PauseAudio(0);
   running = 1;
   emulate_loop();
 
-  //
+  // close the audio device
   if (doaudio) {
     SDL_CloseAudio();
   }

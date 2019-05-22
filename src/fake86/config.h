@@ -68,6 +68,8 @@
 // cpu speed selection
 // 2Mhz cps
 #define CYCLES_PER_SECOND (2000000)
+#define TICK_SLICES (100)
+#define CYCLES_PER_SLICE (CYCLES_PER_SECOND / TICK_SLICES)
 
 // use new video emulator
 #define USE_VIDEO_NEO 0

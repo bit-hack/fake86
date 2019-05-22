@@ -431,13 +431,12 @@ static uint8_t port_read_cga(uint16_t portnum) {
   switch (portnum) {
   case 0x3D5:
     return (uint8_t)VGA_CRTC[portram[0x3D4]];
-  // status register
+  // cga status register
   case 0x3DA:
-    // this is updated in main.c
-    return port3da;
-  default:
-    return portram[portnum];
+    portram[0x3da] = vga_timing_get_3da();
+    break;
   }
+  return portram[portnum];
 }
 
 #define shiftVGA(value)                                                        \

@@ -86,6 +86,7 @@ void i8259_tick(uint64_t cycles);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video.c
 bool video_int_handler(int intnum);
+void video_tick(const uint64_t cycles);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video_neo.c
 uint8_t neo_mem_read(uint32_t addr32);
@@ -184,8 +185,6 @@ void log_printf(int channel, const char *fmt, ...);
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ports.c
 typedef void (*port_write_b_t)(uint16_t portnum, uint8_t value);
 typedef uint8_t (*port_read_b_t)(uint16_t portnum);
-typedef void (*port_write_w_t)(uint16_t portnum, uint16_t value);
-typedef uint16_t (*port_read_w_t)(uint16_t portnum);
 
 void portout(uint16_t portnum, uint8_t value);
 void portout16(uint16_t portnum, uint16_t value);
@@ -198,10 +197,6 @@ void set_port_write_redirector(uint16_t startport, uint16_t endport,
                                void *callback);
 void set_port_read_redirector(uint16_t startport, uint16_t endport,
                               void *callback);
-void set_port_write_redirector_16(uint16_t startport, uint16_t endport,
-                                  void *callback);
-void set_port_read_redirector_16(uint16_t startport, uint16_t endport,
-                                 void *callback);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- interrupt.c
 extern void intcall86(uint8_t intnum);
@@ -222,3 +217,11 @@ void neo_mem_write_B8000(uint32_t addr, uint8_t value);
 bool neo_init(void);
 void neo_int10_handler();
 void neo_tick(uint64_t cycles);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- vga_timing.c
+
+void vga_timing_init(void);
+void vga_timing_advance(const uint64_t cycles);
+uint8_t vga_timing_get_3da(void);
+bool vga_timing_should_flip(void);
+void vga_timing_did_flip(void);

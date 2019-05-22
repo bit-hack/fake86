@@ -1,0 +1,91 @@
+/*
+  Fake86: A portable, open-source 8086 PC emulator.
+  Copyright (C)2010-2013 Mike Chambers
+
+  This program is free software; you can redistribute it and/or
+  modify it under the terms of the GNU General Public License
+  as published by the Free Software Foundation; either version 2
+  of the License, or (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+  USA.
+*/
+
+#include "common.h"
+#include "../80x86/cpu.h"
+
+
+struct vga_timing_t {
+  uint32_t hlines, vlines, hz;
+  uint64_t px_rate;
+  double px_per_cycle, px_per_frame;
+  double px_accum;
+};
+
+static struct vga_timing_t _vga_timing;
+
+static bool _should_flip;
+
+void vga_timing_init(void) {
+
+  // see: http://tinyvga.com/vga-timing/640x480@60Hz
+
+  // valid for 640x400@70 and 640x350@70
+  _vga_timing.hlines = 800;
+  _vga_timing.vlines = 449;
+  _vga_timing.hz = 70;
+
+  // pixels per second
+  _vga_timing.px_rate =
+    _vga_timing.hlines * _vga_timing.vlines * _vga_timing.hz;
+  // pixels per cpu cycle
+  _vga_timing.px_per_cycle =
+    (double)_vga_timing.px_rate / (double)CYCLES_PER_SECOND;
+  // pixels per video frame
+  _vga_timing.px_per_frame =
+    (double)(_vga_timing.hlines * _vga_timing.vlines);
+}
+
+void vga_timing_advance(const uint64_t cycles) {
+  // accumulate and wrap
+  const double num_pixels = _vga_timing.px_per_cycle * (double)cycles;
+  // accumulate
+  _vga_timing.px_accum += num_pixels;
+  // wrap back into range
+  while (_vga_timing.px_accum > _vga_timing.px_per_frame) {
+    _should_flip = true;
+    // wrap back into range
+    _vga_timing.px_accum -= _vga_timing.px_per_frame;
+  }
+}
+
+uint8_t vga_timing_get_3da(void) {
+  // find our cycles part way through the slice
+  double acc = _vga_timing.px_accum;
+  acc += _vga_timing.px_per_cycle * (double)cpu_slice_ticks();
+  while (acc > _vga_timing.px_per_frame) {
+    acc -= _vga_timing.px_per_frame;
+  }
+  // current pixel in frame
+  const uint64_t px_number = (uint64_t)acc;
+  // horz and vert progression
+  const uint64_t hpos = px_number % _vga_timing.hlines;
+  const uint64_t vpos = px_number / _vga_timing.hlines;
+  // set vblank and hblank bits accordingly
+  return ((hpos >= 640) ? 1 : 0) | ((vpos >= 400) ? 8 : 0);
+}
+
+bool vga_timing_should_flip(void) {
+  return _should_flip;
+}
+
+void vga_timing_did_flip(void) {
+  _should_flip = false;
+}

@@ -52,9 +52,6 @@ static bool _port_ignore[0x10000];
 static port_write_b_t port_write_callback[0x10000];
 static port_read_b_t port_read_callback[0x10000];
 
-static port_write_w_t port_write_callback16[0x10000];
-static port_read_w_t port_read_callback16[0x10000];
-
 extern uint8_t verbose;
 
 
@@ -69,7 +66,7 @@ void portout(uint16_t portnum, uint8_t value) {
 
   portram[portnum] = value;
 
-  port_write_b_t cb = port_write_callback[portnum];
+  const port_write_b_t cb = port_write_callback[portnum];
   if (cb) {
     cb(portnum, value);
   } else {
@@ -84,7 +81,7 @@ void portout(uint16_t portnum, uint8_t value) {
 // 8bit port read
 uint8_t portin(uint16_t portnum) {
 
-  port_read_b_t cb = port_read_callback[portnum];
+  const port_read_b_t cb = port_read_callback[portnum];
   if (cb) {
     return cb(portnum);
   }
@@ -101,26 +98,16 @@ uint8_t portin(uint16_t portnum) {
 
 // 16bit port write
 void portout16(uint16_t portnum, uint16_t value) {
-  port_write_w_t cb = port_write_callback16[portnum];
-  if (cb) {
-    cb(portnum, value);
-  } else {
-    portout(portnum, (uint8_t)value);
-    portout(portnum + 1, (uint8_t)(value >> 8));
-  }
+  portout(portnum + 0, (uint8_t)(value >> 0));
+  portout(portnum + 1, (uint8_t)(value >> 8));
 }
 
 // 16bit port read
 uint16_t portin16(uint16_t portnum) {
-  port_read_w_t cb = port_read_callback16[portnum];
-  if (cb) {
-    return cb(portnum);
-  } else {
-    // do dual 8bit read
-    const uint16_t lo = (uint16_t)portin(portnum + 0);
-    const uint16_t hi = (uint16_t)portin(portnum + 1);
-    return (hi << 8) | lo;
-  }
+  // do dual 8bit read
+  const uint16_t lo = (uint16_t)portin(portnum + 0);
+  const uint16_t hi = (uint16_t)portin(portnum + 1);
+  return (hi << 8) | lo;
 }
 
 void set_port_write_redirector(uint16_t startport, uint16_t endport,
@@ -137,21 +124,7 @@ void set_port_read_redirector(uint16_t startport, uint16_t endport,
   }
 }
 
-void set_port_write_redirector_16(uint16_t startport, uint16_t endport,
-                                  void *callback) {
-  for (uint16_t i = startport; i <= endport; i++) {
-    port_write_callback16[i] = callback;
-  }
-}
-
-void set_port_read_redirector_16(uint16_t startport, uint16_t endport,
-                                 void *callback) {
-  for (uint16_t i = startport; i <= endport; i++) {
-    port_read_callback16[i] = callback;
-  }
-}
-
-void port_init() {
+void port_init(void) {
 
   // TODO
   // byte write to unknown port 0a0h        PIC 2	(Programmable Interrupt Controller 8259)
