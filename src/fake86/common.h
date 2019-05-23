@@ -88,11 +88,6 @@ void i8259_tick(uint64_t cycles);
 bool video_int_handler(int intnum);
 void video_tick(const uint64_t cycles);
 
-// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video_neo.c
-uint8_t neo_mem_read(uint32_t addr32);
-void neo_mem_write(uint32_t addr, uint8_t value);
-bool neo_init(void);
-
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- sermouse.c
 struct sermouse_s {
   uint8_t reg[8];
@@ -218,6 +213,7 @@ void neo_mem_write_B8000(uint32_t addr, uint8_t value);
 bool neo_init(void);
 void neo_int10_handler();
 void neo_tick(uint64_t cycles);
+int neo_get_video_mode(void);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- vga_timing.c
 

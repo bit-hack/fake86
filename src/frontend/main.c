@@ -77,7 +77,7 @@ static uint64_t get_ticks() {
 #endif
 }
 
-static void tick_cursor(uint64_t cycles) {
+static void cursor_tick(uint64_t cycles) {
   static uint64_t cursor_accum;
   cursor_accum += cycles;
   if (cursor_accum >= CYCLES_PER_SECOND) {
@@ -87,7 +87,7 @@ static void tick_cursor(uint64_t cycles) {
 }
 
 static void tick_hardware(uint64_t cycles) {
-  tick_cursor(cycles);
+  cursor_tick(cycles);
   // dma controller
   i8237_tick(cycles);
   // PIC controller
@@ -98,10 +98,10 @@ static void tick_hardware(uint64_t cycles) {
   vga_timing_advance(cycles);
   // PIT timer
   i8253_tick(cycles);
-}
-
-// fine grained timing
-void tick_hardware_fast(uint64_t cycles) {
+  //
+#if USE_VIDEO_NEO
+  neo_tick(cycles);
+#endif
 }
 
 static void emulate_loop(void) {
@@ -110,7 +110,6 @@ static void emulate_loop(void) {
 #define MSTOCYCLES(X) ((X) * (CYCLES_PER_SECOND / 1000))
 
   int64_t cpu_acc = 0;
-  int64_t video_acc = 0;
   uint64_t bench_acc = 0;
 
   uint64_t old_ms = get_ticks();
@@ -136,12 +135,10 @@ static void emulate_loop(void) {
       const uint64_t executed = tick_cpu(CYCLES_PER_SLICE);
       bench_acc += executed;
       cpu_acc += executed;
-      video_acc += executed;
 
-      // update video
-      if (video_acc >= CYCLES_PER_REFRESH) {
-        video_acc -= CYCLES_PER_REFRESH;
+      if (vga_timing_should_flip()) {
         video_redraw = true;
+        vga_timing_did_flip();
       }
 
       // tick peripherals

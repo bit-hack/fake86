@@ -22,6 +22,8 @@
 
 #include "../80x86/cpu.h"
 
+#define MAX_PAGES 16
+
 enum system_t {
   video_mda,
   video_cga,
@@ -33,6 +35,14 @@ enum mode_t {
   mode_text,
   mode_graphics,
 };
+
+struct cursor_t {
+  uint32_t x, y;
+  uint8_t size;
+};
+
+// cursor per page
+static struct cursor_t _cursor[MAX_PAGES];
 
 // current video mode
 static uint8_t _video_mode = 0x00;
@@ -111,6 +121,10 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
 // ports 03D0-03DF
 
 static uint8_t cga_port_read(uint16_t portnum) {
+  switch (portnum) {
+  case 0x3da:
+    return portram[0x3da] = vga_timing_get_3da();
+  }
   return 0;
 }
 
@@ -126,6 +140,8 @@ void neo_tick(uint64_t cycles) {
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 static void neo_set_video_mode(uint8_t al) {
+
+  log_printf(LOG_CHAN_VIDEO, "set video mode to %d", (int)al);
 
   // check for no blanking
   no_blanking = ((cpu_regs.al & 0x80) != 0);
@@ -169,27 +185,37 @@ static void neo_set_video_mode(uint8_t al) {
   if (al >= 0x0D && al <= 0x13) {
     _base = 0xA0000;
   }
+
+  _video_mode = al;
 }
 
-// set cursor size
-static do_int10_01() {
+// set cursor shape
+static void do_int10_01(void) {
 }
 
 // set cursor position
-static do_int10_02() {
+static void do_int10_02(void) {
+  const int page = cpu_regs.bh;
+  assert(page <= MAX_PAGES);
+  struct cursor_t *c = &_cursor[page];
+  c->x = cpu_regs.dl;
+  c->y = cpu_regs.dh;
 }
 
 // get cursor mode and shape
-static do_int10_03(int page_num) {
+static void do_int10_03(int page_num) {
+  const int page = cpu_regs.bh;
+  assert(page <= MAX_PAGES);
+  struct cursor_t *c = &_cursor[page];
   cpu_regs.ax = 0;
-  cpu_regs.ch = 0;
-  cpu_regs.cl = 0;
-  cpu_regs.dh = 0;
-  cpu_regs.dl = 0;
+  cpu_regs.ch = 0; // start scanline
+  cpu_regs.cl = 0; // end scanline
+  cpu_regs.dh = c->y;
+  cpu_regs.dl = c->x;
 }
 
 // select active display page 
-static do_int10_05() {
+static void do_int10_05(void) {
   switch (cpu_regs.al) {
   case 0x81: // cpu page regs
   case 0x82: // crt page regs
@@ -199,48 +225,48 @@ static do_int10_05() {
 }
 
 // scroll window up
-static do_int10_06() {
+static void do_int10_06(void) {
 }
 
 // scroll window down
-static do_int10_07() {
+static void do_int10_07(void) {
 }
 
 // read character and attribute at cursor position
-static do_int10_08() {
+static void do_int10_08(void) {
 }
 
 // write character and attribute at cursor position 
-static do_int10_09() {
+static void do_int10_09(void) {
 }
 
 // write character only at cursor position
-static do_int10_0A() {
+static void do_int10_0A(void) {
 }
 
 // teletype output
-static do_int10_0E() {
+static void do_int10_0E(void) {
 }
 
-static do_int10_0F() {
+static void do_int10_0F(void) {
   cpu_regs.ah = _cols;
   cpu_regs.al = _video_mode | (no_blanking ? 0x80 : 0x00);
   cpu_regs.bh = _active_page;
 }
 
 // write to dac registers (vga) or Alternate Select (ega)?
-static do_int10_12() {
+static void do_int10_12(void) {
 }
 
 // write string (EGA+)
-static do_int10_13() {
+static void do_int10_13(void) {
 }
 
 // get/set display combination
-static do_int10_1AXX() {
+static void do_int10_1AXX(void) {
 }
 
-static do_int10_30XX() {
+static void do_int10_30XX(void) {
   cpu_regs.cx = 0;
   cpu_regs.dx = 0;
 }
@@ -288,4 +314,8 @@ bool neo_init(void) {
   set_port_write_redirector(0x3D0, 0x3DF, cga_port_write);
 
   return true;
+}
+
+int neo_get_video_mode(void) {
+  return _video_mode;
 }
