@@ -363,7 +363,7 @@ void i8253_tick(uint64_t cycles) {
   // Convert from the CPU cycles to PIT CLK
   const int64_t pit_cycles = (cycles * 1193182) / CYCLES_PER_SECOND;
 
-#if 1
+#if 0
   // TODO: Remove when channel 0 is working correctly
   // Generate an interupt every 18.2Hz on IRQ0
   irq0_accum += cycles;
@@ -405,4 +405,9 @@ void i8253_tick(uint64_t cycles) {
     }
   }
 #endif
+}
+
+uint64_t i8253_cycles_before_irq(void) {
+  // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
+  return ((uint64_t)i8253.channel[0].counter * CYCLES_PER_SECOND) / 1193182;
 }

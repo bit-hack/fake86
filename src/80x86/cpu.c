@@ -38,7 +38,6 @@ uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
 uint32_t temp1, temp2, temp3, temp32, ea;
 uint8_t running = 0;
 
-static uint64_t _totalexec;
 static uint64_t _cycles;
 
 uint64_t cpu_slice_ticks(void) {
@@ -1225,28 +1224,22 @@ static void op_grp5() {
 // return executed cycles
 int32_t cpu_exec86(int32_t cycle_target) {
 
-  static uint16_t firstip;
   static uint16_t trap_toggle = 0;
 
   _cycles = 0;
 
-  while (running && _cycles < cycle_target) {
+  // set ourselves some cycle targets
+  const uint64_t target =
+    SDL_max(1, SDL_min(i8253_cycles_before_irq(), cycle_target));
 
-    if (_totalexec > TIMING_INTERVAL) {
-      tick_hardware_fast(_totalexec);
-      _totalexec = 0;
-    }
+  while (running && _cycles < target) {
 
     // if trap is asserted
     if (trap_toggle) {
       _intcall_handler(1);
     }
 
-    if (cpu_flags.tf) {
-      trap_toggle = 1;
-    } else {
-      trap_toggle = 0;
-    }
+    trap_toggle = cpu_flags.tf;
 
     const bool pending_irq = cpu_flags.ifl && (i8259.irr & (~i8259.imr));
     if (!trap_toggle && pending_irq) {
@@ -1264,23 +1257,14 @@ int32_t cpu_exec86(int32_t cycle_target) {
     segoverride = 0;
     useseg = cpu_regs.ds;
     uint8_t docontinue = 0;
-    firstip = ip;
+    uint16_t firstip = ip;
 
     while (!docontinue) {
-      cpu_regs.cs = cpu_regs.cs & 0xFFFF;
-      ip = ip & 0xFFFF;
+      cpu_regs.cs &= 0xFFFF;
+      ip &= 0xFFFF;
       savecs = cpu_regs.cs;
       saveip = ip;
-#ifdef USE_PREFETCH_QUEUE
-      ea = segbase(savecs) + (uint32_t)saveip;
-      if ((ea < prefetch_base) || (ea > (prefetch_base + 5))) {
-        memcpy(&prefetch[0], &RAM[ea], 6);
-        prefetch_base = ea;
-      }
-      opcode = prefetch[ea - prefetch_base];
-#else
       opcode = getmem8(cpu_regs.cs, ip);
-#endif
       StepIP(1);
 
       switch (opcode) {
@@ -1321,7 +1305,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
     } // while
 
     ++_cycles;
-    ++_totalexec;
 
     switch (opcode) {
     case 0x0: /* 00 ADD Eb Gb */
@@ -1412,9 +1395,11 @@ int32_t cpu_exec86(int32_t cycle_target) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_or16();
+#ifdef CPU_286
       if ((oper1 == 0xF802) && (oper2 == 0xF802)) {
         cpu_flags.sf = 0; /* cheap hack to make Wolf 3D think we're a 286 so it plays */
       }
+#endif
       cpu_setreg16(reg, res16);
       break;
 
@@ -2173,7 +2158,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       --_cycles;
       if (!reptype) {
         break;
@@ -2200,7 +2184,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       --_cycles;
       if (!reptype) {
         break;
@@ -2227,7 +2210,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       --_cycles;
       if (!reptype) {
         break;
@@ -2254,7 +2236,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2683,7 +2664,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2711,7 +2691,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2746,7 +2725,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         break;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2783,7 +2761,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         break;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2822,7 +2799,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2847,7 +2823,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2872,7 +2847,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2898,7 +2872,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2931,7 +2904,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         break;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;
@@ -2964,7 +2936,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
         break;
       }
 
-      ++_totalexec;
       ++_cycles;
       if (!reptype) {
         break;

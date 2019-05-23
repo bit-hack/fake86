@@ -84,7 +84,9 @@ static uint8_t _keys[256];
 static uint8_t _key_index = 0;
 
 void i8255_key_push(uint8_t key) {
+#if 0
   printf("pushing key %d\n", key);
+#endif
   if (USE_KEY_BUFFER) {
     if (_key_index >= sizeof(_keys)) {
       // key buffer overflow
@@ -227,5 +229,7 @@ void i8255_key_required(void) {
     // decrement key index
     _key_index -= (_key_index > 0);
   }
+#if 0
   printf("popping key %d\n", i8255.port_in[0]);
+#endif
 }

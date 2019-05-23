@@ -96,12 +96,12 @@ static void tick_hardware(uint64_t cycles) {
   i8255_tick(cycles);
   // 
   vga_timing_advance(cycles);
+  // PIT timer
+  i8253_tick(cycles);
 }
 
 // fine grained timing
 void tick_hardware_fast(uint64_t cycles) {
-  // PIT timer
-  i8253_tick(cycles);
 }
 
 static void emulate_loop(void) {
