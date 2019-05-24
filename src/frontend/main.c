@@ -62,7 +62,6 @@ static void tick_render() {
 #if USE_VIDEO_NEO
   neo_render_tick();
 #else
-  updatedscreen = 1;
   render_check_for_mode_change();
   render_update();
 #endif
@@ -218,14 +217,20 @@ static bool emulate_init() {
   i8259_init();
   i8237_init();
   i8255_init();
-  initVideoPorts();
   mouse_init(0x3F8, 4);
+  // initalize vga refresh timing
   vga_timing_init();
 #if USE_VIDEO_NEO
+  // initalize new video renderer
   if (!neo_render_init()) {
     return false;
   }
+  if (!neo_init()) {
+    return false;
+  }
 #else
+  // initalize old video renderer
+  initVideoPorts();
   if (!render_init()) {
     return false;
   }
@@ -241,11 +246,13 @@ static bool load_roms(void) {
   }
   // load other roms
   if (biossize <= (1024 * 8)) {
-    if (!mem_loadrom(0xF6000UL, PATH_DATAFILES "rombasic.bin", 0)) {
-      return false;
+    const char *rom_basic = "rombasic.bin";
+    if (!mem_loadrom(0xF6000UL, "rombasic.bin", 0)) {
+      log_printf(LOG_CHAN_MEM, "unable to load '%s'", rom_basic);
     }
-    if (!mem_loadrom(0xC0000UL, PATH_DATAFILES "videorom.bin", 1)) {
-      return false;
+    const char *rom_video = "videorom.bin";
+    if (!mem_loadrom(0xC0000UL, "videorom.bin", 1)) {
+      log_printf(LOG_CHAN_MEM, "unable to load '%s'", rom_video);
     }
   }
   return true;

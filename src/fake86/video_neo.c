@@ -22,6 +22,11 @@
 
 #include "../80x86/cpu.h"
 
+
+// text mode layout:
+//  [[char], [attr]], [[char], [attr]], ...
+
+
 // cga has 16kb ram at 0xB8000 for framebuffer
 // frame buffer is incompletely decoded and is mirrored at 0xBC000
 // text mode page is either 2k bytes (40x25x2) or 4k bytes (80x25x2)
@@ -104,34 +109,40 @@ void neo_mem_write_B8000(uint32_t addr, uint8_t value) {
 // ports 03B0-03BF
 
 static uint8_t mda_port_read(uint16_t portnum) {
-  return 0;
+  printf("port %04x -> %02x\n", portnum, portram[portnum]);
+  return portram[portnum];
 }
 
 static void mda_port_write(uint16_t portnum, uint8_t value) {
+//  portram[portnum] = value;
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 // ports 03C0-03CF
 
 static uint8_t ega_port_read(uint16_t portnum) {
-  return 0;
+  return portram[portnum];
 }
 
 static void ega_port_write(uint16_t portnum, uint8_t value) {
+  portram[portnum] = value;
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 // ports 03D0-03DF
 
 static uint8_t cga_port_read(uint16_t portnum) {
+  printf("%04x r\n", (int)portnum);
   switch (portnum) {
   case 0x3da:
     return portram[0x3da] = vga_timing_get_3da();
   }
-  return 0;
+  return portram[portnum];
 }
 
 static void cga_port_write(uint16_t portnum, uint8_t value) {
+  printf("%04x w %02x\n", (int)portnum, (int)value);
+  portram[portnum] = value;
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -147,8 +158,8 @@ static void _clear_text_buffer(void) {
   const uint32_t mem_size = 1024 * 16;
 
   for (int i=0; i<mem_size; i+=2) {
-    RAM[i + 0] = 0x0;
-    RAM[i + 1] = 0x0;
+    RAM[0xB8000 + i + 0] = 0x0;
+    RAM[0xB8000 + i + 1] = 0x0;
   }
 }
 
@@ -194,6 +205,7 @@ static void neo_set_video_mode(uint8_t al) {
   // memory base
   if (al >= 0x00 && al <= 0x07) {
     _base = 0xB8000;
+    _clear_text_buffer();
   }
   if (al >= 0x0D && al <= 0x13) {
     _base = 0xA0000;
@@ -289,7 +301,8 @@ bool neo_int10_handler(void) {
   switch (cpu_regs.ah) {
   case 0x00:
     neo_set_video_mode(cpu_regs.al);
-    return true;
+    // must return false
+    return false;
 #if 0
   case 0x01: do_int10_01(); return;
   case 0x02: do_int10_02(); return;
@@ -320,9 +333,11 @@ bool neo_int10_handler(void) {
 bool neo_init(void) {
 
   // mda
-  set_port_read_redirector(0x3B0, 0x3BF, mda_port_read);
-  set_port_write_redirector(0x3B0, 0x3BF, mda_port_write);
+  set_port_read_redirector(0x3B0, 0x3BB, mda_port_read);
+  set_port_write_redirector(0x3B0, 0x3BB, mda_port_write);
 
+  //XXX: with this disabled we see the Tseng labs boot screen
+#if 0
   // ega
   set_port_read_redirector(0x3C0, 0x3CF, ega_port_read);
   set_port_write_redirector(0x3C0, 0x3CF, ega_port_write);
@@ -330,6 +345,7 @@ bool neo_init(void) {
   // cga
   set_port_read_redirector(0x3D0, 0x3DF, cga_port_read);
   set_port_write_redirector(0x3D0, 0x3DF, cga_port_write);
+#endif
 
   return true;
 }

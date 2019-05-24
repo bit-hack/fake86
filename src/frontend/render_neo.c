@@ -82,8 +82,11 @@ static void _neo_render_mode_3(void) {
       // grab character and attribute
       const uint8_t ch = RAM[src + 0];
       const uint8_t at = RAM[src + 1];
+      // decode colour from attribute
+      const uint32_t rgba = palette_cga_rgb[at & 0xf];
+      const uint32_t rgbb = palette_cga_rgb[at >> 4];
       // draw the glyph
-      font_draw_glyph_8x16(dstx, pitch, ch, -1, 0);
+      font_draw_glyph_8x16(dstx, pitch, ch + 0x100, rgba, rgbb);
       // step over to next glyph
       dstx += chw;
       // step over character and attribute

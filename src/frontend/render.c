@@ -24,6 +24,7 @@
    going to add hardware accelerated scaling soon. */
 
 #include "../fake86/common.h"
+#include "../fake86/video.h"
 
 
 SDL_Surface *screen = NULL;
@@ -50,7 +51,6 @@ uint32_t nw, nh;
 // time since last screen update
 static uint32_t cursorprevtick = 0;
 
-uint64_t totalframes = 0;
 uint32_t framedelay = 20;
 
 // XXX: make this atomic
@@ -89,10 +89,9 @@ void render_update(void) {
   if (screen == NULL) {
     return;
   }
-  if (updatedscreen) {
+  if (vga_timing_should_flip()) {
     render_redraw();
-    totalframes++;
-    updatedscreen = 0;
+    vga_timing_did_flip();
   }
 }
 
@@ -489,7 +488,6 @@ static void render_redraw(void) {
         }
     }
   }
-
   // blit display to the screen
   if (((nw << 1) <= (uint32_t)screen->w) &&
       ((nh << 1) <= (uint32_t)screen->h)) {
