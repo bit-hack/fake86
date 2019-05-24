@@ -23,6 +23,8 @@
 
 
 #include "../fake86/common.h"
+#include "../fake86/video.h"
+
 
 static SDL_Surface *_surface;
 
@@ -58,17 +60,6 @@ static void _neo_render_mode_unknown(void) {
   }
 }
 
-static void _draw_glyph_8x16(uint32_t *dst, uint32_t pitch, uint8_t ch, uint8_t at) {
-  uint32_t *dsty = dst;
-  for (int y=0; y<16; ++y) {
-    uint32_t *dstx = dsty;
-    for (int x=0; x<8; ++x) {
-      dstx[x] = ch;
-    }
-    dsty += pitch;
-  }
-}
-
 // 80x25 16-colour text mode
 static void _neo_render_mode_3(void) {
   // text mode buffer address
@@ -92,14 +83,14 @@ static void _neo_render_mode_3(void) {
       const uint8_t ch = RAM[src + 0];
       const uint8_t at = RAM[src + 1];
       // draw the glyph
-      _draw_glyph_8x16(dstx, pitch, ch, at);
+      font_draw_glyph_8x16(dstx, pitch, ch, -1, 0);
       // step over to next glyph
       dstx += chw;
       // step over character and attribute
       src += 2;
     }
     // step over glyph line
-    dsty += (_surface->pitch / sizeof(uint32_t)) * chh;
+    dsty += pitch * chh;
   }
 }
 

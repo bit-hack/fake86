@@ -64,6 +64,10 @@ void write86(uint32_t addr, uint8_t value) {
   }
   if (addr >= 0xA0000) {
     if (addr >= 0xB8000) {
+      if (addr >= 0xBC000) {
+        // address is mirrored
+        addr -= 0x4000;
+      }
       neo_mem_write_B8000(addr, value); // cga
       return;
     }
@@ -71,10 +75,8 @@ void write86(uint32_t addr, uint8_t value) {
       neo_mem_write_B0000(addr, value); // mda
       return;
     }
-    if (addr >= 0xA0000) {
-      neo_mem_write_A0000(addr, value); // vga/ega
-      return;
-    }
+    neo_mem_write_A0000(addr, value); // vga/ega
+    return;
   }
   else {
     mem_write_8(addr, value);
@@ -116,6 +118,10 @@ uint8_t read86(uint32_t addr) {
 #if USE_VIDEO_NEO
   if (addr >= 0xA0000 && addr <= 0xC0000) {
     if (addr >= 0xB8000) {
+      if (addr >= 0xBC000) {
+        // address is mirrored
+        addr -= 0x4000;
+      }
       return neo_mem_read_B8000(addr); // cga
     }
     if (addr >= 0xB0000) {

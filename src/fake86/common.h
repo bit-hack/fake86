@@ -211,7 +211,7 @@ void neo_mem_write_B0000(uint32_t addr, uint8_t value);
 void neo_mem_write_B8000(uint32_t addr, uint8_t value);
 
 bool neo_init(void);
-void neo_int10_handler();
+bool neo_int10_handler(void);
 void neo_tick(uint64_t cycles);
 int neo_get_video_mode(void);
 

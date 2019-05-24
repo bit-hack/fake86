@@ -22,6 +22,9 @@
 
 #include "../80x86/cpu.h"
 
+// cga has 16kb ram at 0xB8000 for framebuffer
+// frame buffer is incompletely decoded and is mirrored at 0xBC000
+// text mode page is either 2k bytes (40x25x2) or 4k bytes (80x25x2)
 #define MAX_PAGES 16
 
 enum system_t {
@@ -138,6 +141,16 @@ void neo_tick(uint64_t cycles) {
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+static void _clear_text_buffer(void) {
+
+  const uint32_t mem_size = 1024 * 16;
+
+  for (int i=0; i<mem_size; i+=2) {
+    RAM[i + 0] = 0x0;
+    RAM[i + 1] = 0x0;
+  }
+}
 
 static void neo_set_video_mode(uint8_t al) {
 
@@ -272,9 +285,12 @@ static void do_int10_30XX(void) {
 }
 
 // BIOS int 10h Video Services handler
-void neo_int10_handler() {
+bool neo_int10_handler(void) {
   switch (cpu_regs.ah) {
-  case 0x00: neo_set_video_mode(cpu_regs.al); return;
+  case 0x00:
+    neo_set_video_mode(cpu_regs.al);
+    return true;
+#if 0
   case 0x01: do_int10_01(); return;
   case 0x02: do_int10_02(); return;
   case 0x03: do_int10_03(cpu_regs.bh); return;
@@ -293,7 +309,9 @@ void neo_int10_handler() {
   default:
     // handle me please
     __debugbreak();
+#endif
   }
+  return false;
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----

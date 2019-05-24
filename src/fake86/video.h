@@ -20,39 +20,11 @@
 
 #include "common.h"
 
-#include "../80x86/cpu.h"
 
+void font_draw_glyph_8x8(
+  uint32_t *dst, const uint32_t pitch, uint16_t ch,
+  const uint32_t rgb_a, const uint32_t rgb_b);
 
-bool video_int_handler(int intnum);
-
-void intcall86(uint8_t intnum) {
-
-  switch (intnum) {
-  // Video services
-  case 0x10:
-#if USE_VIDEO_NEO
-    if (neo_int10_handler()) {
-      return;
-    }
-    break;
-#else
-    if (video_int_handler(intnum)) {
-      return;
-    }
-    break;
-#endif
-  // Bootstrap loader interupt
-  case 0x19:
-    disk_bootstrap(intnum);
-    return;
-  // Disk services
-  case 0x13:
-  case 0xFD:
-    disk_int_handler(intnum);
-    return;
-  }
-
-  // if interupt was not handled then let the CPU
-  // jump to the interupt handler 
-  cpu_prep_interupt(intnum);
-}
+void font_draw_glyph_8x16(
+  uint32_t *dst, const uint32_t pitch, uint16_t ch,
+  const uint32_t rgb_a, const uint32_t rgb_b);
