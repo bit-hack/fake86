@@ -89,10 +89,7 @@ void render_update(void) {
   if (screen == NULL) {
     return;
   }
-  if (vga_timing_should_flip()) {
-    render_redraw();
-    vga_timing_did_flip();
-  }
+  render_redraw();
 }
 
 void render_check_for_mode_change(void) {
