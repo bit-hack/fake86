@@ -128,6 +128,10 @@ static void i8255_port_write(uint16_t port, uint8_t value) {
   // PORTB
   case 0x61:
     i8255.port_out[port & 0x3] = value;
+    // update audio
+    if ((port & 0x3) == 1) {
+      audio_pc_speaker_enable(value & 1);
+    }
     break;
   // PORTC
   case 0x62:

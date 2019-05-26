@@ -116,6 +116,11 @@ static void i8253_channel_write(int channel,
   // calculate frequency in Hz
   c->frequency = 1193182 / (c->rvalue == 0 ? 0xffff : c->rvalue);
 
+  // update audio
+  if (channel == 2) {
+    audio_pc_speaker_freq(c->frequency);
+  }
+
 #if DEVELOPER
   printf("chan %d freq %d\n", channel, c->frequency);
 #endif

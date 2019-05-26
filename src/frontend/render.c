@@ -56,7 +56,7 @@ uint32_t framedelay = 20;
 // XXX: make this atomic
 volatile bool scrmodechange = false;
 
-uint8_t noscale = 0, nosmooth = 1, renderbenchmark = 0, doaudio = 1;
+uint8_t noscale = 0, nosmooth = 1, renderbenchmark = 0;
 char windowtitle[128];
 
 void initcga();

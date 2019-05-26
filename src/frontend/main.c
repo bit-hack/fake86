@@ -38,7 +38,6 @@ bool neo_render_init();
 void neo_render_tick();
 
 extern bool cursorvisible;
-extern uint8_t doaudio;
 extern uint8_t updatedscreen;
 
 const char *biosfile = "pcxtbios.bin";
@@ -97,6 +96,8 @@ static void tick_hardware(uint64_t cycles) {
   vga_timing_advance(cycles);
   // PIT timer
   i8253_tick(cycles);
+  // tick audio event stream
+  audio_tick(cycles);
   //
 #if USE_VIDEO_NEO
   neo_tick(cycles);
@@ -189,7 +190,7 @@ static bool sdl_audio_init(void) {
 
   if (SDL_OpenAudio(&desired, &obtained)) {
     log_printf(LOG_CHAN_AUDIO, "SDL_OpenAudio failed");
-    doaudio = false;
+    audio_enable = false;
     return false;
   }
 
@@ -268,7 +269,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   // initalize SDL
-  const int flags = SDL_INIT_VIDEO | (doaudio ? SDL_INIT_AUDIO : 0);
+  const int flags = SDL_INIT_VIDEO | (audio_enable ? SDL_INIT_AUDIO : 0);
   if (SDL_Init(flags)) {
     log_printf(LOG_CHAN_SDL, "unable to init sdl");
     return 1;
@@ -277,7 +278,7 @@ int main(int argc, char *argv[]) {
     log_printf(LOG_CHAN_SDL, "initalized sdl");
   }
   // initalize the audio stream
-  if (doaudio) {
+  if (audio_enable) {
     if (!sdl_audio_init()) {
       return 1;
     }
@@ -297,7 +298,7 @@ int main(int argc, char *argv[]) {
   emulate_loop();
 
   // close the audio device
-  if (doaudio) {
+  if (audio_enable) {
     SDL_CloseAudio();
   }
 

@@ -50,13 +50,15 @@
   #endif
 #endif
 
-// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- main.c
-void tick_hardware_fast(uint64_t cycles);
-
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- audio.c
 void audio_init(uint32_t sample_rate);
 void audio_close(void);
 uint32_t audio_callback(int16_t *samples, uint32_t num_samples);
+void audio_tick(const uint64_t cycles);
+void audio_pc_speaker_freq(const uint32_t freq);
+void audio_pc_speaker_enable(bool enable);
+
+extern bool audio_enable;
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8259.c
 struct structpic {
@@ -204,11 +206,7 @@ bool rom_insert();
 
 // memory access for video cards
 uint8_t neo_mem_read_A0000(uint32_t addr);
-uint8_t neo_mem_read_B0000(uint32_t addr);
-uint8_t neo_mem_read_B8000(uint32_t addr);
 void neo_mem_write_A0000(uint32_t addr, uint8_t value);
-void neo_mem_write_B0000(uint32_t addr, uint8_t value);
-void neo_mem_write_B8000(uint32_t addr, uint8_t value);
 
 bool neo_init(void);
 bool neo_int10_handler(void);

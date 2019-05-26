@@ -69,6 +69,29 @@ static uint8_t _active_page = 0;
 
 static bool no_blanking = false;
 
+
+// CRTC (6845) address register
+static uint8_t crt_reg_addr = 0;
+
+// CRTC (6845) data registers
+//
+// 0 - horz. total
+// 1 - horz. displayed
+// 2 - horz. sync pos
+// 3 - horz. & vert. sync widths
+// 4 - vert. total
+// 5 - vert. total adjust
+// 6 - vert. displayed
+// 7 - vert. sync pos
+// 8 - interlace and skew
+// 9 - max raster address
+// 12 - display start address hi
+// 13 - display start address lo
+// 14 - cursor address hi
+// 15 - cursor address lo
+//
+static uint8_t crt_register[32];
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 // EGA/VGA
@@ -82,39 +105,48 @@ void neo_mem_write_A0000(uint32_t addr, uint8_t value) {
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
-
-// MDA
-uint8_t neo_mem_read_B0000(uint32_t addr) {
-  return RAM[addr];
-}
-
-// MDA
-void neo_mem_write_B0000(uint32_t addr, uint8_t value) {
-  RAM[addr] = value;
-}
-
-// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
-
-// CGA
-uint8_t neo_mem_read_B8000(uint32_t addr) {
-  return RAM[addr];
-}
-
-// CGA
-void neo_mem_write_B8000(uint32_t addr, uint8_t value) {
-  RAM[addr] = value;
-}
-
-// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 // ports 03B0-03BF
 
+// 5 - blinking     (1 enable, 0 disable)
+// 3 - video output (1 enable, 0 disable)
+// 1 - black and white
+// 0 - high res mode
+static uint8_t mda_control = 0;
+
+// 3 - 1 if currently drawing something bright
+// 0 - horz. retrace (1 true, 0 false)
+static uint8_t mda_status = 0;
+
 static uint8_t mda_port_read(uint16_t portnum) {
-  printf("port %04x -> %02x\n", portnum, portram[portnum]);
-  return portram[portnum];
+  if (portnum >= 0x03B0 && portnum <= 0x03B7) {
+    if (portnum & 1) {
+      return crt_register[crt_reg_addr];
+    } else {
+      // write only but lets return it anyway
+      return crt_reg_addr;
+    }
+  }
+  else {
+    if (portnum == 0x03BA) {
+      const uint8_t port_3da = vga_timing_get_3da();
+      mda_status = (port_3da & 1) ? 1 : 0;
+      return mda_status | 0xf0;
+    }
+  }
+  return 0;
 }
 
 static void mda_port_write(uint16_t portnum, uint8_t value) {
-//  portram[portnum] = value;
+  if (portnum >= 0x03B0 && portnum <= 0x03B7) {
+    if (portnum & 1) {
+      crt_register[crt_reg_addr] = value;
+    } else {
+      crt_reg_addr = value & 0x1f;
+    }
+  }
+  if (portnum == 0x03b8) {
+    mda_control = value;
+  }
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -131,18 +163,53 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 // ports 03D0-03DF
 
+static uint8_t cga_control = 0;
+static uint8_t cga_palette = 0;
+
 static uint8_t cga_port_read(uint16_t portnum) {
-  printf("%04x r\n", (int)portnum);
+
+  if (portnum >= 0x03d0 && portnum <= 0x03d7) {
+    if (portnum & 1) {
+      return crt_register[crt_reg_addr];
+    } else {
+      return crt_reg_addr;
+    }
+  }
+
   switch (portnum) {
+  case 0x3d8: // mode control register
+    return cga_control;
+  case 0x3d9: // colour control register
+    return cga_palette;
   case 0x3da:
     return portram[0x3da] = vga_timing_get_3da();
+  default:
+    printf("%04x r\n", (int)portnum);
   }
   return portram[portnum];
 }
 
 static void cga_port_write(uint16_t portnum, uint8_t value) {
-  printf("%04x w %02x\n", (int)portnum, (int)value);
-  portram[portnum] = value;
+  if (portnum >= 0x03d0 && portnum <= 0x03d7) {
+    if (portnum & 1) {
+      crt_register[crt_reg_addr] = value;
+    } else {
+      crt_reg_addr = value & 0x1f;
+    }
+  }
+  else {
+    switch (portnum) {
+    case 0x3d8:
+      cga_control = value;
+      break;
+    case 0x3d9:
+      cga_palette = value;
+      break;
+    default:
+      printf("%04x w %02x\n", (int)portnum, (int)value);
+      portram[portnum] = value;
+    }
+  }
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -165,7 +232,7 @@ static void _clear_text_buffer(void) {
 
 static void neo_set_video_mode(uint8_t al) {
 
-  log_printf(LOG_CHAN_VIDEO, "set video mode to %d", (int)al);
+  log_printf(LOG_CHAN_VIDEO, "set video mode to %02Xh", (int)al);
 
   // check for no blanking
   no_blanking = ((cpu_regs.al & 0x80) != 0);
@@ -303,26 +370,6 @@ bool neo_int10_handler(void) {
     neo_set_video_mode(cpu_regs.al);
     // must return false
     return false;
-#if 0
-  case 0x01: do_int10_01(); return;
-  case 0x02: do_int10_02(); return;
-  case 0x03: do_int10_03(cpu_regs.bh); return;
-  case 0x05: do_int10_05(); return;
-  case 0x06: do_int10_06(); return;
-  case 0x07: do_int10_07(); return;
-  case 0x08: do_int10_08(); return;
-  case 0x09: do_int10_09(); return;
-  case 0x0A: do_int10_0A(); return;
-  case 0x0E: do_int10_0E(); return;
-  case 0x0F: do_int10_0F(); return;
-  case 0x12: do_int10_12(); return;
-  case 0x13: do_int10_13(); return;
-  case 0x1A: do_int10_1AXX(); return;
-  case 0x30: do_int10_30XX(); return;
-  default:
-    // handle me please
-    __debugbreak();
-#endif
   }
   return false;
 }
@@ -333,11 +380,9 @@ bool neo_int10_handler(void) {
 bool neo_init(void) {
 
   // mda
-  set_port_read_redirector(0x3B0, 0x3BB, mda_port_read);
-  set_port_write_redirector(0x3B0, 0x3BB, mda_port_write);
+  set_port_read_redirector(0x3B0, 0x3BF, mda_port_read);
+  set_port_write_redirector(0x3B0, 0x3BF, mda_port_write);
 
-  //XXX: with this disabled we see the Tseng labs boot screen
-#if 0
   // ega
   set_port_read_redirector(0x3C0, 0x3CF, ega_port_read);
   set_port_write_redirector(0x3C0, 0x3CF, ega_port_write);
@@ -345,7 +390,6 @@ bool neo_init(void) {
   // cga
   set_port_read_redirector(0x3D0, 0x3DF, cga_port_read);
   set_port_write_redirector(0x3D0, 0x3DF, cga_port_write);
-#endif
 
   return true;
 }

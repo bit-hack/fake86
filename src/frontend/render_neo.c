@@ -32,6 +32,10 @@ static SDL_Surface *_surface;
 extern SDL_Surface *screen;
 
 
+// offscreen render target
+static uint32_t temp[320 * 240];
+
+
 bool neo_render_init() {
 
   _surface = SDL_SetVideoMode(640, 480, 32, 0);
@@ -97,11 +101,66 @@ static void _neo_render_mode_3(void) {
   }
 }
 
+// 320x200 4-colour graphics mode interleaved
+static void _neo_render_mode_4(void) {
+  // buffer address
+  uint32_t src = 0xB8000;
+  uint32_t span = 1024 * 8;
+  // screen buffer position
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  uint32_t *dsty = (uint32_t*)_surface->pixels;
+  dsty += pitch * ((_surface->h - 200) / 2);
+  // blit loop
+  for (int y=0; y<200; ++y) {
+    uint32_t *dstx = dsty;
+    uint32_t srcx = src + ((y & 1) ? span : 0);
+    for (int x=0; x<320; x += 4, ++srcx) {
+      const uint8_t ch = RAM[srcx];
+      dstx[x + 3] = palette_cga_4_rgb[0x3 & (ch >> 0)];
+      dstx[x + 2] = palette_cga_4_rgb[0x3 & (ch >> 2)];
+      dstx[x + 1] = palette_cga_4_rgb[0x3 & (ch >> 4)];
+      dstx[x + 0] = palette_cga_4_rgb[0x3 & (ch >> 6)];
+    }
+    dsty += pitch;
+    src += (y & 1) ? (320 / 4) : 0;
+  }
+}
+
+// 320x200 greyscale graphics mode interleaved
+static void _neo_render_mode_5(void) {
+
+  static const uint32_t ramp[] = {
+    0x000000, 0x444444, 0x888888, 0xcccccc
+  };
+
+  // buffer address
+  uint32_t src = 0xB8000;
+  uint32_t span = 1024 * 8;
+  // screen buffer position
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  uint32_t *dsty = (uint32_t*)_surface->pixels;
+  dsty += pitch * ((_surface->h - 200) / 2);
+  // blit loop
+  for (int y=0; y<200; ++y) {
+    uint32_t *dstx = dsty;
+    uint32_t srcx = src + ((y & 1) ? span : 0);
+    for (int x=0; x<320; x += 4, ++srcx) {
+      const uint8_t ch = RAM[srcx];
+      dstx[x + 3] = ramp[0x3 & (ch >> 0)];
+      dstx[x + 2] = ramp[0x3 & (ch >> 2)];
+      dstx[x + 1] = ramp[0x3 & (ch >> 4)];
+      dstx[x + 0] = ramp[0x3 & (ch >> 6)];
+    }
+    dsty += pitch;
+    src += (y & 1) ? (320 / 4) : 0;
+  }
+}
+
 void neo_render_tick(void) {
   switch (neo_get_video_mode()) {
-  case 0x03:
-    _neo_render_mode_3();
-    break;
+  case 0x03: _neo_render_mode_3(); break;
+  case 0x04: _neo_render_mode_4(); break;
+  case 0x05: _neo_render_mode_5(); break;
   default:
     _neo_render_mode_unknown();
     break;

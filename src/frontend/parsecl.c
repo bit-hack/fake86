@@ -25,7 +25,7 @@
 
 extern const char *biosfile;
 
-extern uint8_t bootdrive, verbose, cgaonly, usessource, renderbenchmark, useconsole, doaudio;
+extern uint8_t bootdrive, verbose, cgaonly;
 extern uint32_t framedelay, textbase, usefullscreen, speed;
 extern int32_t usesamplerate, latency;
 uint16_t constantw = 0, constanth = 0;
@@ -71,7 +71,7 @@ static bool _cl_do_boot(const char *opt, const char *arg[]) {
 
 static bool _cl_do_nosound(const char *opt, const char *arg[]) {
   log_printf(LOG_CHAN_AUDIO, "sound disabled");
-  doaudio = 0;
+  audio_enable = false;
   return true;
 }
 
@@ -145,6 +145,7 @@ static void _cl_defaults() {
   biosfile = "pcxtbios.bin";
   textbase = 0xB8000;
   usefullscreen = 0;
+  audio_enable = true;
 }
 
 bool cl_parse(const int argc, const char **args) {
