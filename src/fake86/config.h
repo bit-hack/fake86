@@ -72,7 +72,7 @@
 #define CYCLES_PER_SLICE (CYCLES_PER_SECOND / TICK_SLICES)
 
 // use new video emulator
-#define USE_VIDEO_NEO 0
+#define USE_VIDEO_NEO 1
 
 // buffer keyboard strokes
 #define USE_KEY_BUFFER 0

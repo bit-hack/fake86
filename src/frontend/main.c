@@ -27,8 +27,7 @@
 
 #include "../80x86/cpu.h"
 
-
-extern uint8_t running, renderbenchmark;
+extern uint8_t running;
 
 bool render_init(void);
 void tick_events(void);
@@ -175,7 +174,12 @@ static void emulate_loop(void) {
 
 static void sdl_audio_callback(void *userdata, Uint8 *stream, int len) {
   int16_t *samples = (int16_t*)stream;
-  audio_callback(samples, len / 2);
+  uint32_t todo = len / sizeof(int16_t);
+  while (todo) {
+    const uint32_t done = audio_callback(samples, todo);
+    samples += done;
+    todo -= done;
+  }
 }
 
 static bool sdl_audio_init(void) {

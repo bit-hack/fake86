@@ -413,6 +413,13 @@ void i8253_tick(uint64_t cycles) {
 }
 
 uint64_t i8253_cycles_before_irq(void) {
+  const struct i8253_channel_t *c0 = &i8253.channel[0];
+  if (c0->rvalue == 0) {
+    return 0xffffff;
+  }
+  if (!c0->output_active) {
+    return 0xffffff;
+  }
   // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
-  return ((uint64_t)i8253.channel[0].counter * CYCLES_PER_SECOND) / 1193182;
+  return ((uint64_t)c0->counter * CYCLES_PER_SECOND) / 1193182;
 }

@@ -59,8 +59,18 @@ static void on_key_down(const SDL_Event *event) {
     return;
   }
 
+  // alt + F4 quit
+  if (keys[SDLK_LALT] && keys[SDLK_F4]) {
+    running = 0;
+  }
+
   // alt + enter to toggle full screen
   if (keys[SDLK_LALT] && keys[SDLK_RETURN]) {
+
+#if USE_VIDEO_NEO
+    SDL_WM_ToggleFullScreen(screen);
+#endif
+
     if (usefullscreen) {
       usefullscreen = 0;
     } else {

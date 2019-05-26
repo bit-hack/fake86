@@ -31,6 +31,8 @@ extern int32_t usesamplerate, latency;
 uint16_t constantw = 0, constanth = 0;
 uint8_t slowsystem = 0;
 
+extern bool do_fullscreen;
+extern uint32_t frame_skip;
 
 typedef bool(*cl_callback_t)(const char *opt, const char *arg[]);
 
@@ -80,6 +82,17 @@ static bool _cl_do_bios(const char *opt, const char *arg[]) {
   return true;
 }
 
+static bool _cl_do_fullscreen(const char *opt, const char *arg[]) {
+  do_fullscreen = true;
+  return true;
+}
+
+static bool _cl_do_frameskip(const char *opt, const char *arg[]) {
+  frame_skip = atoi(*arg);
+  log_printf(LOG_CHAN_FRONTEND, "skipping %d frames", frame_skip);
+  return true;
+}
+
 static const struct cl_entry_t _cl_list[] = {
   {"-help", 0, _cl_do_help, "Display this help page"
   },
@@ -107,6 +120,11 @@ static const struct cl_entry_t _cl_list[] = {
   {"-bios", 1, _cl_do_bios, "Specify bios image to load",
     "   -bios pcxtbios.bin\n"
     "   -bios landmarktest.bin\n"
+  },
+  {"-fullscreen", 0, _cl_do_fullscreen, "Enable fullscreen mode"
+  },
+  {"-frameskip", 1, _cl_do_frameskip, "Number of frames to skip",
+    "   -frameskip 1\n"
   },
   {NULL, 0, NULL, NULL}
 };
@@ -146,6 +164,7 @@ static void _cl_defaults() {
   textbase = 0xB8000;
   usefullscreen = 0;
   audio_enable = true;
+  frame_skip = 0;
 }
 
 bool cl_parse(const int argc, const char **args) {

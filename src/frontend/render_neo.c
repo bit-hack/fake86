@@ -27,18 +27,21 @@
 
 
 static SDL_Surface *_surface;
+bool do_fullscreen;
+
+// offscreen render target
+static uint32_t temp[320 * 240];
 
 // hack for just now
 extern SDL_Surface *screen;
 
 
-// offscreen render target
-static uint32_t temp[320 * 240];
-
-
 bool neo_render_init() {
 
-  _surface = SDL_SetVideoMode(640, 480, 32, 0);
+  const int flags =
+    (do_fullscreen ? SDL_FULLSCREEN : 0);
+
+  _surface = SDL_SetVideoMode(640, 480, 32, flags);
   if (!_surface) {
     log_printf(LOG_CHAN_VIDEO, "SDL_SetVideoMode failed");
     return false;
@@ -107,9 +110,8 @@ static void _neo_render_mode_4(void) {
   uint32_t src = 0xB8000;
   uint32_t span = 1024 * 8;
   // screen buffer position
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  dsty += pitch * ((_surface->h - 200) / 2);
+  const uint32_t pitch = 320;
+  uint32_t *dsty = temp;
   // blit loop
   for (int y=0; y<200; ++y) {
     uint32_t *dstx = dsty;
@@ -137,9 +139,8 @@ static void _neo_render_mode_5(void) {
   uint32_t src = 0xB8000;
   uint32_t span = 1024 * 8;
   // screen buffer position
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  dsty += pitch * ((_surface->h - 200) / 2);
+  const uint32_t pitch = 320;
+  uint32_t *dsty = temp;
   // blit loop
   for (int y=0; y<200; ++y) {
     uint32_t *dstx = dsty;
@@ -156,11 +157,45 @@ static void _neo_render_mode_5(void) {
   }
 }
 
+// blit offscreen render target to screen
+static void blit_2x(uint32_t w, uint32_t h) {
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  uint32_t *dst = (uint32_t *)_surface->pixels;
+
+  if (_surface->h > 2 * h) {
+    dst += pitch * ((_surface->h - h * 2) / 2);
+  }
+
+  const uint32_t *src = temp;
+  for (uint32_t y = 0; y < h; ++y) {
+    uint32_t *dstx = dst;
+    for (uint32_t x = 0; x < w; ++x) {
+      const uint32_t rgb = src[x];
+      dstx[      + 0] = rgb;
+      dstx[      + 1] = rgb;
+      dstx[pitch + 0] = rgb;
+      dstx[pitch + 1] = rgb;
+      dstx += 2;
+    }
+    dst += pitch * 2;
+    src += 320;
+  }
+}
+
+uint32_t frame_skip;
+static uint32_t frame_index;
+
 void neo_render_tick(void) {
+
+  ++frame_index;
+  if (frame_index >= frame_skip) {
+    frame_index = 0;
+  }
+
   switch (neo_get_video_mode()) {
   case 0x03: _neo_render_mode_3(); break;
-  case 0x04: _neo_render_mode_4(); break;
-  case 0x05: _neo_render_mode_5(); break;
+  case 0x04: _neo_render_mode_4(); blit_2x(320, 200); break;
+  case 0x05: _neo_render_mode_5(); blit_2x(320, 200); break;
   default:
     _neo_render_mode_unknown();
     break;
