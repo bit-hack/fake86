@@ -20,6 +20,7 @@
 
 #include "common.h"
 #include "../80x86/cpu.h"
+#include "../external/opl3.h"
 
 
 // audio enabled
@@ -39,6 +40,10 @@ static uint32_t _spk_delta;
 static bool     _spk_enable;
 static uint32_t _spk_freq;
 
+#if USE_AUDIO_ADLIB
+// adlib opl3
+opl3_chip _adlib_chip;
+#endif
 
 // type of audio event
 enum audio_event_type_t {
@@ -46,6 +51,8 @@ enum audio_event_type_t {
   event_none,
   // pc speaker has updated
   event_speaker,
+  // adlib ym3812 event
+  event_adlib,
 };
 
 // pc speaker update
@@ -54,15 +61,21 @@ struct audio_event_speaker_t {
   uint16_t freq;
 };
 
+struct audio_event_adlib_t {
+  uint8_t reg;
+  uint8_t data;
+};
+
 // audio event ring buffer
 struct audio_event_t {
   // cycles since last delta
   uint32_t cycle_delta;
-  //
+  // event type
   uint8_t type;
-  //
+  // event data
   union {
     struct audio_event_speaker_t spk;
+    struct audio_event_adlib_t adlib;
   };
 };
 
@@ -108,6 +121,46 @@ static bool _push_event(const struct audio_event_t *event) {
   return true;
 }
 
+struct audio_adlib_t {
+  uint8_t address;
+  uint8_t status;
+  uint8_t reg[256];
+};
+
+static struct audio_adlib_t _adlib;
+
+static void push_event_adlib(const uint8_t addr, const uint8_t data) {
+  struct audio_event_t event;
+  const uint64_t new_update = cpu_slice_ticks();
+  event.cycle_delta = new_update - _last_update;
+  _last_update = new_update;
+  event.type = event_adlib;
+  event.adlib.reg = addr;
+  event.adlib.data = data;
+  if (!_push_event(&event)) {
+    __debugbreak();
+  }
+}
+
+static void adlib_port_write(uint16_t port, uint8_t value) {
+  switch (port) {
+  case 0x388:
+    _adlib.address = value;
+    break;
+  case 0x389:
+    _adlib.reg[_adlib.address] = value;
+    push_event_adlib(_adlib.address, value);
+    break;
+  }
+}
+
+static uint8_t adlib_port_read(uint16_t port) {
+  switch (port) {
+  case 0x388:
+    return _adlib.status;
+  }
+}
+
 void audio_init(uint32_t rate) {
   // we shouldnt initalize otherwise
   assert(audio_enable);
@@ -118,6 +171,14 @@ void audio_init(uint32_t rate) {
 
   _sample_rate = rate;
   _cycles_per_sample = CYCLES_PER_SECOND / rate;
+
+#if USE_AUDIO_ADLIB
+  memset(&_adlib_chip, 0, sizeof(_adlib_chip));
+  OPL3_Reset(&_adlib_chip, rate);
+
+  set_port_read_redirector(0x388, 0x388, adlib_port_read);
+  set_port_write_redirector(0x388, 0x389, adlib_port_write);
+#endif
 }
 
 void audio_close(void) {
@@ -125,7 +186,6 @@ void audio_close(void) {
     SDL_DestroyMutex(_audio_mux);
   }
 }
-
 
 #if 1
 static int32_t _pending_samples;
@@ -156,34 +216,39 @@ static void _next_event(void) {
     _at_spk_freq = event.spk.freq;
     _at_spk_delta = ((uint64_t)_at_spk_freq * (uint64_t)0xffffffff / _sample_rate);
     break;
+  case event_adlib:
+    OPL3_WriteRegBuffered(&_adlib_chip, event.adlib.reg, event.adlib.data);
+    break;
   }
 }
 
 static uint32_t last_eval = 0;
 
-void adjust_rate() {
+void adjust_rate(void) {
   SDL_mutexP(_audio_mux);
 
+  // check remaining cycles in buffer
   uint64_t accum = 0;
   uint32_t i = _ring_tail;
   for (;&RING_GET(i) != &RING_GET(_ring_head); ++i) {
     accum += RING_GET(i).cycle_delta;
   }
 
-  uint32_t samples = cycles_to_samples(accum);
-  if (samples >= _sample_rate / 100) {
-    _at_adjust--;
-  }
-  if (samples <= _sample_rate / 100) {
-    _at_adjust++;
-  }
+  // target number of samples we want in the buffer
+  const uint32_t target_samples = _sample_rate / 100;
 
-  if (_at_adjust > 1100) {
-    _at_adjust = 1100;
-  }
-  if (_at_adjust < 900) {
-    _at_adjust = 900;
-  }
+  // adjust based on samples left in the buffer
+  const uint32_t samples = cycles_to_samples(accum);
+  _at_adjust -= (samples > target_samples);
+  _at_adjust += (samples < target_samples);
+
+#if 0
+  printf("adjust %d\n", _at_adjust);
+#endif
+
+  // limit to +/- 10%
+  _at_adjust = SDL_min(_at_adjust, 1100);
+  _at_adjust = SDL_max(_at_adjust, 900);
 
   SDL_mutexV(_audio_mux);
 }
@@ -195,6 +260,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
     return num_samples;
   }
 
+  // todo: make this sample based
   const uint32_t next_eval = SDL_GetTicks();
   if ((next_eval - last_eval) > 10) {
     adjust_rate();
@@ -210,19 +276,24 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
   const uint32_t to_do = SDL_min(_pending_samples * 2, num_samples);
   _pending_samples -= to_do / 2;
 
-  if (_at_spk_enable) {
-    for (uint32_t i = 0; i < to_do; i += 2) {
-      const int16_t out = (_at_spk_accum & 0x80000000) ? -0x7000 : 0x7000;
-      _at_spk_accum += _at_spk_delta;
-      // fill left and right
-      samples[i + 0] = out;
-      samples[i + 1] = out;
-    }
+  memset(samples, 0, to_do * sizeof(uint16_t));
+
+#if USE_AUDIO_ADLIB
+  if (to_do) {
+    OPL3_GenerateStream(&_adlib_chip, samples, to_do / 2);
   }
-  else {
-    for (uint32_t i = 0; i < to_do; i += 2) {
-      samples[i + 0] = 0;
-      samples[i + 1] = 0;
+#endif
+
+  // render internal speaker
+  if (_at_spk_freq > 10 && _at_spk_freq < 18000) {
+    if (_at_spk_enable) {
+      for (uint32_t i = 0; i < to_do; i += 2) {
+        const int16_t out = (_at_spk_accum & 0x80000000) ? -0x7000 : 0x7000;
+        _at_spk_accum += _at_spk_delta;
+        // fill left and right
+        samples[i + 0] += out;
+        samples[i + 1] += out;
+      }
     }
   }
 
@@ -254,7 +325,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
 }
 #endif
 
-void _push_event_spk(void) {
+static void push_event_spk(void) {
   struct audio_event_t event;
   const uint64_t new_update = cpu_slice_ticks();
   event.cycle_delta = new_update - _last_update;
@@ -263,13 +334,13 @@ void _push_event_spk(void) {
   event.spk.freq = _spk_freq;
   event.spk.enable = _spk_enable;
   if (!_push_event(&event)) {
-    __debugbreak();
+    log_printf(LOG_CHAN_AUDIO, "dropped audio event");
   }
 }
 
 void audio_pc_speaker_freq(const uint32_t freq) {
   _spk_freq = freq;
-  _push_event_spk();
+  push_event_spk();
 
   if (_sample_rate == 0) {
     return;
@@ -281,7 +352,7 @@ void audio_pc_speaker_freq(const uint32_t freq) {
 
 void audio_pc_speaker_enable(bool enable) {
   _spk_enable = enable;
-  _push_event_spk();
+  push_event_spk();
 }
 
 void audio_tick(const uint64_t cycles) {

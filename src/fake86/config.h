@@ -76,3 +76,6 @@
 
 // buffer keyboard strokes
 #define USE_KEY_BUFFER 0
+
+// do adlib emulation
+#define USE_AUDIO_ADLIB 1
