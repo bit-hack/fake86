@@ -22,6 +22,8 @@
 
 #include "../80x86/cpu.h"
 
+// http://www.osdever.net/FreeVGA/vga/vgareg.htm
+// http://www.osdever.net/FreeVGA/vga/graphreg.htm#05
 
 // text mode layout:
 //  [[char], [attr]], [[char], [attr]], ...
@@ -69,6 +71,9 @@ static uint8_t _active_page = 0;
 
 static bool no_blanking = false;
 
+// 4x 64k memory planes
+static uint8_t _vga_ram[0x40000];
+
 
 // CRTC (6845) address register
 static uint8_t crt_reg_addr = 0;
@@ -100,18 +105,6 @@ uint16_t neo_crt_cursor_reg(void) {
   const uint32_t hi = crt_register[12];
   const uint32_t lo = crt_register[13];
   return 0x3FFF & ((hi << 8) | lo);
-}
-
-// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
-
-// EGA/VGA
-uint8_t neo_mem_read_A0000(uint32_t addr) {
-  return RAM[addr];
-}
-
-// EGA/VGA
-void neo_mem_write_A0000(uint32_t addr, uint8_t value) {
-  RAM[addr] = value;
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -160,7 +153,64 @@ static void mda_port_write(uint16_t portnum, uint8_t value) {
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
-// ports 03C0-03CF
+// VGA Sequencer Registers
+
+// port 3C4h
+static uint8_t _vga_seq_addr;
+
+// port 3C5h
+// 
+// Index 00h -- Reset Register
+// Index 01h -- Clocking Mode Register
+// Index 02h -- Map Mask Register
+// Index 03h -- Character Map Select Register
+// Index 04h -- Sequencer Memory Mode Register
+
+static uint8_t _vga_seq_data[256];
+
+static uint32_t _vga_plane_write_enable(void) {
+  return _vga_seq_data[0x2] & 0x0f;
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+// VGA Graphics Registers
+
+// port 3CEh
+static uint8_t _vga_reg_addr;
+
+// port 3CFh
+//
+// Index 00h -- Set/Reset Register
+// Index 01h -- Enable Set/Reset Register
+// Index 02h -- Color Compare Register
+// Index 03h -- Data Rotate Register
+// Index 04h -- Read Map Select Register
+// Index 05h -- Graphics Mode Register
+// Index 06h -- Miscellaneous Graphics Register
+// Index 07h -- Color Don't Care Register
+// Index 08h -- Bit Mask Register
+//
+static uint8_t _vga_reg_data[256];
+
+static uint32_t _vga_read_mode(void) {
+  return _vga_reg_data[0x5] & 3;
+}
+
+static uint32_t _vga_write_mode(void) {
+  return (_vga_reg_data[0x5] >> 3) & 1;
+}
+
+static uint32_t _vga_read_map_select(void) {
+  return _vga_reg_data[0x4] & 3;
+}
+
+static uint32_t _vga_memory_map_select(void) {
+  return (_vga_reg_data[0x6] >> 2) & 3;
+}
+
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+// VGA DAC
 
 // bit layout
 // msb                             lsb
@@ -169,14 +219,13 @@ static uint32_t _dac_entry[256];
 
 static uint8_t _dac_state;       // dac state, port 0x3c7
 
-// note 8 bit size wraps implicitly
+// note 8-bit size wraps implicitly
 static uint8_t _dac_mode_write;  // dac write address
 static uint8_t _dac_mode_read;   // dac read address
 
 // XXX: these may be the same thing?
 static uint8_t _dac_pal_read;    // palette index (r, g, b, r, g ...)
 static uint8_t _dac_pal_write;   // palette index (r, g, b, r, g ...)
-
 
 const uint32_t *neo_dac_data(void) {
   return _dac_entry;
@@ -223,8 +272,15 @@ static void _dac_data_write(const uint8_t val) {
   }
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+// ports 03C0-03CF
+
 static uint8_t ega_port_read(uint16_t portnum) {
   switch (portnum) {
+  case 0x3c4:
+    return _vga_seq_addr;
+  case 0x3c5:
+    return _vga_seq_data[_vga_seq_addr];
   case 0x3c7:
     return _dac_state & 0x3;
   case 0x3c8:
@@ -232,6 +288,10 @@ static uint8_t ega_port_read(uint16_t portnum) {
     return _dac_mode_write;
   case 0x3c9:
     return _dac_data_read();
+  case 0x3ce:
+    return _vga_reg_addr;
+  case 0x3cf:
+    return _vga_reg_data[_vga_reg_addr];
   default:
     return portram[portnum];
   }
@@ -239,6 +299,13 @@ static uint8_t ega_port_read(uint16_t portnum) {
 
 static void ega_port_write(uint16_t portnum, uint8_t value) {
   switch (portnum) {
+  case 0x3c4:
+    _vga_seq_addr = value;
+    break;
+  case 0x3c5:
+    _vga_seq_data[_vga_seq_addr] = value;
+    break;
+
   case 0x3c7:
     _dac_mode_read  = value;
     _dac_pal_read   = 0;
@@ -252,6 +319,14 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
   case 0x3c9:
     _dac_data_write(value);
     break;
+
+  case 0x3ce:
+    _vga_reg_addr = value;
+    break;
+  case 0x3cf:
+    _vga_reg_data[_vga_reg_addr] = value;
+    break;
+
   default:
     portram[portnum] = value;
   }
@@ -494,4 +569,36 @@ bool neo_init(void) {
 
 int neo_get_video_mode(void) {
   return _video_mode;
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// EGA/VGA
+uint8_t neo_mem_read_A0000(uint32_t addr) {
+  addr -= 0xA0000;
+  const uint32_t planesize = 0x10000;
+  switch (_vga_read_mode()) {
+  case 0:
+    switch (_vga_read_map_select()) {
+    case 0: return _vga_ram[addr + planesize * 0];
+    case 1: return _vga_ram[addr + planesize * 1];
+    case 2: return _vga_ram[addr + planesize * 2];
+    case 3: return _vga_ram[addr + planesize * 3];
+    }
+  case 1:
+    return RAM[addr];
+    break;
+  }
+}
+
+// EGA/VGA
+void neo_mem_write_A0000(uint32_t addr, uint8_t value) {
+  switch (_vga_write_mode()) {
+  case 0:
+  case 1:
+  case 2:
+  case 3:
+    RAM[addr] = value;
+    break;
+  }
 }

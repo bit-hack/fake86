@@ -284,6 +284,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
   }
 #endif
 
+#if 0
   // render internal speaker
   if (_at_spk_freq > 10 && _at_spk_freq < 18000) {
     if (_at_spk_enable) {
@@ -296,6 +297,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
       }
     }
   }
+#endif
 
   return to_do;
 }

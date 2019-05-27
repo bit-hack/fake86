@@ -30,7 +30,7 @@ static SDL_Surface *_surface;
 bool do_fullscreen;
 
 // offscreen render target
-static uint32_t temp[320 * 240];
+static uint32_t _temp[320 * 240];
 
 // hack for just now
 extern SDL_Surface *screen;
@@ -149,7 +149,7 @@ static void _neo_render_mode_4(void) {
   uint32_t span = 1024 * 8;
   // screen buffer position
   const uint32_t pitch = 320;
-  uint32_t *dsty = temp;
+  uint32_t *dsty = _temp;
   // blit loop
   for (int y=0; y<200; ++y) {
     uint32_t *dstx = dsty;
@@ -178,7 +178,7 @@ static void _neo_render_mode_5(void) {
   uint32_t span = 1024 * 8;
   // screen buffer position
   const uint32_t pitch = 320;
-  uint32_t *dsty = temp;
+  uint32_t *dsty = _temp;
   // blit loop
   for (int y=0; y<200; ++y) {
     uint32_t *dstx = dsty;
@@ -227,6 +227,21 @@ static void _neo_render_mode_7(void) {
   }
 }
 
+//XXX: needed by ega tree house
+static void _neo_render_mode_0d(void) {
+  uint32_t *dst = _temp;
+  for (int y = 0; y < 240; ++y) {
+    for (int x = 0; x < 320; ++x) {
+      // planar like mode 13
+    }
+    dst += 320;
+  }
+}
+
+static void _neo_render_mode_13(void) {
+  // todo
+}
+
 // blit offscreen render target to screen
 static void blit_2x(uint32_t w, uint32_t h) {
   const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
@@ -236,7 +251,7 @@ static void blit_2x(uint32_t w, uint32_t h) {
     dst += pitch * ((_surface->h - h * 2) / 2);
   }
 
-  const uint32_t *src = temp;
+  const uint32_t *src = _temp;
   for (uint32_t y = 0; y < h; ++y) {
     uint32_t *dstx = dst;
     for (uint32_t x = 0; x < w; ++x) {
@@ -268,6 +283,7 @@ void neo_render_tick(void) {
   case 0x04: _neo_render_mode_4(); blit_2x(320, 200); break;
   case 0x05: _neo_render_mode_5(); blit_2x(320, 200); break;
   case 0x07: _neo_render_mode_7(); break;
+//  case 0x0d: _neo_render_mode_d(); blit_2x(320, 200); break;
   default:
     _neo_render_mode_unknown();
     break;
