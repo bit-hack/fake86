@@ -34,7 +34,6 @@
 
 extern uint8_t hdcount;
 
-// D4000 -> EC000
 static int rom_addr = 0xD8000;
 static int rom_size = 0x02000;
 
@@ -58,7 +57,7 @@ bool rom_insert() {
   uint8_t elist2 = 0;
   elist2 |= 0x01;  // dma hardware present
 
-  // if the BIOS is happy execution will be given to 0xD4003
+  // if the BIOS is happy execution will be given to (rom_addr + 3)
   const uint8_t code[] = {
 #if 0
     0xF4,                   // halt

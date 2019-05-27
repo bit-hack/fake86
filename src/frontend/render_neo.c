@@ -67,8 +67,8 @@ static void _neo_render_mode_unknown(void) {
   }
 }
 
-// 80x25 16-colour text mode
-static void _neo_render_mode_3(void) {
+// 80x25 greyscale text mode
+static void _neo_render_mode_2(void) {
   // text mode buffer address
   uint32_t src = 0xB8000;
   // cga/PCjr = 8x8  char px
@@ -90,8 +90,46 @@ static void _neo_render_mode_3(void) {
       const uint8_t ch = RAM[src + 0];
       const uint8_t at = RAM[src + 1];
       // decode colour from attribute
-      const uint32_t rgba = palette_cga_rgb[at & 0xf];
-      const uint32_t rgbb = palette_cga_rgb[at >> 4];
+      const uint32_t rgba = palette_cga_2_rgb[at & 0xf];
+      const uint32_t rgbb = palette_cga_2_rgb[at >> 4];
+      // draw the glyph
+      font_draw_glyph_8x16(dstx, pitch, ch + 0x100, rgba, rgbb);
+      // step over to next glyph
+      dstx += chw;
+      // step over character and attribute
+      src += 2;
+    }
+    // step over glyph line
+    dsty += pitch * chh;
+  }
+}
+
+// 80x25 16-colour text mode
+static void _neo_render_mode_3(void) {
+  const uint32_t base = 0xB8000;
+  // text mode buffer address
+  uint32_t src = 0xB8000;
+  // cga/PCjr = 8x8  char px
+  // EGA      = 8x14 char px
+  // MCGA     = 8x16 char px
+  // VGA      = 9x16 char px
+  const int chw = 8, chh = 16;
+  // step through VGA text-mode buffer
+  const int rows = 25, cols = 80;
+  // screen buffer position
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  uint32_t *dsty = (uint32_t*)_surface->pixels;
+  dsty += pitch * ((_surface->h - (chh * rows)) / 2);
+  // blit loop
+  for (int y=0; y<rows; ++y) {
+    uint32_t *dstx = dsty;
+    for (int x=0; x<cols; ++x) {
+      // grab character and attribute
+      const uint8_t ch = RAM[src + 0];
+      const uint8_t at = RAM[src + 1];
+      // decode colour from attribute
+      const uint32_t rgba = palette_cga_3_rgb[at & 0xf];
+      const uint32_t rgbb = palette_cga_3_rgb[at >> 4];
       // draw the glyph
       font_draw_glyph_8x16(dstx, pitch, ch + 0x100, rgba, rgbb);
       // step over to next glyph
@@ -157,6 +195,38 @@ static void _neo_render_mode_5(void) {
   }
 }
 
+// 80x25 greyscale text mode
+// XXX: untested
+static void _neo_render_mode_7(void) {
+  // text mode buffer address
+  uint32_t src = 0xB8000;
+  // cga/PCjr = 9x14  char px
+  const int chw = 8, chh = 16;
+  // step through VGA text-mode buffer
+  const int rows = 25, cols = 80;
+  // screen buffer position
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  uint32_t *dsty = (uint32_t*)_surface->pixels;
+  dsty += pitch * ((_surface->h - (chh * rows)) / 2);
+  // blit loop
+  for (int y=0; y<rows; ++y) {
+    uint32_t *dstx = dsty;
+    for (int x=0; x<cols; ++x) {
+      // grab character and attribute
+      const uint8_t ch = RAM[src + 0];
+      const uint8_t at = RAM[src + 1];
+      // draw the glyph
+      font_draw_glyph_8x16(dstx, pitch, ch + 0x100, 0xaaaaaa, 0x0);
+      // step over to next glyph
+      dstx += chw;
+      // step over character and attribute
+      src += 2;
+    }
+    // step over glyph line
+    dsty += pitch * chh;
+  }
+}
+
 // blit offscreen render target to screen
 static void blit_2x(uint32_t w, uint32_t h) {
   const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
@@ -193,9 +263,11 @@ void neo_render_tick(void) {
   }
 
   switch (neo_get_video_mode()) {
+  case 0x02: _neo_render_mode_2(); break;
   case 0x03: _neo_render_mode_3(); break;
   case 0x04: _neo_render_mode_4(); blit_2x(320, 200); break;
   case 0x05: _neo_render_mode_5(); blit_2x(320, 200); break;
+  case 0x07: _neo_render_mode_7(); break;
   default:
     _neo_render_mode_unknown();
     break;

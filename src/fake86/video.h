@@ -21,6 +21,14 @@
 #include "common.h"
 
 
+// crt driver access
+uint16_t neo_crt_cursor_reg(void);
+uint8_t neo_crt_register(uint32_t index);
+
+// return video DAC data
+const uint32_t *neo_dac_data(void);
+
+// font glyph blitters
 void font_draw_glyph_8x8(
   uint32_t *dst, const uint32_t pitch, uint16_t ch,
   const uint32_t rgb_a, const uint32_t rgb_b);
@@ -30,6 +38,6 @@ void font_draw_glyph_8x16(
   const uint32_t rgb_a, const uint32_t rgb_b);
 
 // palette.c
-extern const uint32_t palette_cga_rgb[];
-
+extern const uint32_t palette_cga_2_rgb[];
+extern const uint32_t palette_cga_3_rgb[];
 extern const uint32_t palette_cga_4_rgb[];

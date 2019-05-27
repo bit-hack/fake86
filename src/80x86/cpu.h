@@ -62,3 +62,5 @@ union cpu_flags_t {
 };
 
 extern union cpu_flags_t cpu_flags;
+
+extern bool running;

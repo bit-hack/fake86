@@ -92,6 +92,16 @@ static uint8_t crt_reg_addr = 0;
 //
 static uint8_t crt_register[32];
 
+uint8_t neo_crt_register(uint32_t index) {
+  return crt_register[index & 0x1f];
+}
+
+uint16_t neo_crt_cursor_reg(void) {
+  const uint32_t hi = crt_register[12];
+  const uint32_t lo = crt_register[13];
+  return 0x3FFF & ((hi << 8) | lo);
+}
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 // EGA/VGA
@@ -152,12 +162,99 @@ static void mda_port_write(uint16_t portnum, uint8_t value) {
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 // ports 03C0-03CF
 
+// bit layout
+// msb                             lsb
+// ________ rrrrrr__ gggggg__ bbbbbb__
+static uint32_t _dac_entry[256];
+
+static uint8_t _dac_state;       // dac state, port 0x3c7
+
+// note 8 bit size wraps implicitly
+static uint8_t _dac_mode_write;  // dac write address
+static uint8_t _dac_mode_read;   // dac read address
+
+// XXX: these may be the same thing?
+static uint8_t _dac_pal_read;    // palette index (r, g, b, r, g ...)
+static uint8_t _dac_pal_write;   // palette index (r, g, b, r, g ...)
+
+
+const uint32_t *neo_dac_data(void) {
+  return _dac_entry;
+}
+
+static uint8_t _dac_data_read(void) {
+  uint8_t out = 0;
+  switch (_dac_pal_read) {
+  case 0:
+    out = 0x3f & (_dac_entry[_dac_mode_read] >> 18);
+    _dac_pal_read = 1;
+    break;
+  case 1:
+    out = 0x3f & (_dac_entry[_dac_mode_read] >> 10);
+    _dac_pal_read = 2;
+    break;
+  case 2:
+    out = 0x3f & (_dac_entry[_dac_mode_read] >> 2);
+    _dac_pal_read = 0;
+    ++_dac_mode_read;
+    break;
+  }
+  return out;
+}
+
+static void _dac_data_write(const uint8_t val) {
+  switch (_dac_pal_write) {
+  case 0:
+    _dac_entry[_dac_mode_write] = 0x00FFFF;
+    _dac_entry[_dac_mode_write] |= val << 18;
+    _dac_pal_write = 1;
+    break;
+  case 1:
+    _dac_entry[_dac_mode_write] = 0xFF00FF;
+    _dac_entry[_dac_mode_write] |= val << 10;
+    _dac_pal_write = 2;
+    break;
+  case 2:
+    _dac_entry[_dac_mode_write] = 0xFFFF00;
+    _dac_entry[_dac_mode_write] |= val << 2;
+    _dac_pal_write = 0;
+    ++_dac_mode_write;
+    break;
+  }
+}
+
 static uint8_t ega_port_read(uint16_t portnum) {
-  return portram[portnum];
+  switch (portnum) {
+  case 0x3c7:
+    return _dac_state & 0x3;
+  case 0x3c8:
+    // XXX: this is uncertain
+    return _dac_mode_write;
+  case 0x3c9:
+    return _dac_data_read();
+  default:
+    return portram[portnum];
+  }
 }
 
 static void ega_port_write(uint16_t portnum, uint8_t value) {
-  portram[portnum] = value;
+  switch (portnum) {
+  case 0x3c7:
+    _dac_mode_read  = value;
+    _dac_pal_read   = 0;
+    _dac_state      = 0x00;  // prepared to accept reads
+    break;
+  case 0x3c8:
+    _dac_mode_write = value;
+    _dac_pal_write  = 0;
+    _dac_state      = 0x03;  // prepared to accept writes
+    break;
+  case 0x3c9:
+    _dac_data_write(value);
+    break;
+  default:
+    portram[portnum] = value;
+  }
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -184,7 +281,8 @@ static uint8_t cga_port_read(uint16_t portnum) {
   case 0x3da:
     return portram[0x3da] = vga_timing_get_3da();
   default:
-    printf("%04x r\n", (int)portnum);
+//    printf("%04x r\n", (int)portnum);
+    break;
   }
   return portram[portnum];
 }
@@ -206,7 +304,7 @@ static void cga_port_write(uint16_t portnum, uint8_t value) {
       cga_palette = value;
       break;
     default:
-      printf("%04x w %02x\n", (int)portnum, (int)value);
+//      printf("%04x w %02x\n", (int)portnum, (int)value);
       portram[portnum] = value;
     }
   }
@@ -272,7 +370,7 @@ static void neo_set_video_mode(uint8_t al) {
   // memory base
   if (al >= 0x00 && al <= 0x07) {
     _base = 0xB8000;
-    _clear_text_buffer();
+//    _clear_text_buffer();
   }
   if (al >= 0x0D && al <= 0x13) {
     _base = 0xA0000;

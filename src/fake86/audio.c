@@ -190,6 +190,11 @@ void adjust_rate() {
 
 uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
 
+  // rapid quit when not running (system is going down)
+  if (!running) {
+    return num_samples;
+  }
+
   const uint32_t next_eval = SDL_GetTicks();
   if ((next_eval - last_eval) > 10) {
     adjust_rate();

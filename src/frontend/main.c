@@ -27,8 +27,6 @@
 
 #include "../80x86/cpu.h"
 
-extern uint8_t running;
-
 bool render_init(void);
 void tick_events(void);
 void handlevideo();
@@ -252,11 +250,11 @@ static bool load_roms(void) {
   // load other roms
   if (biossize <= (1024 * 8)) {
     const char *rom_basic = "rombasic.bin";
-    if (!mem_loadrom(0xF6000UL, "rombasic.bin", 0)) {
+    if (!mem_loadrom(0xF6000UL, rom_basic, 0)) {
       log_printf(LOG_CHAN_MEM, "unable to load '%s'", rom_basic);
     }
-    const char *rom_video = "videorom.bin";
-    if (!mem_loadrom(0xC0000UL, "videorom.bin", 1)) {
+    const char *rom_video = false ? "ibm_vga.bin" : "videorom.bin";
+    if (!mem_loadrom(0xC0000UL, rom_video, 1)) {
       log_printf(LOG_CHAN_MEM, "unable to load '%s'", rom_video);
     }
   }
@@ -298,7 +296,7 @@ int main(int argc, char *argv[]) {
 
   // enter the emulation loop
   SDL_PauseAudio(0);
-  running = 1;
+  running = true;
   emulate_loop();
 
   // close the audio device

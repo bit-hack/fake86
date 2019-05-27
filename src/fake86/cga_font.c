@@ -571,7 +571,10 @@ void font_draw_glyph_8x16(
   uint32_t *dst, const uint32_t pitch, uint16_t ch,
   const uint32_t rgb_a, const uint32_t rgb_b)
 {
+  //note: there is a font in the bios at 0xffa6e
+
   const uint8_t *src = &cga_font_8x8[(ch & 0x1ff) * 8];
+
   for (int y=0; y<16; ++y) {
     uint8_t mask = *src;
     for (int x=0; x<8; ++x) {

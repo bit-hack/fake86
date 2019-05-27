@@ -36,7 +36,9 @@ uint8_t mode, reg, rm;
 uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
 uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
 uint32_t temp1, temp2, temp3, temp32, ea;
-uint8_t running = 0;
+
+// cpu is running
+bool running;
 
 static uint64_t _cycles;
 
