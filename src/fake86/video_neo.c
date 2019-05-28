@@ -169,6 +169,9 @@ static uint8_t _vga_seq_addr;
 //
 static uint8_t _vga_seq_data[256];
 
+// memory plane write enable
+// 0x3CE  02  ....**** lsb
+//
 static uint32_t _vga_plane_write_enable(void) {
   return _vga_seq_data[0x2] & 0x0f;
 }
@@ -223,13 +226,6 @@ static uint32_t _vga_sr_value(void) {
   return _vga_reg_data[0x0] & 0x0f;
 }
 
-// memory plane write enable
-// 0x3CE  02  ....**** lsb
-//
-static uint32_t _vga_plane_we(void) {
-  return _vga_seq_data[0x2] & 0x0f;
-}
-
 // vga alu logical operation
 // 0x3CE  03  ...**... lsb
 //
@@ -242,6 +238,12 @@ static uint32_t _vga_logic_op(void) {
 //
 static uint32_t _vga_rot_count(void) {
   return _vga_reg_data[0x3] & 0x07;
+}
+
+// vga bit mask register
+// 0x3Ce  08  ******** lsb
+static uint32_t _vga_bit_mask(void) {
+  return _vga_reg_data[0x8];
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -292,18 +294,18 @@ static uint8_t _dac_data_read(void) {
 static void _dac_data_write(const uint8_t val) {
   switch (_dac_pal_write) {
   case 0:
-    _dac_entry[_dac_mode_write] = 0x00FFFF;
-    _dac_entry[_dac_mode_write] |= val << 18;
+    _dac_entry[_dac_mode_write] &= 0x00FFFF;
+    _dac_entry[_dac_mode_write] |= ((uint32_t)val) << 18;
     _dac_pal_write = 1;
     break;
   case 1:
-    _dac_entry[_dac_mode_write] = 0xFF00FF;
-    _dac_entry[_dac_mode_write] |= val << 10;
+    _dac_entry[_dac_mode_write] &= 0xFF00FF;
+    _dac_entry[_dac_mode_write] |= ((uint32_t)val) << 10;
     _dac_pal_write = 2;
     break;
   case 2:
-    _dac_entry[_dac_mode_write] = 0xFFFF00;
-    _dac_entry[_dac_mode_write] |= val << 2;
+    _dac_entry[_dac_mode_write] &= 0xFFFF00;
+    _dac_entry[_dac_mode_write] |= ((uint32_t)val) << 2;
     _dac_pal_write = 0;
     ++_dac_mode_write;
     break;
@@ -346,11 +348,15 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
     _vga_seq_addr = value;
     break;
   case 0x3c5:
+//    printf("_vga_seq_data[0x%02x] = 0x%02x\n", _vga_seq_addr, value);
     _vga_seq_data[_vga_seq_addr] = value;
     break;
+
   case 0x3c6:
+//    printf("_vga_mask_reg = 0x%02x\n", value);
     _dac_mask_reg = value;
     break;
+
   case 0x3c7:
     _dac_mode_read  = value;
     _dac_pal_read   = 0;
@@ -369,6 +375,7 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
     _vga_reg_addr = value;
     break;
   case 0x3cf:
+//    printf("_vga_reg_data[0x%02x] = 0x%02x\n", _vga_reg_addr, value);
     _vga_reg_data[_vga_reg_addr] = value;
     break;
 
@@ -618,6 +625,9 @@ int neo_get_video_mode(void) {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
+// four latch bytes packed in 32bits
+static uint32_t _vga_latch;
+
 // EGA/VGA
 uint8_t neo_mem_read_A0000(uint32_t addr) {
   addr -= 0xA0000;
@@ -638,47 +648,91 @@ uint8_t neo_mem_read_A0000(uint32_t addr) {
   }
 }
 
-uint8_t rot_mode_0(uint8_t in, uint8_t rot) {
+static uint8_t _ror8(uint8_t in, uint8_t rot) {
+  rot &= 7;
   // rotate right by rot bits (max 7)
   return (in >> rot) | (((uint16_t)in << 8) >> rot);
 }
 
-#define PHASE2(val, sr_reg, sr_val, mask) \
-  ((sr_reg) & (mask)) ? (value) : (((sr_val) & (mask)) ? ~0 : 0)
+static void _neo_vga_write_0(uint32_t addr, uint8_t value) {
 
-static void _neo_mem_write_A0000_0(uint32_t addr, uint8_t value) {
-  value = rot_mode_0(value, _vga_rot_count());
+  value = _ror8(value, _vga_rot_count());
+  
+  // 4 lanes of input bytes
+  uint32_t path = (value << 24) | (value << 16) | (value << 8) | value;
+  // 4 lanes on input bits from s/r value
+  uint32_t srvl = _vga_sr_value() ? 0 : ~0u;
 
+  // mask to mux between bytes or s/r value
+  // todo: precompute this
   const uint8_t sr_reg = _vga_sr_enable();
-  const uint8_t sr_val = _vga_sr_value();
+  uint32_t sr_mask;
+  sr_mask  = (sr_reg & 0x1) ? 0 : 0x000000ff;
+  sr_mask |= (sr_reg & 0x2) ? 0 : 0x0000ff00;
+  sr_mask |= (sr_reg & 0x4) ? 0 : 0x00ff0000;
+  sr_mask |= (sr_reg & 0x8) ? 0 : 0xff000000;
 
-  const uint8_t pix[4] = {
-    PHASE2(value, sr_reg, sr_val, 0x1),
-    PHASE2(value, sr_reg, sr_val, 0x2),
-    PHASE2(value, sr_reg, sr_val, 0x4),
-    PHASE2(value, sr_reg, sr_val, 0x8),
-  };
+  // mux between byte inputs or s/r value
+  uint32_t tmp0 = (path & sr_mask) | (srvl & ~sr_mask);
 
-  addr -= 0xA0000;
+  // alu operations
+  uint32_t tmp1;
+  switch (_vga_logic_op()) {
+  case 0: tmp1 = tmp0;              break;
+  case 1: tmp1 = tmp0 & _vga_latch; break;
+  case 2: tmp1 = tmp0 | _vga_latch; break;
+  case 3: tmp1 = tmp0 ^ _vga_latch; break;
+  }
+
+  // mux between tmp0 or alu results
+  // todo: precompute this
+  uint32_t bm_mux;
+  bm_mux  = (_vga_bit_mask() & 0x1) ? 0x000000ff : 0;
+  bm_mux |= (_vga_bit_mask() & 0x2) ? 0x0000ff00 : 0;
+  bm_mux |= (_vga_bit_mask() & 0x4) ? 0x00ff0000 : 0;
+  bm_mux |= (_vga_bit_mask() & 0x8) ? 0xff000000 : 0;
+
+  uint32_t tmp2 = (tmp1 & bm_mux) | (_vga_latch & ~bm_mux);
+
   const uint32_t planesize = 0x10000;
 
+  if (_vga_plane_write_enable() & 0x01) {
+    _vga_ram[addr + planesize * 0] = tmp2 & 0xff;
+  }
+  if (_vga_plane_write_enable() & 0x02) {
+    _vga_ram[addr + planesize * 1] = (tmp2 >> 8) & 0xff;
+  }
+  if (_vga_plane_write_enable() & 0x04) {
+    _vga_ram[addr + planesize * 2] = (tmp2 >> 16) & 0xff;
+  }
+  if (_vga_plane_write_enable() & 0x08) {
+    _vga_ram[addr + planesize * 3] = (tmp2 >> 24) & 0xff;
+  }
 
+#undef PHASE2
 }
 
-static void _neo_mem_write_A0000_1(uint32_t addr, uint8_t value) {}
+static void _neo_vga_write_1(uint32_t addr, uint8_t value) {}
 
-static void _neo_mem_write_A0000_2(uint32_t addr, uint8_t value) {}
+static void _neo_vga_write_2(uint32_t addr, uint8_t value) {}
 
-static void _neo_mem_write_A0000_3(uint32_t addr, uint8_t value) {}
+static void _neo_vga_write_3(uint32_t addr, uint8_t value) {}
 
 // EGA/VGA
 void neo_mem_write_A0000(uint32_t addr, uint8_t value) {
+
+  addr -= 0xA0000;
+
   switch (_vga_write_mode()) {
-  case 0: _neo_mem_write_A0000_0(addr, value); break;
-  case 1: _neo_mem_write_A0000_1(addr, value); break;
-  case 2: _neo_mem_write_A0000_2(addr, value); break;
-  case 3: _neo_mem_write_A0000_3(addr, value); break;
+  case 0: _neo_vga_write_0(addr, value); break;
+  case 1: _neo_vga_write_1(addr, value); break;
+  case 2: _neo_vga_write_2(addr, value); break;
+  case 3: _neo_vga_write_3(addr, value); break;
   default:
     UNREACHABLE();
   }
+}
+
+const uint8_t *vga_ram(void) {
+  return _vga_ram;
 }

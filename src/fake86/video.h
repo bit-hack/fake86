@@ -25,6 +25,8 @@
 uint16_t neo_crt_cursor_reg(void);
 uint8_t neo_crt_register(uint32_t index);
 
+const uint8_t *vga_ram(void);
+
 // return video DAC data
 const uint32_t *neo_dac_data(void);
 

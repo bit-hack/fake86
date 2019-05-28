@@ -39,6 +39,7 @@
 #else
 #define CPU_ALLOW_ILLEGAL_OP_EXCEPTION
 #define CPU_LIMIT_SHIFT_COUNT
+//#define CPU_ALLOW_POP_CS
 #endif
 
 #if defined(CPU_V20)

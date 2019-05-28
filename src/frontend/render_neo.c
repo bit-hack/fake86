@@ -36,6 +36,19 @@ static uint32_t _temp[320 * 240];
 extern SDL_Surface *screen;
 
 
+void neo_render_fs_toggle(void) {
+  assert(_surface);
+  const int flags = _surface->flags ^ SDL_FULLSCREEN;
+  _surface = SDL_SetVideoMode(_surface->w, _surface->h, 32, flags);
+  if (!_surface) {
+    log_printf(LOG_CHAN_VIDEO, "SDL_SetVideoMode failed");
+  }
+  SDL_WM_SetCaption(BUILD_STRING, NULL);
+  // hack for now
+  screen = _surface;
+}
+
+
 bool neo_render_init() {
 
   const int flags =
@@ -46,12 +59,9 @@ bool neo_render_init() {
     log_printf(LOG_CHAN_VIDEO, "SDL_SetVideoMode failed");
     return false;
   }
-
   SDL_WM_SetCaption(BUILD_STRING, NULL);
-
   // hack for now
   screen = _surface;
-
   return true;
 }
 
@@ -239,12 +249,20 @@ static void _neo_render_mode_0d(void) {
 }
 
 static void _neo_render_mode_13(void) {
-  const uint8_t *srcy = RAM + 0xA0000;
+  const uint32_t *dac = neo_dac_data();
+  // clear temp buffer
+  memset(_temp, 0, 320 * 240 * 4);
+  // source now is our video ram at 0xA0000
+  const uint8_t *srcy = vga_ram();
+  // writing to temporary buffer
   uint32_t *dst = _temp;
-  for (int y = 0; y < 240; ++y) {
+  // offset for 320x200 to 320x240 mismatch
+  dst += 320 * 20;
+  // blit loop
+  for (int y = 0; y < 200; ++y) {
     const uint8_t *srcx = srcy;
     for (int x = 0; x < 320; ++x) {
-      const uint8_t pix = srcx[x];
+      dst[x] = dac[srcx[x]];
     }
     dst += 320;
     srcy += 320;

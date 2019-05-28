@@ -31,6 +31,9 @@ extern void set_window_title(uint8_t *extra);
 
 uint8_t translate_scancode(uint16_t keyval);
 
+void neo_render_fs_toggle(void);
+
+
 static void toggle_mouse_grab() {
   if (usegrabmode == SDL_GRAB_ON) {
     usegrabmode = SDL_GRAB_OFF;
@@ -68,7 +71,7 @@ static void on_key_down(const SDL_Event *event) {
   if (keys[SDLK_LALT] && keys[SDLK_RETURN]) {
 
 #if USE_VIDEO_NEO
-    SDL_WM_ToggleFullScreen(screen);
+    neo_render_fs_toggle();
 #endif
 
     if (usefullscreen) {

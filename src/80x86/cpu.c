@@ -30,7 +30,9 @@ union cpu_flags_t cpu_flags;
 
 extern struct structpic i8259;
 
-uint8_t opcode, segoverride, reptype, hltstate = 0;
+bool in_hlt_state;
+
+uint8_t opcode, segoverride, reptype;
 uint16_t segregs[4], savecs, saveip, ip, useseg, oldsp;
 uint8_t mode, reg, rm;
 uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
@@ -638,7 +640,7 @@ void cpu_reset() {
   log_printf(LOG_CHAN_CPU, "reset");
   cpu_regs.cs = 0xFFFF;
   ip = 0x0000;
-  hltstate = 0;
+  in_hlt_state = false;
 }
 
 static uint16_t readrm16(uint8_t rmval) {
@@ -1222,6 +1224,10 @@ static void op_grp5() {
   }
 }
 
+bool cpu_in_hlt_state(void) {
+  return in_hlt_state;
+}
+
 // cycles is target cycles
 // return executed cycles
 int32_t cpu_exec86(int32_t cycle_target) {
@@ -1245,13 +1251,14 @@ int32_t cpu_exec86(int32_t cycle_target) {
 
     const bool pending_irq = cpu_flags.ifl && (i8259.irr & (~i8259.imr));
     if (!trap_toggle && pending_irq) {
-      hltstate = 0;
+      in_hlt_state = false;
       const int next_int = i8259_nextintr();
       // get next interrupt from the i8259, if any
       _intcall_handler(next_int);
     }
 
-    if (hltstate) {
+    if (in_hlt_state) {
+      _cycles += target;
       break;
     }
 
@@ -3325,7 +3332,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
       break;
 
     case 0xF4: /* F4 HLT */
-      hltstate = 1;
+      in_hlt_state = true;
       break;
 
     case 0xF5: /* F5 CMC */
@@ -3408,14 +3415,12 @@ int32_t cpu_exec86(int32_t cycle_target) {
       // technically they aren't exactly like NOPs in most cases,
       // but for our pursoses, that's accurate enough.
 #endif
-      log_printf(
-        LOG_CHAN_CPU,
-        "illegal opcode: %02X %02X /%X @ %04X:%04X\n",
-        getmem8(savecs, saveip),
-        getmem8(savecs, saveip + 1),
-        (getmem8(savecs, saveip + 2) >> 3) & 7,
-        savecs,
-        saveip);
+      log_printf(LOG_CHAN_CPU, "unknown opcode:");
+      log_printf(LOG_CHAN_CPU, "  @ %04x:%04x", savecs, saveip);
+
+      for (int i = 0; i < 5; ++i) {
+        log_printf(LOG_CHAN_CPU, "  %02x", getmem8(savecs, saveip + i));
+      }
 
 #ifndef NDEBUG
       __debugbreak();
