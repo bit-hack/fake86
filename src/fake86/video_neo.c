@@ -24,6 +24,7 @@
 
 // http://www.osdever.net/FreeVGA/vga/vgareg.htm
 // http://www.osdever.net/FreeVGA/vga/graphreg.htm#05
+// https://wiki.osdev.org/VGA_Hardware#Port_0x3C0
 
 // text mode layout:
 //  [[char], [attr]], [[char], [attr]], ...
@@ -153,7 +154,7 @@ static void mda_port_write(uint16_t portnum, uint8_t value) {
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
-// VGA Sequencer Registers
+// VGA Sequencer Registers - 3C4 - 3C5
 
 // port 3C4h
 static uint8_t _vga_seq_addr;
@@ -165,7 +166,7 @@ static uint8_t _vga_seq_addr;
 // Index 02h -- Map Mask Register
 // Index 03h -- Character Map Select Register
 // Index 04h -- Sequencer Memory Mode Register
-
+//
 static uint8_t _vga_seq_data[256];
 
 static uint32_t _vga_plane_write_enable(void) {
@@ -173,7 +174,7 @@ static uint32_t _vga_plane_write_enable(void) {
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
-// VGA Graphics Registers
+// VGA Graphics Controller - 3CE - 3CF
 
 // port 3CEh
 static uint8_t _vga_reg_addr;
@@ -192,11 +193,11 @@ static uint8_t _vga_reg_addr;
 //
 static uint8_t _vga_reg_data[256];
 
-static uint32_t _vga_read_mode(void) {
+static uint32_t _vga_write_mode(void) {
   return _vga_reg_data[0x5] & 3;
 }
 
-static uint32_t _vga_write_mode(void) {
+static uint32_t _vga_read_mode(void) {
   return (_vga_reg_data[0x5] >> 3) & 1;
 }
 
@@ -208,9 +209,43 @@ static uint32_t _vga_memory_map_select(void) {
   return (_vga_reg_data[0x6] >> 2) & 3;
 }
 
+// enable set/reset
+// 0x3CE  01  ....**** lsb
+//
+static uint32_t _vga_sr_enable(void) {
+  return _vga_reg_data[0x1] & 0x0f;
+}
+
+// set/reset value
+// 0x3CE  00  ....**** lsb
+//
+static uint32_t _vga_sr_value(void) {
+  return _vga_reg_data[0x0] & 0x0f;
+}
+
+// memory plane write enable
+// 0x3CE  02  ....**** lsb
+//
+static uint32_t _vga_plane_we(void) {
+  return _vga_seq_data[0x2] & 0x0f;
+}
+
+// vga alu logical operation
+// 0x3CE  03  ...**... lsb
+//
+static uint32_t _vga_logic_op(void) {
+  return (_vga_reg_data[0x3] >> 3) & 0x03;
+}
+
+// vga bit rotate count
+// 0x3CE  03  .....*** lsb
+//
+static uint32_t _vga_rot_count(void) {
+  return _vga_reg_data[0x3] & 0x07;
+}
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
-// VGA DAC
+// VGA DAC - 3C6H - 3C9H
 
 // bit layout
 // msb                             lsb
@@ -226,6 +261,9 @@ static uint8_t _dac_mode_read;   // dac read address
 // XXX: these may be the same thing?
 static uint8_t _dac_pal_read;    // palette index (r, g, b, r, g ...)
 static uint8_t _dac_pal_write;   // palette index (r, g, b, r, g ...)
+
+static uint8_t _dac_mask_reg;    // port 0x3c6
+
 
 const uint32_t *neo_dac_data(void) {
   return _dac_entry;
@@ -281,6 +319,8 @@ static uint8_t ega_port_read(uint16_t portnum) {
     return _vga_seq_addr;
   case 0x3c5:
     return _vga_seq_data[_vga_seq_addr];
+  case 0x3c6:
+    return _dac_mask_reg;
   case 0x3c7:
     return _dac_state & 0x3;
   case 0x3c8:
@@ -299,13 +339,18 @@ static uint8_t ega_port_read(uint16_t portnum) {
 
 static void ega_port_write(uint16_t portnum, uint8_t value) {
   switch (portnum) {
+//case 0x3c3:
+//  video subsystem enable
+
   case 0x3c4:
     _vga_seq_addr = value;
     break;
   case 0x3c5:
     _vga_seq_data[_vga_seq_addr] = value;
     break;
-
+  case 0x3c6:
+    _dac_mask_reg = value;
+    break;
   case 0x3c7:
     _dac_mode_read  = value;
     _dac_pal_read   = 0;
@@ -588,17 +633,52 @@ uint8_t neo_mem_read_A0000(uint32_t addr) {
   case 1:
     return RAM[addr];
     break;
+  default:
+    UNREACHABLE();
   }
 }
+
+uint8_t rot_mode_0(uint8_t in, uint8_t rot) {
+  // rotate right by rot bits (max 7)
+  return (in >> rot) | (((uint16_t)in << 8) >> rot);
+}
+
+#define PHASE2(val, sr_reg, sr_val, mask) \
+  ((sr_reg) & (mask)) ? (value) : (((sr_val) & (mask)) ? ~0 : 0)
+
+static void _neo_mem_write_A0000_0(uint32_t addr, uint8_t value) {
+  value = rot_mode_0(value, _vga_rot_count());
+
+  const uint8_t sr_reg = _vga_sr_enable();
+  const uint8_t sr_val = _vga_sr_value();
+
+  const uint8_t pix[4] = {
+    PHASE2(value, sr_reg, sr_val, 0x1),
+    PHASE2(value, sr_reg, sr_val, 0x2),
+    PHASE2(value, sr_reg, sr_val, 0x4),
+    PHASE2(value, sr_reg, sr_val, 0x8),
+  };
+
+  addr -= 0xA0000;
+  const uint32_t planesize = 0x10000;
+
+
+}
+
+static void _neo_mem_write_A0000_1(uint32_t addr, uint8_t value) {}
+
+static void _neo_mem_write_A0000_2(uint32_t addr, uint8_t value) {}
+
+static void _neo_mem_write_A0000_3(uint32_t addr, uint8_t value) {}
 
 // EGA/VGA
 void neo_mem_write_A0000(uint32_t addr, uint8_t value) {
   switch (_vga_write_mode()) {
-  case 0:
-  case 1:
-  case 2:
-  case 3:
-    RAM[addr] = value;
-    break;
+  case 0: _neo_mem_write_A0000_0(addr, value); break;
+  case 1: _neo_mem_write_A0000_1(addr, value); break;
+  case 2: _neo_mem_write_A0000_2(addr, value); break;
+  case 3: _neo_mem_write_A0000_3(addr, value); break;
+  default:
+    UNREACHABLE();
   }
 }

@@ -68,7 +68,7 @@ static void _neo_render_mode_unknown(void) {
 }
 
 // 80x25 greyscale text mode
-static void _neo_render_mode_2(void) {
+static void _neo_render_mode_02(void) {
   // text mode buffer address
   uint32_t src = 0xB8000;
   // cga/PCjr = 8x8  char px
@@ -105,7 +105,7 @@ static void _neo_render_mode_2(void) {
 }
 
 // 80x25 16-colour text mode
-static void _neo_render_mode_3(void) {
+static void _neo_render_mode_03(void) {
   const uint32_t base = 0xB8000;
   // text mode buffer address
   uint32_t src = 0xB8000;
@@ -143,7 +143,7 @@ static void _neo_render_mode_3(void) {
 }
 
 // 320x200 4-colour graphics mode interleaved
-static void _neo_render_mode_4(void) {
+static void _neo_render_mode_04(void) {
   // buffer address
   uint32_t src = 0xB8000;
   uint32_t span = 1024 * 8;
@@ -167,7 +167,7 @@ static void _neo_render_mode_4(void) {
 }
 
 // 320x200 greyscale graphics mode interleaved
-static void _neo_render_mode_5(void) {
+static void _neo_render_mode_05(void) {
 
   static const uint32_t ramp[] = {
     0x000000, 0x444444, 0x888888, 0xcccccc
@@ -197,7 +197,7 @@ static void _neo_render_mode_5(void) {
 
 // 80x25 greyscale text mode
 // XXX: untested
-static void _neo_render_mode_7(void) {
+static void _neo_render_mode_07(void) {
   // text mode buffer address
   uint32_t src = 0xB8000;
   // cga/PCjr = 9x14  char px
@@ -239,7 +239,16 @@ static void _neo_render_mode_0d(void) {
 }
 
 static void _neo_render_mode_13(void) {
-  // todo
+  const uint8_t *srcy = RAM + 0xA0000;
+  uint32_t *dst = _temp;
+  for (int y = 0; y < 240; ++y) {
+    const uint8_t *srcx = srcy;
+    for (int x = 0; x < 320; ++x) {
+      const uint8_t pix = srcx[x];
+    }
+    dst += 320;
+    srcy += 320;
+  }
 }
 
 // blit offscreen render target to screen
@@ -278,12 +287,12 @@ void neo_render_tick(void) {
   }
 
   switch (neo_get_video_mode()) {
-  case 0x02: _neo_render_mode_2(); break;
-  case 0x03: _neo_render_mode_3(); break;
-  case 0x04: _neo_render_mode_4(); blit_2x(320, 200); break;
-  case 0x05: _neo_render_mode_5(); blit_2x(320, 200); break;
-  case 0x07: _neo_render_mode_7(); break;
-//  case 0x0d: _neo_render_mode_d(); blit_2x(320, 200); break;
+  case 0x02: _neo_render_mode_02(); break;
+  case 0x03: _neo_render_mode_03(); break;
+  case 0x04: _neo_render_mode_04(); blit_2x(320, 200); break;
+  case 0x05: _neo_render_mode_05(); blit_2x(320, 200); break;
+  case 0x07: _neo_render_mode_07(); break;
+  case 0x13: _neo_render_mode_13(); blit_2x(320, 240); break;
   default:
     _neo_render_mode_unknown();
     break;
