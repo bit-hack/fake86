@@ -276,6 +276,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
   const uint32_t to_do = SDL_min(_pending_samples * 2, num_samples);
   _pending_samples -= to_do / 2;
 
+  // wipe our buffer
   memset(samples, 0, to_do * sizeof(uint16_t));
 
 #if USE_AUDIO_ADLIB
@@ -284,7 +285,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
   }
 #endif
 
-#if 0
+#if USE_AUDIO_SPEAKER
   // render internal speaker
   if (_at_spk_freq > 10 && _at_spk_freq < 18000) {
     if (_at_spk_enable) {

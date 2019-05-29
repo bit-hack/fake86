@@ -1404,7 +1404,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_or16();
-#ifdef CPU_286
+#if (CPU == CPU_286)
       if ((oper1 == 0xF802) && (oper2 == 0xF802)) {
         cpu_flags.sf = 0; /* cheap hack to make Wolf 3D think we're a 286 so it plays */
       }
@@ -2054,7 +2054,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
       cpu_regs.di = cpu_pop();
       break;
 
-#ifndef CPU_8086
+#if (CPU != CPU_8086)
     case 0x60: /* 60 PUSHA (80186+) */
       oldsp = cpu_regs.sp;
       cpu_push(cpu_regs.ax);
