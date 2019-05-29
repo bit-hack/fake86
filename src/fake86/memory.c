@@ -38,14 +38,6 @@ void mem_init(void) {
   memset(RAM, 0, sizeof(RAM));
 }
 
-static uint8_t mem_read_8(uint32_t addr) {
-  return RAM[addr];
-}
-
-static uint16_t mem_read_16(uint32_t addr) {
-  return RAM[addr] | (RAM[addr + 1] << 8);
-}
-
 static void mem_write_8(uint32_t addr, uint8_t data) {
   RAM[addr] = data;
 }
@@ -71,7 +63,7 @@ void write86(uint32_t addr, uint8_t value) {
     return;
   }
   else {
-    mem_write_8(addr, value);
+    RAM[addr] = value;
   }
 #else
   if (readonly[addr] || (addr >= 0xC0000)) {
@@ -82,11 +74,11 @@ void write86(uint32_t addr, uint8_t value) {
         (vidmode != 0x12) &&
         (vidmode != 0x0D) &&
         (vidmode != 0x10)) {
-      mem_write_8(addr, value);
+      RAM[addr] = value;
     } else {
       if (((VGA_SC[4] & 6) == 0) && (vidmode != 0xD) && (vidmode != 0x10) &&
           (vidmode != 0x12)) {
-        mem_write_8(addr, value);
+        RAM[addr] = value;
       } else {
         writeVGA(addr - 0xA0000, value);
         updatedscreen = 1;
@@ -94,14 +86,23 @@ void write86(uint32_t addr, uint8_t value) {
     }
     return;
   }
-  mem_write_8(addr, value);
+  RAM[addr] = value;
 #endif
 }
 
 void writew86(uint32_t addr32, uint16_t value) {
   addr32 &= 0xFFFFF;
-  write86(addr32 + 0, (uint8_t)(value >> 0));
-  write86(addr32 + 1, (uint8_t)(value >> 8));
+  if (addr32 >= 0xC0000) {
+    // read only
+    return;
+  }
+  if (addr32 < 0xA0000) {
+    *(uint16_t*)(RAM + addr32) = value;
+  }
+  else {
+    write86(addr32 + 0, (uint8_t)(value >> 0));
+    write86(addr32 + 1, (uint8_t)(value >> 8));
+  }
 }
 
 uint8_t read86(uint32_t addr) {
@@ -115,7 +116,7 @@ uint8_t read86(uint32_t addr) {
     return neo_mem_read_A0000(addr); // vga/ega
   }
   else {
-    return mem_read_8(addr);
+    return RAM[addr];
   }
 #else
   // VRAM read
@@ -134,14 +135,19 @@ uint8_t read86(uint32_t addr) {
       }
     }
   }
-  return mem_read_8(addr);
+  return RAM[addr];
 #endif
 }
 
 uint16_t readw86(uint32_t addr32) {
   addr32 &= 0xFFFFF;
-  return (uint16_t)(read86(addr32 + 0) << 0) |
-         (uint16_t)(read86(addr32 + 1) << 8);
+  if (addr32 < 0xA0000 || addr32 >= 0xC0000) {
+    return *(const uint16_t*)(RAM + addr32);
+  }
+  else {
+    return (uint16_t)(read86(addr32 + 0) << 0) |
+           (uint16_t)(read86(addr32 + 1) << 8);
+  }
 }
 
 uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag) {

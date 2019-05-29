@@ -74,9 +74,9 @@ struct struct_drive {
   uint32_t heads;
 };
 
-uint8_t bootdrive = 128;
-uint8_t hdcount = 0;
-uint8_t fdcount = 0;
+uint8_t bootdrive;
+uint8_t hdcount;
+uint8_t fdcount;
 
 static struct struct_drive disk[256];
 
@@ -600,11 +600,11 @@ void disk_bootstrap(int intnum) {
 
   // auto detect boot drive
   if (!disk[bootdrive].inserted) {
-    if (disk[0].inserted) {
-      bootdrive = 0;
-    }
     if (disk[128].inserted) {
       bootdrive = 128;
+    }
+    if (disk[0].inserted) {
+      bootdrive = 0;
     }
   }
 

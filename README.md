@@ -12,23 +12,44 @@ Authors:
 
 ## Objectives
 
-The original Fake86 seems to have been abandoned as the last update was in 2013.  Reviewing the latest code, Mike had achieved a lot with this project, however the code was messy and hard to follow in many places (It was one of his first C project remember).
+The original Fake86 seems to have been abandoned as the last update was in 2013.
+Reviewing the latest code, Mike had achieved a lot with this project, however
+the code was messy and hard to follow in many places (It was one of his first C
+project remember).
 
-When I forked the project, my objective was to make the code base as clean as possible, document the code, improve emulation speed, accuracy and compatibility.
+When I forked the project, my objective was to make the code base as clean as
+possible, document the code, improve emulation speed, accuracy and
+compatibility.
 
-The last available code was taken and a no-compromises policy was taken when reworking it to improve the core structure of the code for both speed and maintainability.  Large portions of code were thrown out in the process, however I believe this is necessary to unburden the core of the emulator.  In time these will be re-written and re-integrated into the project in an order that makes sense.  There were a several hacks in the code-base to get things to work, and in the course of time these are being removed and features are being added to make them entirely unnecessary.
+The last available code was taken and a no-compromises policy was taken when
+reworking it to improve the core structure of the code for both speed and
+maintainability.  Large portions of code were thrown out in the process,
+however I believe this is necessary to unburden the core of the emulator.  In
+time these will be re-written and re-integrated into the project in an order
+that makes sense.  There were a several hacks in the code-base to get things to
+work, and in the course of time these are being removed and features are being
+added to make them entirely unnecessary.
 
-If you diff the two codebases you will see almost every line of code has been touched in some manner.
+If you diff the two codebases you will see almost every line of code has been
+touched in some manner.
 
 
 ## Features
 - Intel 80186+ CPU emulation
 - CGA/EGA/VGA graphics emulation
+  - Frame skipping support
 - Floppy drive and hard disk emulation
   - Disk image or device pass-through
-- (_poor_) Internal PC speaker emulation
-- Standard Microsoft-compatible serial mouse emulated on COM1
-- Written in portable C, and runs on Linux and Windows
+- Robust audio support:
+  - Accurate audio event timing
+  - Internal PC speaker emulation
+  - Nuked OPL3 Adlib emulation
+- Peripherals:
+  - Standard Microsoft-compatible serial mouse emulated on COM1
+- Clean codebase:
+  - Written in portable C
+  - 64 bit clean
+  - Linux and Windows support
 
 
 ## Status

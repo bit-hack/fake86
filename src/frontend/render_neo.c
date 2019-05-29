@@ -237,14 +237,49 @@ static void _neo_render_mode_07(void) {
   }
 }
 
-//XXX: needed by ega tree house
 static void _neo_render_mode_0d(void) {
-  uint32_t *dst = _temp;
-  for (int y = 0; y < 240; ++y) {
-    for (int x = 0; x < 320; ++x) {
-      // planar like mode 13
+  const uint32_t *dac = neo_dac_data();
+  // clear temp buffer
+  memset(_temp, 0, 320 * 240 * 4);
+  // video ram at 0xA0000
+  const uint8_t *plane0 = vga_ram() + 0x1000 * 0;
+  const uint8_t *plane1 = vga_ram() + 0x1000 * 1;
+  const uint8_t *plane2 = vga_ram() + 0x1000 * 2;
+  const uint8_t *plane3 = vga_ram() + 0x1000 * 3;
+  // writing to temporary buffer
+  uint32_t *dsty = _temp;
+  // offset for 320x200 to 320x240 mismatch
+  dsty += 320 * 20;
+  // blit loop
+  for (int y = 0; y < 200; ++y) {
+    uint32_t *dstx = dsty;
+    for (int x = 0; x < (320 / 8); ++x) {
+      // get the next colour bytes from each plane
+      const uint8_t b0 = plane0[x];
+      const uint8_t b1 = plane1[x];
+      const uint8_t b2 = plane2[x];
+      const uint8_t b3 = plane3[x];
+      // write 8 pixels at a time
+      for (int i=0; i<8; ++i) {
+        const uint8_t mask = 0x80 >> i;
+        // combine bits for colour index
+        const uint32_t index = ((b0 & mask) ? 1 : 0) |
+                               ((b1 & mask) ? 2 : 0) |
+                               ((b2 & mask) ? 4 : 0) |
+                               ((b3 & mask) ? 8 : 0);
+        // todo:
+        *dstx = (index << 4) | (index << 12) | (index << 20);
+        // next dest
+        ++dstx;
+      }
     }
-    dst += 320;
+    // step over the destination
+    dsty += 320;
+    // step the planes
+    plane0 += (320 / 8);
+    plane1 += (320 / 8);
+    plane2 += (320 / 8);
+    plane3 += (320 / 8);
   }
 }
 
@@ -310,6 +345,7 @@ void neo_render_tick(void) {
   case 0x04: _neo_render_mode_04(); blit_2x(320, 200); break;
   case 0x05: _neo_render_mode_05(); blit_2x(320, 200); break;
   case 0x07: _neo_render_mode_07(); break;
+  case 0x0d: _neo_render_mode_0d(); blit_2x(320, 200); break;
   case 0x13: _neo_render_mode_13(); blit_2x(320, 240); break;
   default:
     _neo_render_mode_unknown();

@@ -165,6 +165,7 @@ static void _cl_defaults() {
   usefullscreen = 0;
   audio_enable = true;
   frame_skip = 0;
+  bootdrive = 0;
 }
 
 bool cl_parse(const int argc, const char **args) {

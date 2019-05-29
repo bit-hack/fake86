@@ -22,17 +22,19 @@
 
 #include "../80x86/cpu.h"
 
-// http://www.osdever.net/FreeVGA/vga/vgareg.htm
-// http://www.osdever.net/FreeVGA/vga/graphreg.htm#05
-// https://wiki.osdev.org/VGA_Hardware#Port_0x3C0
+// References:
+//   http://www.osdever.net/FreeVGA/vga/vgareg.htm
+//   http://www.osdever.net/FreeVGA/vga/graphreg.htm#05
+//   https://wiki.osdev.org/VGA_Hardware#Port_0x3C0
+//   https://www.phatcode.net/res/224/files/html/ch27/27-01.html
 
-// text mode layout:
+// Text mode layout:
 //  [[char], [attr]], [[char], [attr]], ...
 
-
-// cga has 16kb ram at 0xB8000 for framebuffer
-// frame buffer is incompletely decoded and is mirrored at 0xBC000
-// text mode page is either 2k bytes (40x25x2) or 4k bytes (80x25x2)
+// Misc Notes:
+//  cga has 16kb ram at 0xB8000 for framebuffer
+//  frame buffer is incompletely decoded and is mirrored at 0xBC000
+//  text mode page is either 2k bytes (40x25x2) or 4k bytes (80x25x2)
 #define MAX_PAGES 16
 
 enum system_t {
@@ -75,6 +77,26 @@ static bool no_blanking = false;
 // 4x 64k memory planes
 static uint8_t _vga_ram[0x40000];
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// rotate right
+static inline uint8_t _ror8(uint8_t in, uint8_t rot) {
+  rot &= 7;
+  // rotate right by rot bits (max 7)
+  return (in >> rot) | (((uint16_t)in << 8) >> rot);
+}
+
+// lower four bits to byte mask
+static uint32_t _make_mask(const uint8_t bits) {
+  uint32_t out;
+  out  = (bits & 0x1) ? 0x000000ff : 0;
+  out |= (bits & 0x2) ? 0x0000ff00 : 0;
+  out |= (bits & 0x4) ? 0x00ff0000 : 0;
+  out |= (bits & 0x8) ? 0xff000000 : 0;
+  return out;
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 // CRTC (6845) address register
 static uint8_t crt_reg_addr = 0;
@@ -628,32 +650,104 @@ int neo_get_video_mode(void) {
 // four latch bytes packed in 32bits
 static uint32_t _vga_latch;
 
-// EGA/VGA
-uint8_t neo_mem_read_A0000(uint32_t addr) {
-  addr -= 0xA0000;
-  const uint32_t planesize = 0x10000;
-  switch (_vga_read_mode()) {
-  case 0:
-    switch (_vga_read_map_select()) {
-    case 0: return _vga_ram[addr + planesize * 0];
-    case 1: return _vga_ram[addr + planesize * 1];
-    case 2: return _vga_ram[addr + planesize * 2];
-    case 3: return _vga_ram[addr + planesize * 3];
-    }
-  case 1:
-    return RAM[addr];
-    break;
+// Read Mode 0
+//
+// During a CPU read from the frame buffer, the value returned to the CPU is
+// data from the memory plane selected by bits 1 and 0 of the Read Plane Select
+// Register (GR04).
+static uint8_t _neo_vga_read_0(uint32_t addr) {
+  switch (_vga_read_map_select()) {
+  case 0: return (_vga_latch >>  0) & 0xff;
+  case 1: return (_vga_latch >>  8) & 0xff;
+  case 2: return (_vga_latch >> 16) & 0xff;
+  case 3: return (_vga_latch >> 24) & 0xff;
   default:
     UNREACHABLE();
   }
 }
 
-static uint8_t _ror8(uint8_t in, uint8_t rot) {
-  rot &= 7;
-  // rotate right by rot bits (max 7)
-  return (in >> rot) | (((uint16_t)in << 8) >> rot);
+// Read Mode 1
+// 
+// During a CPU read from the frame buffer, all 8 bits of the byte in each of
+// the 4 memory planes corresponding to the address from which a CPU read
+// access is being performed are compared to the corresponding bits in this
+// register (if the corresponding bit in the Color Don’t Care Register (GR07)
+// is set to 1). The value that the CPU receives from the read access is an
+// 8-bit value that shows the result of this comparison. A value of 1 in a
+// given bit position indicates that all of the corresponding bits in the bytes
+// across all 4 of the memory planes that were included in the comparison had
+// the same value as their memory plane’s respective bits in this register.
+static uint8_t _neo_vga_read_1(uint32_t addr) {
+  // https://www.phatcode.net/res/224/files/html/ch28/28-03.html#Heading4
+  UNREACHABLE();
 }
 
+// EGA/VGA
+uint8_t neo_mem_read_A0000(uint32_t addr) {
+  addr -= 0xA0000;
+  const uint32_t planesize = 0x10000;
+  // fill the latches
+  _vga_latch  = ((uint32_t)_vga_ram[addr + planesize * 0]) << 0;
+  _vga_latch |= ((uint32_t)_vga_ram[addr + planesize * 1]) << 8;
+  _vga_latch |= ((uint32_t)_vga_ram[addr + planesize * 2]) << 16;
+  _vga_latch |= ((uint32_t)_vga_ram[addr + planesize * 3]) << 24;
+  // dispatch via read mode
+  switch (_vga_read_mode()) {
+  case 0: return _neo_vga_read_0(addr);
+  case 1: return _neo_vga_read_1(addr);
+  default:
+    UNREACHABLE();
+  }
+}
+
+static void _neo_vga_write_planes(uint32_t addr, uint32_t lanes) {
+
+  const uint32_t planesize = 0x10000;
+
+  if (_vga_plane_write_enable() & 0x01) {
+    _vga_ram[addr + planesize * 0] = (lanes >> 0) & 0xff;
+  }
+  if (_vga_plane_write_enable() & 0x02) {
+    _vga_ram[addr + planesize * 1] = (lanes >> 8) & 0xff;
+  }
+  if (_vga_plane_write_enable() & 0x04) {
+    _vga_ram[addr + planesize * 2] = (lanes >> 16) & 0xff;
+  }
+  if (_vga_plane_write_enable() & 0x08) {
+    _vga_ram[addr + planesize * 3] = (lanes >> 24) & 0xff;
+  }
+}
+
+static void _neo_vga_write_alu(uint32_t addr, uint32_t input) {
+    // alu operations
+  uint32_t tmp1;
+  switch (_vga_logic_op()) {
+  case 0: tmp1 = input;              break;
+  case 1: tmp1 = input & _vga_latch; break;
+  case 2: tmp1 = input | _vga_latch; break;
+  case 3: tmp1 = input ^ _vga_latch; break;
+  default:
+    UNREACHABLE();
+  }
+
+  // mux between tmp0 or alu results
+  // todo: precompute this
+  const uint32_t bm_mux = _make_mask(_vga_bit_mask());
+  uint32_t tmp2 = (tmp1 & bm_mux) | (_vga_latch & ~bm_mux);
+
+  // write data to planes
+  _neo_vga_write_planes(addr, tmp2);
+}
+
+// 00 = Write Mode 0
+//
+// During a CPU write to the frame buffer, the addressed byte in each of the 4
+// memory planes is written with the CPU write data after it has been rotated
+// by the number of counts specified in the Data Rotate Register (GR03). If,
+// however, the bit(s) in the Enable Set/Reset Register (GR01) corresponding to
+// one or more of the memory planes is set to 1, then those memory planes will
+// be written to with the data stored in the corresponding bits in the Set/Reset
+// Register (GR00).
 static void _neo_vga_write_0(uint32_t addr, uint8_t value) {
 
   value = _ror8(value, _vga_rot_count());
@@ -666,57 +760,85 @@ static void _neo_vga_write_0(uint32_t addr, uint8_t value) {
   // mask to mux between bytes or s/r value
   // todo: precompute this
   const uint8_t sr_reg = _vga_sr_enable();
-  uint32_t sr_mask;
-  sr_mask  = (sr_reg & 0x1) ? 0 : 0x000000ff;
-  sr_mask |= (sr_reg & 0x2) ? 0 : 0x0000ff00;
-  sr_mask |= (sr_reg & 0x4) ? 0 : 0x00ff0000;
-  sr_mask |= (sr_reg & 0x8) ? 0 : 0xff000000;
+  uint32_t sr_mask = ~_make_mask(sr_reg);
 
   // mux between byte inputs or s/r value
   uint32_t tmp0 = (path & sr_mask) | (srvl & ~sr_mask);
 
-  // alu operations
-  uint32_t tmp1;
-  switch (_vga_logic_op()) {
-  case 0: tmp1 = tmp0;              break;
-  case 1: tmp1 = tmp0 & _vga_latch; break;
-  case 2: tmp1 = tmp0 | _vga_latch; break;
-  case 3: tmp1 = tmp0 ^ _vga_latch; break;
-  }
-
-  // mux between tmp0 or alu results
-  // todo: precompute this
-  uint32_t bm_mux;
-  bm_mux  = (_vga_bit_mask() & 0x1) ? 0x000000ff : 0;
-  bm_mux |= (_vga_bit_mask() & 0x2) ? 0x0000ff00 : 0;
-  bm_mux |= (_vga_bit_mask() & 0x4) ? 0x00ff0000 : 0;
-  bm_mux |= (_vga_bit_mask() & 0x8) ? 0xff000000 : 0;
-
-  uint32_t tmp2 = (tmp1 & bm_mux) | (_vga_latch & ~bm_mux);
-
-  const uint32_t planesize = 0x10000;
-
-  if (_vga_plane_write_enable() & 0x01) {
-    _vga_ram[addr + planesize * 0] = tmp2 & 0xff;
-  }
-  if (_vga_plane_write_enable() & 0x02) {
-    _vga_ram[addr + planesize * 1] = (tmp2 >> 8) & 0xff;
-  }
-  if (_vga_plane_write_enable() & 0x04) {
-    _vga_ram[addr + planesize * 2] = (tmp2 >> 16) & 0xff;
-  }
-  if (_vga_plane_write_enable() & 0x08) {
-    _vga_ram[addr + planesize * 3] = (tmp2 >> 24) & 0xff;
-  }
-
-#undef PHASE2
+  _neo_vga_write_alu(addr, tmp0);
 }
 
-static void _neo_vga_write_1(uint32_t addr, uint8_t value) {}
+// 01 = Write Mode 1
+//
+// During a CPU write to the frame buffer, the addressed byte in each of the 4
+// memory planes is written to with the data stored in the memory read latches.
+// (The memory read latches stores an unaltered copy of the data last read from
+// any location in the frame buffer.)
+static void _neo_vga_write_1(uint32_t addr, uint8_t value) {
+  //XXX: called by INDY
 
-static void _neo_vga_write_2(uint32_t addr, uint8_t value) {}
+  // untested!
+  _neo_vga_write_planes(addr, _vga_latch);
+}
 
-static void _neo_vga_write_3(uint32_t addr, uint8_t value) {}
+// 10 = Write Mode 2
+//
+// During a CPU write to the frame buffer, the least significant 4 data bits of
+// the CPU write data is treated as the color value for the pixels in the
+// addressed byte in all 4 memory planes. The 8 bits of the Bit Mask Register
+// (GR08) are used to selectively enable or disable the ability to write to the
+// corresponding bit in each of the 4 memory planes that correspond to a given
+// pixel. A setting of 0 in a bit in the Bit Mask Register at a given bit
+// position causes the bits in the corresponding bit positions in the addressed
+// byte in all 4 memory planes to be written with value of their counterparts in
+// the memory read latches. A setting of 1 in a Bit Mask Register at a given bit
+// position causes the bits in the corresponding bit positions in the addressed
+// byte in all 4 memory planes to be written with the 4 bits taken from the CPU
+// write data to thereby cause the pixel corresponding to these bits to be set
+// to the color value.
+static void _neo_vga_write_2(uint32_t addr, uint8_t value) {
+  //see: https://www.phatcode.net/res/224/files/html/ch27/27-01.html
+
+  //XXX: called by INDY
+
+  const uint32_t mask = _make_mask(value);
+  _neo_vga_write_alu(addr, mask);
+}
+
+// 11 = Write Mode 3
+//
+// During a CPU write to the frame buffer, the CPU write data is logically
+// ANDed with the contents of the Bit Mask Register (GR08). The result of this
+// ANDing is treated as the bit mask used in writing the contents of the
+// Set/Reset Register (GR00) are written to addressed byte in all 4 memory
+// planes.
+static void _neo_vga_write_3(uint32_t addr, uint8_t value) {
+
+  // https://wiki.osdev.org/VGA_Hardware - write mode 3
+
+  // rotate input bits
+  value = _ror8(value, _vga_rot_count());
+
+  //XXX: not just be AND, use function select register bits 3-4 for func
+  //see: https://cs.nyu.edu/~yap/classes/machineOrg/info/video.htm
+
+  // The resulting value is ANDed with the Bit Mask Register, resulting in the
+  // bit mask to be applied
+  uint8_t tmp0 = _vga_bit_mask() & value;
+
+  // Each plane takes one bit from the Set/Reset Value register, and turns it
+  // into either 0x00 (if set) or 0xff (if clear) 
+  uint32_t srvl = _vga_sr_value() ? 0 : ~0u;
+
+  // The computed bit mask is checked, for each set bit the corresponding bit
+  // from the set/reset logic is forwarded. If the bit is clear the bit is taken
+  // directly from the Latch
+  uint32_t switcher = _make_mask(tmp0);
+  uint32_t tmp1 = (srvl & switcher) | (_vga_latch & ~switcher );
+
+  // The result is sent towards memory
+  _neo_vga_write_planes(addr, tmp1);
+}
 
 // EGA/VGA
 void neo_mem_write_A0000(uint32_t addr, uint8_t value) {
