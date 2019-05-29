@@ -43,3 +43,4 @@ void font_draw_glyph_8x16(
 extern const uint32_t palette_cga_2_rgb[];
 extern const uint32_t palette_cga_3_rgb[];
 extern const uint32_t palette_cga_4_rgb[];
+extern const uint32_t palette_vga_16_rgb[];

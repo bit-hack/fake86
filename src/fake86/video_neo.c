@@ -397,7 +397,6 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
     _vga_reg_addr = value;
     break;
   case 0x3cf:
-//    printf("_vga_reg_data[0x%02x] = 0x%02x\n", _vga_reg_addr, value);
     _vga_reg_data[_vga_reg_addr] = value;
     break;
 
@@ -625,19 +624,15 @@ bool neo_int10_handler(void) {
 
 // initalize neo display adapter
 bool neo_init(void) {
-
   // mda
   set_port_read_redirector(0x3B0, 0x3BF, mda_port_read);
   set_port_write_redirector(0x3B0, 0x3BF, mda_port_write);
-
   // ega
   set_port_read_redirector(0x3C0, 0x3CF, ega_port_read);
   set_port_write_redirector(0x3C0, 0x3CF, ega_port_write);
-
   // cga
   set_port_read_redirector(0x3D0, 0x3DF, cga_port_read);
   set_port_write_redirector(0x3D0, 0x3DF, cga_port_write);
-
   return true;
 }
 
@@ -700,7 +695,7 @@ uint8_t neo_mem_read_A0000(uint32_t addr) {
   }
 }
 
-static void _neo_vga_write_planes(uint32_t addr, uint32_t lanes) {
+static void _neo_vga_write_planes(uint32_t addr, const uint32_t lanes) {
 
   const uint32_t planesize = 0x10000;
 
@@ -718,6 +713,10 @@ static void _neo_vga_write_planes(uint32_t addr, uint32_t lanes) {
   }
 }
 
+static uint32_t _broadcast(const uint8_t val) {
+  return (val << 24) | (val << 16) | (val << 8) | val;
+}
+
 static void _neo_vga_write_alu(uint32_t addr, uint32_t input) {
     // alu operations
   uint32_t tmp1;
@@ -732,7 +731,8 @@ static void _neo_vga_write_alu(uint32_t addr, uint32_t input) {
 
   // mux between tmp0 or alu results
   // todo: precompute this
-  const uint32_t bm_mux = _make_mask(_vga_bit_mask());
+//  const uint32_t bm_mux = _make_mask(_vga_bit_mask());
+  const uint32_t bm_mux = _broadcast(_vga_bit_mask());
   uint32_t tmp2 = (tmp1 & bm_mux) | (_vga_latch & ~bm_mux);
 
   // write data to planes

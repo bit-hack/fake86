@@ -242,14 +242,12 @@ static void _neo_render_mode_0d(void) {
   // clear temp buffer
   memset(_temp, 0, 320 * 240 * 4);
   // video ram at 0xA0000
-  const uint8_t *plane0 = vga_ram() + 0x1000 * 0;
-  const uint8_t *plane1 = vga_ram() + 0x1000 * 1;
-  const uint8_t *plane2 = vga_ram() + 0x1000 * 2;
-  const uint8_t *plane3 = vga_ram() + 0x1000 * 3;
+  const uint8_t *plane0 = vga_ram() + 0x10000 * 0;
+  const uint8_t *plane1 = vga_ram() + 0x10000 * 1;
+  const uint8_t *plane2 = vga_ram() + 0x10000 * 2;
+  const uint8_t *plane3 = vga_ram() + 0x10000 * 3;
   // writing to temporary buffer
   uint32_t *dsty = _temp;
-  // offset for 320x200 to 320x240 mismatch
-  dsty += 320 * 20;
   // blit loop
   for (int y = 0; y < 200; ++y) {
     uint32_t *dstx = dsty;
@@ -268,7 +266,8 @@ static void _neo_render_mode_0d(void) {
                                ((b2 & mask) ? 4 : 0) |
                                ((b3 & mask) ? 8 : 0);
         // todo:
-        *dstx = (index << 4) | (index << 12) | (index << 20);
+//        *dstx = (index << 20) | (index << 12) | (index << 4);
+        *dstx = dac[index];
         // next dest
         ++dstx;
       }
@@ -291,8 +290,6 @@ static void _neo_render_mode_13(void) {
   const uint8_t *srcy = vga_ram();
   // writing to temporary buffer
   uint32_t *dst = _temp;
-  // offset for 320x200 to 320x240 mismatch
-  dst += 320 * 20;
   // blit loop
   for (int y = 0; y < 200; ++y) {
     const uint8_t *srcx = srcy;
@@ -346,7 +343,7 @@ void neo_render_tick(void) {
   case 0x05: _neo_render_mode_05(); blit_2x(320, 200); break;
   case 0x07: _neo_render_mode_07(); break;
   case 0x0d: _neo_render_mode_0d(); blit_2x(320, 200); break;
-  case 0x13: _neo_render_mode_13(); blit_2x(320, 240); break;
+  case 0x13: _neo_render_mode_13(); blit_2x(320, 200); break;
   default:
     _neo_render_mode_unknown();
     break;

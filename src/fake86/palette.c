@@ -86,6 +86,25 @@ uint32_t palettecga[] = {
   0x00ffffff
 };
 
+const uint32_t palette_vga_16_rgb[] = {
+  0x000000,
+  0x0000a9,
+  0x00a900,
+  0x00a9a9,
+  0xa90000,
+  0xa900a9,
+  0xa9a900,
+  0xa9a9a9,
+  0x000054,
+  0x0000ff,
+  0x00a954,
+  0x00a9ff,
+  0xa90054,
+  0xa900ff,
+  0xa9a954,
+  0xa9a9ff,
+};
+
 // TODO: flip this to native ARGB format, (currently in BGA format)
 uint32_t palettevga[] = {
   0x00000000,
