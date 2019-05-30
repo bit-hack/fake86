@@ -237,6 +237,55 @@ static void _neo_render_mode_07(void) {
   }
 }
 
+// UNTESTED!
+static void _neo_render_mode_0e(void) {
+  //
+  static const uint32_t width = 640;
+  // vga dac palette
+  const uint32_t *dac = neo_dac_data();
+  // video ram at 0xA0000
+  const uint8_t *plane0 = vga_ram() + 0x10000 * 0;
+  const uint8_t *plane1 = vga_ram() + 0x10000 * 1;
+  const uint8_t *plane2 = vga_ram() + 0x10000 * 2;
+  const uint8_t *plane3 = vga_ram() + 0x10000 * 3;
+  // writing to temporary buffer
+  uint32_t *dsty = (uint32_t*)_surface->pixels;
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  // blit loop
+  for (int y = 0; y < 200; ++y) {
+    uint32_t *dstx = dsty;
+    for (int x = 0; x < (width / 8); ++x) {
+      // get the next colour bytes from each plane
+      const uint8_t b0 = plane0[x];
+      const uint8_t b1 = plane1[x];
+      const uint8_t b2 = plane2[x];
+      const uint8_t b3 = plane3[x];
+      // write 8 pixels at a time
+      for (int i=0; i<8; ++i) {
+        const uint8_t mask = 0x80 >> i;
+        // combine bits for colour index
+        const uint32_t index = ((b0 & mask) ? 1 : 0) |
+                               ((b1 & mask) ? 2 : 0) |
+                               ((b2 & mask) ? 4 : 0) |
+                               ((b3 & mask) ? 8 : 0);
+
+        // XXX: this palette index is not right
+        *dstx = dac[index];
+        *dstx = dac[index + pitch];
+        // next dest
+        ++dstx;
+      }
+    }
+    // step over the destination
+    dsty += pitch * 2;
+    // step the planes
+    plane0 += (width / 8);
+    plane1 += (width / 8);
+    plane2 += (width / 8);
+    plane3 += (width / 8);
+  }
+}
+
 static void _neo_render_mode_0d(void) {
   const uint32_t *dac = neo_dac_data();
   // clear temp buffer
@@ -265,8 +314,8 @@ static void _neo_render_mode_0d(void) {
                                ((b1 & mask) ? 2 : 0) |
                                ((b2 & mask) ? 4 : 0) |
                                ((b3 & mask) ? 8 : 0);
-        // todo:
-//        *dstx = (index << 20) | (index << 12) | (index << 4);
+
+        // XXX: this palette index is not right!
         *dstx = dac[index];
         // next dest
         ++dstx;
@@ -279,6 +328,53 @@ static void _neo_render_mode_0d(void) {
     plane1 += (320 / 8);
     plane2 += (320 / 8);
     plane3 += (320 / 8);
+  }
+}
+
+static void _neo_render_mode_10(void) {
+  //
+  static const uint32_t width = 640;
+  static const uint32_t height = 350;
+  // vga dac palette
+  const uint32_t *dac = neo_dac_data();
+  // video ram at 0xA0000
+  const uint8_t *plane0 = vga_ram() + 0x10000 * 0;
+  const uint8_t *plane1 = vga_ram() + 0x10000 * 1;
+  const uint8_t *plane2 = vga_ram() + 0x10000 * 2;
+  const uint8_t *plane3 = vga_ram() + 0x10000 * 3;
+  // destination
+  uint32_t *dsty = (uint32_t*)_surface->pixels;
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  dsty += pitch * ((_surface->h - height) / 2);
+  // blit loop
+  for (int y = 0; y < height; ++y) {
+    uint32_t *dstx = dsty;
+    for (int x = 0; x < (width / 8); ++x) {
+      // get the next colour bytes from each plane
+      const uint8_t b0 = plane0[x];
+      const uint8_t b1 = plane1[x];
+      const uint8_t b2 = plane2[x];
+      const uint8_t b3 = plane3[x];
+      // write 8 pixels at a time
+      for (int i=0; i<8; ++i) {
+        const uint8_t mask = 0x80 >> i;
+        // combine bits for colour index
+        const uint32_t index = ((b0 & mask) ? 1 : 0) |
+                               ((b1 & mask) ? 2 : 0) |
+                               ((b2 & mask) ? 4 : 0) |
+                               ((b3 & mask) ? 8 : 0);
+        *dstx = dac[index];
+        // next dest
+        ++dstx;
+      }
+    }
+    // step over the destination
+    dsty += pitch;
+    // step the planes
+    plane0 += (width / 8);
+    plane1 += (width / 8);
+    plane2 += (width / 8);
+    plane3 += (width / 8);
   }
 }
 
@@ -301,15 +397,62 @@ static void _neo_render_mode_13(void) {
   }
 }
 
+static void _neo_render_mode_12(void) {
+  //
+  static const uint32_t width = 640;
+  static const uint32_t height = 480;
+  // vga dac palette
+  const uint32_t *dac = neo_dac_data();
+  // video ram at 0xA0000
+  const uint8_t *plane0 = vga_ram() + 0x10000 * 0;
+  const uint8_t *plane1 = vga_ram() + 0x10000 * 1;
+  const uint8_t *plane2 = vga_ram() + 0x10000 * 2;
+  const uint8_t *plane3 = vga_ram() + 0x10000 * 3;
+  // destination
+  uint32_t *dsty = (uint32_t*)_surface->pixels;
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  dsty += pitch * ((_surface->h - height) / 2);
+  // blit loop
+  for (int y = 0; y < height; ++y) {
+    uint32_t *dstx = dsty;
+    for (int x = 0; x < (width / 8); ++x) {
+      // get the next colour bytes from each plane
+      const uint8_t b0 = plane0[x];
+      const uint8_t b1 = plane1[x];
+      const uint8_t b2 = plane2[x];
+      const uint8_t b3 = plane3[x];
+      // write 8 pixels at a time
+      for (int i=0; i<8; ++i) {
+        const uint8_t mask = 0x80 >> i;
+        // combine bits for colour index
+        const uint32_t index = ((b0 & mask) ? 1 : 0) |
+                               ((b1 & mask) ? 2 : 0) |
+                               ((b2 & mask) ? 4 : 0) |
+                               ((b3 & mask) ? 8 : 0);
+        *dstx = dac[index];
+        // next dest
+        ++dstx;
+      }
+    }
+    // step over the destination
+    dsty += pitch;
+    // step the planes
+    plane0 += (width / 8);
+    plane1 += (width / 8);
+    plane2 += (width / 8);
+    plane3 += (width / 8);
+  }
+}
+
 // blit offscreen render target to screen
 static void blit_2x(uint32_t w, uint32_t h) {
   const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
   uint32_t *dst = (uint32_t *)_surface->pixels;
-
+  // offset to centre
   if (_surface->h > 2 * h) {
     dst += pitch * ((_surface->h - h * 2) / 2);
   }
-
+  // blit loop
   const uint32_t *src = _temp;
   for (uint32_t y = 0; y < h; ++y) {
     uint32_t *dstx = dst;
@@ -343,6 +486,9 @@ void neo_render_tick(void) {
   case 0x05: _neo_render_mode_05(); blit_2x(320, 200); break;
   case 0x07: _neo_render_mode_07(); break;
   case 0x0d: _neo_render_mode_0d(); blit_2x(320, 200); break;
+  case 0x0e: _neo_render_mode_0e(); break;
+  case 0x10: _neo_render_mode_10(); break;
+  case 0x12: _neo_render_mode_12(); break;
   case 0x13: _neo_render_mode_13(); blit_2x(320, 200); break;
   default:
     _neo_render_mode_unknown();

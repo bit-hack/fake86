@@ -64,3 +64,6 @@ union cpu_flags_t {
 extern union cpu_flags_t cpu_flags;
 
 extern bool running;
+
+// tell the cpu we need to pause its loop and tick the hardware
+void cpu_preempt(void);

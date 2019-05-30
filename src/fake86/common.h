@@ -136,7 +136,7 @@ void i8253_init(void);
 void i8253_tick(uint64_t cycles);
 uint32_t i8253_frequency(int channel);
 uint8_t i8253_channel2_out(void);
-uint64_t i8253_cycles_before_irq(void);
+int64_t i8253_cycles_before_irq(void);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8255.c
 struct i8255_t {

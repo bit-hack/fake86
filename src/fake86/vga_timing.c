@@ -53,9 +53,15 @@ void vga_timing_init(void) {
     (double)(_vga_timing.hlines * _vga_timing.vlines);
 }
 
+// this is a bit of a fudge without this, wolf3d gets stuck in its
+// @@waitdisplay loop inside of ID_VL_A.asm.
+//
+// TODO: fix this in the long term... cpu speed?
+double speed_scale = 0.5f;
+
 void vga_timing_advance(const uint64_t cycles) {
   // accumulate and wrap
-  const double num_pixels = _vga_timing.px_per_cycle * (double)cycles;
+  const double num_pixels = _vga_timing.px_per_cycle * (double)cycles * speed_scale;
   // accumulate
   _vga_timing.px_accum += num_pixels;
   // wrap back into range
@@ -69,7 +75,7 @@ void vga_timing_advance(const uint64_t cycles) {
 uint8_t vga_timing_get_3da(void) {
   // find our cycles part way through the slice
   double acc = _vga_timing.px_accum;
-  acc += _vga_timing.px_per_cycle * (double)cpu_slice_ticks();
+  acc += _vga_timing.px_per_cycle * (double)cpu_slice_ticks() * speed_scale;
   while (acc > _vga_timing.px_per_frame) {
     acc -= _vga_timing.px_per_frame;
   }
@@ -79,7 +85,11 @@ uint8_t vga_timing_get_3da(void) {
   const uint64_t hpos = px_number % _vga_timing.hlines;
   const uint64_t vpos = px_number / _vga_timing.hlines;
   // set vblank and hblank bits accordingly
-  return ((hpos >= 640) ? 1 : 0) | ((vpos >= 400) ? 8 : 0);
+  const bool in_hblank = (hpos >= 640);
+  const bool in_vblank = (vpos >= 400);
+  // vblank is 8 + 1
+  return (in_vblank ? 9 : 0) |
+         (in_hblank ? 1 : 0);
 }
 
 bool vga_timing_should_flip(void) {

@@ -20,7 +20,12 @@
 
 // i8253 Programmable Interval Timer
 
+// NOTE: it seems now like we should buffer the cycles and compute the timer
+//       state on the fly as needed.
+
 #include "common.h"
+
+#include "../80x86/cpu.h"
 
 
 #define DEVELOPER 0
@@ -60,6 +65,8 @@ struct i8253_channel_t {
 struct i8253_s {
   struct i8253_channel_t channel[3];
   uint8_t control;
+  // cycle fraction since last tick
+  int64_t left_over;
 };
 
 struct i8253_s i8253;
@@ -116,6 +123,10 @@ static void i8253_channel_write(int channel,
   // calculate frequency in Hz
   c->frequency = 1193182 / (c->rvalue == 0 ? 0xffff : c->rvalue);
 
+  // update pit hardware
+  if (channel == 0) {
+    cpu_preempt();
+  }
   // update audio
   if (channel == 2) {
     audio_pc_speaker_freq(c->frequency);
@@ -191,6 +202,11 @@ static void i8253_mode_write(uint8_t value) {
     return;
   }
 
+  // if channel 0 then update pit hardware
+  if (select == 0) {
+    cpu_preempt();
+  }
+
   c->output = 0;
   c->toggle_access = (rl == PIT_RLMODE_TOGGLE);
   c->bcd = bcd;
@@ -232,6 +248,11 @@ static uint8_t i8253_port_read(uint16_t portnum) {
   if (channel == 3) {
     // no operation 3 state
     return 0;
+  }
+
+  // tick the PIT timer hardware
+  if (channel == 0) {
+    cpu_preempt();
   }
 
   struct i8253_channel_t *c = &i8253.channel[channel];
@@ -286,7 +307,7 @@ static void update_mode_0(struct i8253_channel_t *c, uint32_t cycles) {
       // move to the 0 counter state
       cycles -= c->counter;
       c->counter = 0;
-      //      i8259_doirq(0);
+      i8259_doirq(0);
     }
   }
   c->counter -= cycles;
@@ -308,12 +329,12 @@ static void update_mode_2(struct i8253_channel_t *c, uint32_t cycles) {
     if (cycles >= c->counter) {
       // reset counter
       cycles -= c->counter;
-      i8253_reload(c);
       // if channel 0
       if (is_chan_0 && c->output_active) {
         c->counter = 2;
         i8259_doirq(0);
       }
+      i8253_reload(c);
     } else {
       c->counter -= cycles;
       cycles = 0;
@@ -363,11 +384,6 @@ static uint32_t old_time = 0;
 #endif
 
 void i8253_tick(uint64_t cycles) {
-
-  // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
-  // Convert from the CPU cycles to PIT CLK
-  const int64_t pit_cycles = (cycles * 1193182) / CYCLES_PER_SECOND;
-
 #if 0
   // TODO: Remove when channel 0 is working correctly
   // Generate an interupt every 18.2Hz on IRQ0
@@ -395,9 +411,22 @@ void i8253_tick(uint64_t cycles) {
   // Channel3 drives the speaker but is gated by the 8255-PB1
 
 #if 1
+  const uint64_t pit_speed = 1193182;
+
+  // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
+  // Convert from the CPU cycles to PIT CLK
+  // note: we keep track of the error for the next cycles this process
+  const int64_t in_cycles = cycles + i8253.left_over;
+  const int64_t pit_cycles = (in_cycles * pit_speed) / CYCLES_PER_SECOND;
+  // convert back and track the error
+  const int64_t will_do = (pit_cycles * CYCLES_PER_SECOND) / pit_speed;
+  i8253.left_over = in_cycles - will_do;
+
   // update timer channels
   for (int i = 0; i < 3; ++i) {
+
     struct i8253_channel_t *c = &i8253.channel[i];
+
     switch (c->mode_op) {
     case 0: update_mode_0(c, (uint32_t)pit_cycles); break;
     case 1: update_mode_1(c, (uint32_t)pit_cycles); break;
@@ -412,7 +441,7 @@ void i8253_tick(uint64_t cycles) {
 #endif
 }
 
-uint64_t i8253_cycles_before_irq(void) {
+int64_t i8253_cycles_before_irq(void) {
   const struct i8253_channel_t *c0 = &i8253.channel[0];
   if (c0->rvalue == 0) {
     return 0xffffff;
@@ -421,5 +450,6 @@ uint64_t i8253_cycles_before_irq(void) {
     return 0xffffff;
   }
   // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
-  return ((uint64_t)c0->counter * CYCLES_PER_SECOND) / 1193182;
+  const int64_t cycles = (((uint64_t)c0->counter * CYCLES_PER_SECOND) / 1193182);
+  return cycles - i8253.left_over;
 }

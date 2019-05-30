@@ -674,6 +674,8 @@ static uint8_t _neo_vga_read_0(uint32_t addr) {
 // the same value as their memory plane’s respective bits in this register.
 static uint8_t _neo_vga_read_1(uint32_t addr) {
   // https://www.phatcode.net/res/224/files/html/ch28/28-03.html#Heading4
+
+  //XXX: needed by CIV when it gets to the menu screen
   UNREACHABLE();
 }
 

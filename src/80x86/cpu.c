@@ -42,6 +42,8 @@ uint32_t temp1, temp2, temp3, temp32, ea;
 // cpu is running
 bool running;
 
+static bool _cpu_preempt;
+
 static uint64_t _cycles;
 
 uint64_t cpu_slice_ticks(void) {
@@ -1228,12 +1230,17 @@ bool cpu_in_hlt_state(void) {
   return in_hlt_state;
 }
 
+void cpu_preempt(void) {
+  _cpu_preempt = true;
+}
+
 // cycles is target cycles
 // return executed cycles
 int32_t cpu_exec86(int32_t cycle_target) {
 
   static uint16_t trap_toggle = 0;
 
+  _cpu_preempt = false;
   _cycles = 0;
 
   // set ourselves some cycle targets
@@ -1241,6 +1248,11 @@ int32_t cpu_exec86(int32_t cycle_target) {
     SDL_max(1, SDL_min(i8253_cycles_before_irq(), cycle_target));
 
   while (running && _cycles < target) {
+
+    // exit if we are being pre-empted
+    if (_cpu_preempt) {
+      break;
+    }
 
     // if trap is asserted
     if (trap_toggle) {
@@ -3263,7 +3275,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
       cpu_regs.al = (uint8_t)portin(oper1b);
       break;
 
-    case 0xE5: /* E5 IN eAX Ib */
+    case 0xE5: /* E5 IN AX Ib */
       oper1b = getmem8(cpu_regs.cs, ip);
       StepIP(1);
       cpu_regs.ax = portin16(oper1b);
