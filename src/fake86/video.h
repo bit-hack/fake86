@@ -24,8 +24,10 @@
 
 
 // crt driver access
-uint16_t neo_crt_cursor_reg(void);
+uint32_t neo_crt_cursor_addr(void);
 uint8_t neo_crt_register(uint32_t index);
+uint8_t neo_crt_cursor_start(void);
+uint8_t neo_crt_cursor_end(void);
 
 const uint8_t *vga_ram(void);
 

@@ -251,6 +251,9 @@ int main(int argc, char *argv[]) {
   else {
     log_printf(LOG_CHAN_SDL, "initalized sdl");
   }
+  // enable key repeat
+  SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY,
+                      SDL_DEFAULT_REPEAT_INTERVAL);
   // initalize the audio stream
   if (audio_enable) {
     if (!sdl_audio_init()) {

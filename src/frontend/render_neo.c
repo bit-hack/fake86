@@ -24,6 +24,7 @@
 
 #include "../fake86/common.h"
 #include "../fake86/video.h"
+#include "frontend.h"
 
 
 SDL_Surface *_surface;
@@ -65,8 +66,43 @@ static void _neo_render_mode_unknown(void) {
     uint32_t *dstx = dsty;
     for (uint32_t x = 0; x < (uint32_t)_surface->w; ++x) {
       dstx[x] = (1 & (x ^ y)) ? 0x000000 : 0x808080;
-     }
+    }
     dsty += (_surface->pitch) / sizeof(uint32_t);
+  }
+}
+
+static void _neo_draw_cursor(const uint8_t chw, const uint8_t chh,
+                             const uint8_t w, const uint8_t h,
+                             const uint32_t yoffset) {
+
+  // blink
+  if ((SDL_GetTicks() % 1000) > 500) {
+    return;
+  }
+  // convert address to location
+  const uint32_t cursor = neo_crt_cursor_addr();
+  const uint32_t x = cursor % w;
+  const uint32_t y = cursor / w;
+  // bail out if offscreen
+  if (x >= w || y >= h) {
+    return;
+  }
+  // draw target
+  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  uint32_t *dst = (uint32_t*)_surface->pixels;
+  dst += yoffset * pitch;
+  dst += chw * x + chh * y * pitch;
+  // scanline locations
+  const uint32_t start = neo_crt_cursor_start();
+  const uint32_t end   = neo_crt_cursor_end();
+  // draw it
+  for (uint32_t y = 0; y < chh; ++y) {
+    if (y >= start && y <= end) {
+      for (uint32_t x = 0; x < chw; ++x) {
+        dst[x] = 0xffffff;
+      }
+    }
+    dst += pitch;
   }
 }
 
@@ -84,11 +120,12 @@ static void _neo_render_mode_02(void) {
   // screen buffer position
   const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
   uint32_t *dsty = (uint32_t*)_surface->pixels;
-  dsty += pitch * ((_surface->h - (chh * rows)) / 2);
+  const uint32_t yoffset = (_surface->h - (chh * rows)) / 2;
+  dsty += pitch * yoffset;
   // blit loop
-  for (int y=0; y<rows; ++y) {
+  for (int y = 0; y < rows; ++y) {
     uint32_t *dstx = dsty;
-    for (int x=0; x<cols; ++x) {
+    for (int x = 0; x < cols; ++x) {
       // grab character and attribute
       const uint8_t ch = RAM[src + 0];
       const uint8_t at = RAM[src + 1];
@@ -105,6 +142,8 @@ static void _neo_render_mode_02(void) {
     // step over glyph line
     dsty += pitch * chh;
   }
+  // this is text mode so draw the cursor if needed
+  _neo_draw_cursor(chw, chh, cols, rows, yoffset);
 }
 
 // 80x25 16-colour text mode
@@ -122,7 +161,8 @@ static void _neo_render_mode_03(void) {
   // screen buffer position
   const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
   uint32_t *dsty = (uint32_t*)_surface->pixels;
-  dsty += pitch * ((_surface->h - (chh * rows)) / 2);
+  const uint32_t yoffset = (_surface->h - (chh * rows)) / 2;
+  dsty += pitch * yoffset;
   // blit loop
   for (int y=0; y<rows; ++y) {
     uint32_t *dstx = dsty;
@@ -143,6 +183,8 @@ static void _neo_render_mode_03(void) {
     // step over glyph line
     dsty += pitch * chh;
   }
+  // this is text mode so draw the cursor if needed
+  _neo_draw_cursor(chw, chh, cols, rows, yoffset);
 }
 
 // 320x200 4-colour graphics mode interleaved

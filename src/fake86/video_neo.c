@@ -124,10 +124,17 @@ uint8_t neo_crt_register(uint32_t index) {
   return crt_register[index & 0x1f];
 }
 
-uint16_t neo_crt_cursor_reg(void) {
-  const uint32_t hi = crt_register[12];
-  const uint32_t lo = crt_register[13];
-  return 0x3FFF & ((hi << 8) | lo);
+uint32_t neo_crt_cursor_addr(void) {
+  const uint32_t hi = crt_register[0xE];
+  const uint32_t lo = crt_register[0xF];
+  return (hi << 8) | lo;
+}
+
+uint8_t neo_crt_cursor_start(void) {
+  return crt_register[0xA];
+}
+uint8_t neo_crt_cursor_end(void) {
+  return crt_register[0xB];
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -145,14 +152,34 @@ static uint8_t mda_status = 0;
 
 extern uint8_t _3c0_flipflop;
 
+uint16_t neo_get_cursor_scanline(void) {
+  return (crt_register[0xC] << 8) | crt_register[0xD];
+}
+
+uint16_t neo_get_cursor_addr(void) {
+  return (crt_register[0xE] << 8) | crt_register[0xF];
+}
+
+static uint8_t _read_3d4_3d5(uint16_t portnum) {
+  if (portnum & 1) {
+    return crt_register[crt_reg_addr];
+  } else {
+    // write only but lets return it anyway
+    return crt_reg_addr;
+  }
+}
+
+static void _write_3d4_3d5(uint16_t portnum, uint8_t value) {
+  if (portnum & 1) {
+    crt_register[crt_reg_addr] = value;
+  } else {
+    crt_reg_addr = value & 0x1f;
+  }
+}
+
 static uint8_t mda_port_read(uint16_t portnum) {
   if (portnum >= 0x03B0 && portnum <= 0x03B7) {
-    if (portnum & 1) {
-      return crt_register[crt_reg_addr];
-    } else {
-      // write only but lets return it anyway
-      return crt_reg_addr;
-    }
+    return _read_3d4_3d5(portnum);
   }
   else {
     if (portnum == 0x03BA) {
@@ -170,11 +197,7 @@ static uint8_t mda_port_read(uint16_t portnum) {
 
 static void mda_port_write(uint16_t portnum, uint8_t value) {
   if (portnum >= 0x03B0 && portnum <= 0x03B7) {
-    if (portnum & 1) {
-      crt_register[crt_reg_addr] = value;
-    } else {
-      crt_reg_addr = value & 0x1f;
-    }
+    _write_3d4_3d5(portnum, value);
   }
   if (portnum == 0x03b8) {
     mda_control = value;
@@ -475,11 +498,7 @@ static uint8_t cga_palette = 0;
 static uint8_t cga_port_read(uint16_t portnum) {
 
   if (portnum >= 0x03d0 && portnum <= 0x03d7) {
-    if (portnum & 1) {
-      return crt_register[crt_reg_addr];
-    } else {
-      return crt_reg_addr;
-    }
+    return _read_3d4_3d5(portnum);
   }
 
   switch (portnum) {
@@ -499,13 +518,11 @@ static uint8_t cga_port_read(uint16_t portnum) {
   return portram[portnum];
 }
 
+
+
 static void cga_port_write(uint16_t portnum, uint8_t value) {
   if (portnum >= 0x03d0 && portnum <= 0x03d7) {
-    if (portnum & 1) {
-      crt_register[crt_reg_addr] = value;
-    } else {
-      crt_reg_addr = value & 0x1f;
-    }
+    _write_3d4_3d5(portnum, value);
   }
   else {
     switch (portnum) {
@@ -592,88 +609,6 @@ static void neo_set_video_mode(uint8_t al) {
   }
 
   _video_mode = al;
-}
-
-// set cursor shape
-static void do_int10_01(void) {
-}
-
-// set cursor position
-static void do_int10_02(void) {
-  const int page = cpu_regs.bh;
-  assert(page <= MAX_PAGES);
-  struct cursor_t *c = &_cursor[page];
-  c->x = cpu_regs.dl;
-  c->y = cpu_regs.dh;
-}
-
-// get cursor mode and shape
-static void do_int10_03(int page_num) {
-  const int page = cpu_regs.bh;
-  assert(page <= MAX_PAGES);
-  struct cursor_t *c = &_cursor[page];
-  cpu_regs.ax = 0;
-  cpu_regs.ch = 0; // start scanline
-  cpu_regs.cl = 0; // end scanline
-  cpu_regs.dh = c->y;
-  cpu_regs.dl = c->x;
-}
-
-// select active display page 
-static void do_int10_05(void) {
-  switch (cpu_regs.al) {
-  case 0x81: // cpu page regs
-  case 0x82: // crt page regs
-  case 0x83: // both
-    break;
-  }
-}
-
-// scroll window up
-static void do_int10_06(void) {
-}
-
-// scroll window down
-static void do_int10_07(void) {
-}
-
-// read character and attribute at cursor position
-static void do_int10_08(void) {
-}
-
-// write character and attribute at cursor position 
-static void do_int10_09(void) {
-}
-
-// write character only at cursor position
-static void do_int10_0A(void) {
-}
-
-// teletype output
-static void do_int10_0E(void) {
-}
-
-static void do_int10_0F(void) {
-  cpu_regs.ah = _cols;
-  cpu_regs.al = _video_mode | (no_blanking ? 0x80 : 0x00);
-  cpu_regs.bh = _active_page;
-}
-
-// write to dac registers (vga) or Alternate Select (ega)?
-static void do_int10_12(void) {
-}
-
-// write string (EGA+)
-static void do_int10_13(void) {
-}
-
-// get/set display combination
-static void do_int10_1AXX(void) {
-}
-
-static void do_int10_30XX(void) {
-  cpu_regs.cx = 0;
-  cpu_regs.dx = 0;
 }
 
 // BIOS int 10h Video Services handler

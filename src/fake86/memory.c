@@ -29,12 +29,10 @@ extern uint8_t updatedscreen;
 extern uint16_t VGA_SC[0x100];
 
 uint8_t RAM[0x100000];
-uint8_t readonly[0x100000];
 
 
 void mem_init(void) {
   // its static so not required
-  memset(readonly, 0, sizeof(readonly));
   memset(RAM, 0, sizeof(RAM));
 }
 
@@ -120,8 +118,6 @@ uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag) {
   // load into memory
   fread((void *)&RAM[addr32], 1, readsize, binfile);
   fclose(binfile);
-  // set read only mask
-  memset((void *)&readonly[addr32], roflag, readsize);
   return (readsize);
 }
 
@@ -152,8 +148,6 @@ uint32_t mem_loadbios(const char *filename) {
   // load into memory
   fread((void *)&RAM[addr32], 1, readsize, binfile);
   fclose(binfile);
-  // set readonly mask
-  memset((void *)&readonly[addr32], 1, readsize);
 
   return readsize;
 }
