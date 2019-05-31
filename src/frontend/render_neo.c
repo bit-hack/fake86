@@ -26,14 +26,11 @@
 #include "../fake86/video.h"
 
 
-static SDL_Surface *_surface;
+SDL_Surface *_surface;
 bool do_fullscreen;
 
 // offscreen render target
 static uint32_t _temp[320 * 240];
-
-// hack for just now
-extern SDL_Surface *screen;
 
 
 void neo_render_fs_toggle(void) {
@@ -44,8 +41,6 @@ void neo_render_fs_toggle(void) {
     log_printf(LOG_CHAN_VIDEO, "SDL_SetVideoMode failed");
   }
   SDL_WM_SetCaption(BUILD_STRING, NULL);
-  // hack for now
-  screen = _surface;
 }
 
 
@@ -60,17 +55,15 @@ bool neo_render_init() {
     return false;
   }
   SDL_WM_SetCaption(BUILD_STRING, NULL);
-  // hack for now
-  screen = _surface;
   return true;
 }
 
 // render a grey/black dither pattern
 static void _neo_render_mode_unknown(void) {
   uint32_t *dsty = (uint32_t*)_surface->pixels;
-  for (uint32_t y = 0; y < _surface->h; ++y) {
+  for (uint32_t y = 0; y < (uint32_t)_surface->h; ++y) {
     uint32_t *dstx = dsty;
-    for (uint32_t x = 0; x < _surface->w; ++x) {
+    for (uint32_t x = 0; x < (uint32_t)_surface->w; ++x) {
       dstx[x] = (1 & (x ^ y)) ? 0x000000 : 0x808080;
      }
     dsty += (_surface->pitch) / sizeof(uint32_t);
@@ -254,9 +247,9 @@ static void _neo_render_mode_0e(void) {
   // center
   dsty += ((_surface->h - (height * 2)) / 2) * pitch;
   // blit loop
-  for (int y = 0; y < height; ++y) {
+  for (uint32_t y = 0; y < height; ++y) {
     uint32_t *dstx = dsty;
-    for (int x = 0; x < (width / 8); ++x) {
+    for (uint32_t x = 0; x < (width / 8); ++x) {
       // get the next colour bytes from each plane
       const uint8_t b0 = plane0[x];
       const uint8_t b1 = plane1[x];
@@ -349,9 +342,9 @@ static void _neo_render_mode_10(void) {
   const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
   dsty += pitch * ((_surface->h - height) / 2);
   // blit loop
-  for (int y = 0; y < height; ++y) {
+  for (uint32_t y = 0; y < height; ++y) {
     uint32_t *dstx = dsty;
-    for (int x = 0; x < (width / 8); ++x) {
+    for (uint32_t x = 0; x < (width / 8); ++x) {
       // get the next colour bytes from each plane
       const uint8_t b0 = plane0[x];
       const uint8_t b1 = plane1[x];
@@ -415,9 +408,9 @@ static void _neo_render_mode_12(void) {
   const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
   dsty += pitch * ((_surface->h - height) / 2);
   // blit loop
-  for (int y = 0; y < height; ++y) {
+  for (uint32_t y = 0; y < height; ++y) {
     uint32_t *dstx = dsty;
-    for (int x = 0; x < (width / 8); ++x) {
+    for (uint32_t x = 0; x < (width / 8); ++x) {
       // get the next colour bytes from each plane
       const uint8_t b0 = plane0[x];
       const uint8_t b1 = plane1[x];
@@ -451,7 +444,7 @@ static void blit_2x(uint32_t w, uint32_t h) {
   const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
   uint32_t *dst = (uint32_t *)_surface->pixels;
   // offset to centre
-  if (_surface->h > 2 * h) {
+  if (_surface->h > (int)(2 * h)) {
     dst += pitch * ((_surface->h - h * 2) / 2);
   }
   // blit loop

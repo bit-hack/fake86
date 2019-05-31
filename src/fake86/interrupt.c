@@ -30,17 +30,10 @@ void intcall86(uint8_t intnum) {
   switch (intnum) {
   // Video services
   case 0x10:
-#if USE_VIDEO_NEO
     if (neo_int10_handler()) {
       return;
     }
     break;
-#else
-    if (video_int_handler(intnum)) {
-      return;
-    }
-    break;
-#endif
   // Bootstrap loader interupt
   case 0x19:
     disk_bootstrap(intnum);

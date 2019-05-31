@@ -20,30 +20,14 @@
 
 #pragma once
 
-#include "common.h"
+#include "../fake86/common.h"
 
 
-// crt driver access
-uint16_t neo_crt_cursor_reg(void);
-uint8_t neo_crt_register(uint32_t index);
+extern SDL_Surface *_surface;
 
-const uint8_t *vga_ram(void);
-
-// return video DAC data
-const uint32_t *neo_vga_dac(void);
-const uint32_t *neo_ega_dac(void);
-
-// font glyph blitters
-void font_draw_glyph_8x8(
-  uint32_t *dst, const uint32_t pitch, uint16_t ch,
-  const uint32_t rgb_a, const uint32_t rgb_b);
-
-void font_draw_glyph_8x16(
-  uint32_t *dst, const uint32_t pitch, uint16_t ch,
-  const uint32_t rgb_a, const uint32_t rgb_b);
-
-// palette.c
-extern const uint32_t palette_cga_2_rgb[];
-extern const uint32_t palette_cga_3_rgb[];
-extern const uint32_t palette_cga_4_rgb[];
-extern const uint32_t palette_vga_16_rgb[];
+extern bool do_fullscreen;
+extern bool running;
+extern const char *biosfile;
+extern uint8_t bootdrive;
+extern bool do_fullscreen;
+extern uint32_t frame_skip;

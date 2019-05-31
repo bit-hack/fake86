@@ -19,13 +19,10 @@
 */
 
 #include "../fake86/common.h"
+#include "frontend.h"
 
 
-extern uint32_t usegrabmode;
-extern uint8_t running, portram[0x10000];
-extern SDL_Surface *screen;
-extern uint8_t scrmodechange;
-extern uint32_t usefullscreen;
+static uint32_t usegrabmode;
 
 extern void set_window_title(uint8_t *extra);
 
@@ -39,12 +36,12 @@ static void toggle_mouse_grab() {
     usegrabmode = SDL_GRAB_OFF;
     SDL_WM_GrabInput(SDL_GRAB_OFF);
     SDL_ShowCursor(SDL_ENABLE);
-    set_window_title("");
+    SDL_WM_SetCaption("", NULL);
   } else {
     usegrabmode = SDL_GRAB_ON;
     SDL_WM_GrabInput(SDL_GRAB_ON);
     SDL_ShowCursor(SDL_DISABLE);
-    set_window_title(" (press Ctrl + Alt to release mouse)");
+    SDL_WM_SetCaption(" (press Ctrl + Alt to release mouse)", NULL);
   }
 }
 
@@ -69,18 +66,7 @@ static void on_key_down(const SDL_Event *event) {
 
   // alt + enter to toggle full screen
   if (keys[SDLK_LALT] && keys[SDLK_RETURN]) {
-
-#if USE_VIDEO_NEO
     neo_render_fs_toggle();
-#endif
-
-    if (usefullscreen) {
-      usefullscreen = 0;
-    } else {
-      usefullscreen = SDL_FULLSCREEN;
-    }
-    scrmodechange = 1;
-    return;
   }
 }
 
@@ -116,8 +102,8 @@ static void on_mouse_button_up(const SDL_Event *event) {
 static void on_mouse_motion(const SDL_Event *event) {
   if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF)
     return;
-  const int midx = screen->w / 2;
-  const int midy = screen->h / 2;
+  const int midx = _surface->w / 2;
+  const int midy = _surface->h / 2;
   int mx = 0, my = 0;
   const uint8_t buttons = SDL_GetMouseState(&mx, &my);
   const int dx = mx - midx;

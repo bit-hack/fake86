@@ -21,18 +21,8 @@
 /* parsecl.c: Fake86 command line parsing for runtime options. */
 
 #include "../fake86/common.h"
+#include "frontend.h"
 
-
-extern const char *biosfile;
-
-extern uint8_t bootdrive, verbose, cgaonly;
-extern uint32_t framedelay, textbase, usefullscreen, speed;
-extern int32_t usesamplerate, latency;
-uint16_t constantw = 0, constanth = 0;
-uint8_t slowsystem = 0;
-
-extern bool do_fullscreen;
-extern uint32_t frame_skip;
 
 typedef bool(*cl_callback_t)(const char *opt, const char *arg[]);
 
@@ -161,8 +151,6 @@ static inline bool strpcmp(const char *a, const char *b) {
 
 static void _cl_defaults() {
   biosfile = "pcxtbios.bin";
-  textbase = 0xB8000;
-  usefullscreen = 0;
   audio_enable = true;
   frame_skip = 0;
   bootdrive = 0;

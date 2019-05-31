@@ -50,7 +50,6 @@ static void mem_write_16(uint32_t addr, uint16_t data) {
 void write86(uint32_t addr, uint8_t value) {
   addr &= 0xFFFFF;
 
-#if USE_VIDEO_NEO
   if (addr >= 0xC0000) {
     return;
   }
@@ -65,29 +64,6 @@ void write86(uint32_t addr, uint8_t value) {
   else {
     RAM[addr] = value;
   }
-#else
-  if (readonly[addr] || (addr >= 0xC0000)) {
-    return;
-  }
-  if ((addr >= 0xA0000) && (addr <= 0xBFFFF)) {
-    if ((vidmode != 0x13) &&
-        (vidmode != 0x12) &&
-        (vidmode != 0x0D) &&
-        (vidmode != 0x10)) {
-      RAM[addr] = value;
-    } else {
-      if (((VGA_SC[4] & 6) == 0) && (vidmode != 0xD) && (vidmode != 0x10) &&
-          (vidmode != 0x12)) {
-        RAM[addr] = value;
-      } else {
-        writeVGA(addr - 0xA0000, value);
-        updatedscreen = 1;
-      }
-    }
-    return;
-  }
-  RAM[addr] = value;
-#endif
 }
 
 void writew86(uint32_t addr32, uint16_t value) {
@@ -108,7 +84,6 @@ void writew86(uint32_t addr32, uint16_t value) {
 uint8_t read86(uint32_t addr) {
   addr &= 0xFFFFF;
 
-#if USE_VIDEO_NEO
   if (addr >= 0xA0000 && addr <= 0xC0000) {
     if (addr >= 0xB0000) {
       return RAM[addr];
@@ -118,25 +93,6 @@ uint8_t read86(uint32_t addr) {
   else {
     return RAM[addr];
   }
-#else
-  // VRAM read
-  static const uint32_t VRAM_ADDR = 0xA0000;
-  static const uint32_t VRAM_END = 0xC0000;
-  if ((addr >= VRAM_ADDR) && (addr < VRAM_END)) {
-    switch (vidmode) {
-    case 0x0D:
-    case 0x0E:
-    case 0x10:
-    case 0x12:
-      return readVGA(addr - VRAM_ADDR);
-    case 0x13:
-      if ((VGA_SC[4] & 6) != 0) {
-        return readVGA(addr - VRAM_ADDR);
-      }
-    }
-  }
-  return RAM[addr];
-#endif
 }
 
 uint16_t readw86(uint32_t addr32) {

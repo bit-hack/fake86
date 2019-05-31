@@ -431,7 +431,7 @@ static void _i8253_tick_partial(uint64_t cycles) {
 
 // update the timer between slices
 static void _i8253_tick_update(void) {
-  const uint32_t slice = cpu_slice_ticks();
+  const uint64_t slice = cpu_slice_ticks();
   assert(slice >= i8253.last_ticks);
   const uint64_t diff = slice - i8253.last_ticks;
   if (diff > 0) {

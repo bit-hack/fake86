@@ -132,7 +132,7 @@ static struct audio_adlib_t _adlib;
 static void push_event_adlib(const uint8_t addr, const uint8_t data) {
   struct audio_event_t event;
   const uint64_t new_update = cpu_slice_ticks();
-  event.cycle_delta = new_update - _last_update;
+  event.cycle_delta = (uint32_t)(new_update - _last_update);
   _last_update = new_update;
   event.type = event_adlib;
   event.adlib.reg = addr;
@@ -151,6 +151,8 @@ static void adlib_port_write(uint16_t port, uint8_t value) {
     _adlib.reg[_adlib.address] = value;
     push_event_adlib(_adlib.address, value);
     break;
+  default:
+    UNREACHABLE();
   }
 }
 
@@ -158,6 +160,8 @@ static uint8_t adlib_port_read(uint16_t port) {
   switch (port) {
   case 0x388:
     return _adlib.status;
+  default:
+    UNREACHABLE();
   }
 }
 
@@ -187,7 +191,6 @@ void audio_close(void) {
   }
 }
 
-#if 1
 static int32_t _pending_samples;
 
 static bool _at_spk_enable;
@@ -238,7 +241,7 @@ void adjust_rate(void) {
   const uint32_t target_samples = _sample_rate / 100;
 
   // adjust based on samples left in the buffer
-  const uint32_t samples = cycles_to_samples(accum);
+  const uint32_t samples = cycles_to_samples((uint32_t)accum);
   _at_adjust -= (samples > target_samples);
   _at_adjust += (samples < target_samples);
 
@@ -273,7 +276,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
     _next_event();
   }
   // number of samples we should render
-  const uint32_t to_do = SDL_min(_pending_samples * 2, num_samples);
+  const int32_t to_do = SDL_min(_pending_samples * 2, (int32_t)num_samples);
   _pending_samples -= to_do / 2;
 
   // wipe our buffer
@@ -289,7 +292,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
   // render internal speaker
   if (_at_spk_freq > 10 && _at_spk_freq < 18000) {
     if (_at_spk_enable) {
-      for (uint32_t i = 0; i < to_do; i += 2) {
+      for (int32_t i = 0; i < to_do; i += 2) {
         const int16_t out = (_at_spk_accum & 0x80000000) ? -0x7000 : 0x7000;
         _at_spk_accum += _at_spk_delta;
         // fill left and right
@@ -302,36 +305,11 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
 
   return to_do;
 }
-#else
-uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
-  // two channels interleaved
-  memset(samples, 0, num_samples * 2);
-  // sample rate may not be set
-  if (_sample_rate == 0) {
-    return num_samples;
-  }
-  // avoid aliasing and rumble
-  if (_spk_freq <= 10 || _spk_freq >= 18000) {
-    return num_samples;
-  }
-  // render the oscillator
-  if (_spk_enable) {
-    for (uint32_t i = 0; i < num_samples; i += 2) {
-      const int16_t out = (_spk_accum & 0x80000000) ? -0x7000 : 0x7000;
-      _spk_accum += _spk_delta;
-      // fill left and right
-      samples[i + 0] = out;
-      samples[i + 1] = out;
-    }
-  }
-  return num_samples;
-}
-#endif
 
 static void push_event_spk(void) {
   struct audio_event_t event;
   const uint64_t new_update = cpu_slice_ticks();
-  event.cycle_delta = new_update - _last_update;
+  event.cycle_delta = (uint32_t)(new_update - _last_update);
   _last_update = new_update;
   event.type = event_speaker;
   event.spk.freq = _spk_freq;
@@ -366,7 +344,7 @@ void audio_tick(const uint64_t cycles) {
   assert(_last_update <= cycles);
 
   struct audio_event_t event;
-  event.cycle_delta = cycles - _last_update;
+  event.cycle_delta = (uint32_t)(cycles - _last_update);
   event.type = event_none;
 
   // check if its worth sending one out

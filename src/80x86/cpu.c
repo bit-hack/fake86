@@ -1234,6 +1234,26 @@ void cpu_preempt(void) {
   _cpu_preempt = true;
 }
 
+static void _on_illegal_instruction(void) {
+#ifdef CPU_ALLOW_ILLEGAL_OP_EXCEPTION
+  // trip invalid opcode exception (this occurs on the 80186+,
+  // 8086/8088 CPUs treat them as NOPs.
+  _intcall_handler(6);
+  // technically they aren't exactly like NOPs in most cases,
+  // but for our pursoses, that's accurate enough.
+#endif
+  log_printf(LOG_CHAN_CPU, "unknown opcode:");
+  log_printf(LOG_CHAN_CPU, "  @ %04x:%04x", savecs, saveip);
+
+  for (int i = 0; i < 5; ++i) {
+    log_printf(LOG_CHAN_CPU, "  %02x", getmem8(savecs, saveip + i));
+  }
+
+#ifndef NDEBUG
+//  __debugbreak();
+#endif
+}
+
 // cycles is target cycles
 // return executed cycles
 int32_t cpu_exec86(int32_t cycle_target) {
@@ -3420,23 +3440,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
       break;
 
     default:
-#ifdef CPU_ALLOW_ILLEGAL_OP_EXCEPTION
-      // trip invalid opcode exception (this occurs on the 80186+,
-      // 8086/8088 CPUs treat them as NOPs.
-      _intcall_handler(6);
-      // technically they aren't exactly like NOPs in most cases,
-      // but for our pursoses, that's accurate enough.
-#endif
-      log_printf(LOG_CHAN_CPU, "unknown opcode:");
-      log_printf(LOG_CHAN_CPU, "  @ %04x:%04x", savecs, saveip);
-
-      for (int i = 0; i < 5; ++i) {
-        log_printf(LOG_CHAN_CPU, "  %02x", getmem8(savecs, saveip + i));
-      }
-
-#ifndef NDEBUG
-      __debugbreak();
-#endif
+      _on_illegal_instruction();
       break;
     }
   }

@@ -57,7 +57,7 @@ void vga_timing_init(void) {
 // @@waitdisplay loop inside of ID_VL_A.asm.
 //
 // TODO: fix this in the long term... cpu speed?
-double speed_scale = 0.5f;
+double speed_scale = 0.9f;
 
 void vga_timing_advance(const uint64_t cycles) {
   // accumulate and wrap

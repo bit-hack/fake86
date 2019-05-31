@@ -34,9 +34,6 @@ void handlevideo();
 bool neo_render_init();
 void neo_render_tick();
 
-extern bool cursorvisible;
-extern uint8_t updatedscreen;
-
 const char *biosfile = "pcxtbios.bin";
 
 extern bool cl_parse(int argc, char *argv[]);
@@ -55,12 +52,7 @@ static int64_t tick_cpu(int64_t num_cycles) {
 }
 
 static void tick_render() {
-#if USE_VIDEO_NEO
   neo_render_tick();
-#else
-  render_check_for_mode_change();
-  render_update();
-#endif
 }
 
 static uint64_t get_ticks() {
@@ -72,17 +64,7 @@ static uint64_t get_ticks() {
 #endif
 }
 
-static void cursor_tick(uint64_t cycles) {
-  static uint64_t cursor_accum;
-  cursor_accum += cycles;
-  if (cursor_accum >= CYCLES_PER_SECOND) {
-    cursor_accum -= CYCLES_PER_SECOND;
-  }
-  cursorvisible = cursor_accum > (CYCLES_PER_SECOND / 2);
-}
-
 static void tick_hardware(uint64_t cycles) {
-  cursor_tick(cycles);
   // dma controller
   i8237_tick(cycles);
   // PIC controller
@@ -96,9 +78,7 @@ static void tick_hardware(uint64_t cycles) {
   // tick audio event stream
   audio_tick(cycles);
   //
-#if USE_VIDEO_NEO
   neo_tick(cycles);
-#endif
 }
 
 static void emulate_loop(void) {
@@ -223,7 +203,6 @@ static bool emulate_init() {
   mouse_init(0x3F8, 4);
   // initalize vga refresh timing
   vga_timing_init();
-#if USE_VIDEO_NEO
   // initalize new video renderer
   if (!neo_render_init()) {
     return false;
@@ -231,13 +210,6 @@ static bool emulate_init() {
   if (!neo_init()) {
     return false;
   }
-#else
-  // initalize old video renderer
-  initVideoPorts();
-  if (!render_init()) {
-    return false;
-  }
-#endif
   return true;
 }
 

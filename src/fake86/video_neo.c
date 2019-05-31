@@ -531,13 +531,15 @@ void neo_tick(uint64_t cycles) {
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 static void _clear_text_buffer(void) {
-
   const uint32_t mem_size = 1024 * 16;
-
-  for (int i=0; i<mem_size; i+=2) {
+  for (uint32_t i=0; i<mem_size; i+=2) {
     RAM[0xB8000 + i + 0] = 0x0;
     RAM[0xB8000 + i + 1] = 0x0;
   }
+}
+
+static void _clear_vga_buffer(void) {
+  memset(_vga_ram, 0, sizeof(_vga_ram));
 }
 
 static void neo_set_video_mode(uint8_t al) {
@@ -582,10 +584,11 @@ static void neo_set_video_mode(uint8_t al) {
   // memory base
   if (al >= 0x00 && al <= 0x07) {
     _base = 0xB8000;
-//    _clear_text_buffer();
+    _clear_text_buffer();
   }
   if (al >= 0x0D && al <= 0x13) {
     _base = 0xA0000;
+    _clear_vga_buffer();
   }
 
   _video_mode = al;

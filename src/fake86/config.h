@@ -66,12 +66,11 @@
 
 // cpu speed selection
 // 2Mhz cps
-#define CYCLES_PER_SECOND (2000000)
+//#define CYCLES_PER_SECOND (2000000)
+// ~4Mhz
+#define CYCLES_PER_SECOND (3000000)
 #define TICK_SLICES (100)
 #define CYCLES_PER_SLICE (CYCLES_PER_SECOND / TICK_SLICES)
-
-// use new video emulator
-#define USE_VIDEO_NEO 1
 
 // buffer keyboard strokes
 #define USE_KEY_BUFFER 0
