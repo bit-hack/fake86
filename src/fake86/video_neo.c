@@ -143,6 +143,8 @@ static uint8_t mda_control = 0;
 // 0 - horz. retrace (1 true, 0 false)
 static uint8_t mda_status = 0;
 
+extern uint8_t _3c0_flipflop;
+
 static uint8_t mda_port_read(uint16_t portnum) {
   if (portnum >= 0x03B0 && portnum <= 0x03B7) {
     if (portnum & 1) {
@@ -154,6 +156,10 @@ static uint8_t mda_port_read(uint16_t portnum) {
   }
   else {
     if (portnum == 0x03BA) {
+
+      // reading from 3bA/3dA will set the 3c0 flipflop to index mode
+      _3c0_flipflop = 0;
+
       const uint8_t port_3da = vga_timing_get_3da();
       mda_status = (port_3da & 1) ? 1 : 0;
       return mda_status | 0xf0;
@@ -289,7 +295,7 @@ static uint8_t _dac_pal_write;   // palette index (r, g, b, r, g ...)
 static uint8_t _dac_mask_reg;    // port 0x3c6
 
 
-const uint32_t *neo_dac_data(void) {
+const uint32_t *neo_vga_dac(void) {
   return _dac_entry;
 }
 
@@ -337,8 +343,62 @@ static void _dac_data_write(const uint8_t val) {
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 // ports 03C0-03CF
 
+// 
+uint32_t _ega_dac[16];
+uint8_t _ega_reg[32];
+
+// 0 = index mode
+// 1 = value mode
+uint8_t _3c0_flipflop;
+
+// port 3c0 address
+uint8_t _3c0_addr;
+
+const uint32_t *neo_ega_dac(void) {
+  return _ega_dac;
+}
+
+static uint32_t _ega_attr_to_rgb(const uint8_t value) {
+  // `value` layout:   [msb]  ..rgbRGB  [lsb]
+  //
+  //                primary                 secondary
+  const uint8_t r = ((value >> 4) & 2) | ((value >> 2) & 1);
+  const uint8_t g = ((value >> 3) & 2) | ((value >> 1) & 1);
+  const uint8_t b = ((value >> 2) & 2) | ((value >> 0) & 1);
+  // partial lookup table
+  static const uint8_t lut[] = {0x00, 0xaa, 0x55, 0xff};
+  // pack as RGB byte
+  return (((uint32_t)lut[r]) << 16) |
+         (((uint32_t)lut[g]) <<  8) |
+         (((uint32_t)lut[b]));
+}
+
+static void _write_port_3c0(const uint8_t value) {
+  // write mode
+  if (_3c0_flipflop & 1) {
+    // if this is a palette write
+    if (_3c0_addr < 16) {
+      _ega_dac[_3c0_addr] = _ega_attr_to_rgb(value);
+
+      printf("%02d -> %02d -> %06x\n", _3c0_addr, value, _ega_dac[_3c0_addr]);
+
+    }
+    // other register
+    else {
+      _ega_reg[_3c0_addr] = value;
+    }
+  }
+  // set address mode
+  else {
+    _3c0_addr = value & 0x1f;
+  }
+  _3c0_flipflop ^= 1;
+}
+
 static uint8_t ega_port_read(uint16_t portnum) {
   switch (portnum) {
+  case 0x3c0:
+    return _3c0_addr;
   case 0x3c4:
     return _vga_seq_addr;
   case 0x3c5:
@@ -363,6 +423,10 @@ static uint8_t ega_port_read(uint16_t portnum) {
 
 static void ega_port_write(uint16_t portnum, uint8_t value) {
   switch (portnum) {
+  case 0x3c0:
+    _write_port_3c0(value);
+    break;
+
 //case 0x3c3:
 //  video subsystem enable
 
@@ -427,6 +491,9 @@ static uint8_t cga_port_read(uint16_t portnum) {
   case 0x3d9: // colour control register
     return cga_palette;
   case 0x3da:
+    // reading from port 3ba/3da will reset the 3c0 address/data flip flop
+    _3c0_flipflop = 0;
+    // compute the new vga timing info
     return portram[0x3da] = vga_timing_get_3da();
   default:
 //    printf("%04x r\n", (int)portnum);

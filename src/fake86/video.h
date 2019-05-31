@@ -28,7 +28,8 @@ uint8_t neo_crt_register(uint32_t index);
 const uint8_t *vga_ram(void);
 
 // return video DAC data
-const uint32_t *neo_dac_data(void);
+const uint32_t *neo_vga_dac(void);
+const uint32_t *neo_ega_dac(void);
 
 // font glyph blitters
 void font_draw_glyph_8x8(
