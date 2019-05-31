@@ -27,6 +27,7 @@
 
 #include "../80x86/cpu.h"
 
+static void _i8253_tick_update(void);
 
 #define DEVELOPER 0
 
@@ -67,9 +68,18 @@ struct i8253_s {
   uint8_t control;
   // cycle fraction since last tick
   int64_t left_over;
+  // 
+  uint64_t last_ticks;
 };
 
 struct i8253_s i8253;
+
+// 182Hz threshold (UNUSED)
+static const int64_t irq0_thresh = CYCLES_PER_SECOND / 182;
+static int64_t irq0_accum = 0;
+
+// In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
+const uint64_t pit_speed = 1193182;
 
 uint32_t i8253_frequency(int channel) {
   switch (channel) {
@@ -123,10 +133,13 @@ static void i8253_channel_write(int channel,
   // calculate frequency in Hz
   c->frequency = 1193182 / (c->rvalue == 0 ? 0xffff : c->rvalue);
 
+#if 0
   // update pit hardware
   if (channel == 0) {
     cpu_preempt();
   }
+#endif
+
   // update audio
   if (channel == 2) {
     audio_pc_speaker_freq(c->frequency);
@@ -202,10 +215,12 @@ static void i8253_mode_write(uint8_t value) {
     return;
   }
 
+#if 0
   // if channel 0 then update pit hardware
   if (select == 0) {
     cpu_preempt();
   }
+#endif
 
   c->output = 0;
   c->toggle_access = (rl == PIT_RLMODE_TOGGLE);
@@ -219,6 +234,9 @@ static void i8253_mode_write(uint8_t value) {
 
 // port write
 static void i8253_port_write(uint16_t portnum, uint8_t value) {
+
+  // update the timers
+  _i8253_tick_update();
 
 #if DEVELOPER
   printf("%02x <- %02x\n", portnum, value);
@@ -240,6 +258,9 @@ static void i8253_port_write(uint16_t portnum, uint8_t value) {
 // port read
 static uint8_t i8253_port_read(uint16_t portnum) {
 
+  // update the timers
+  _i8253_tick_update();
+
 #if DEVELOPER
   printf("%02x -> \n", portnum);
 #endif
@@ -250,10 +271,12 @@ static uint8_t i8253_port_read(uint16_t portnum) {
     return 0;
   }
 
+#if 0
   // tick the PIT timer hardware
   if (channel == 0) {
     cpu_preempt();
   }
+#endif
 
   struct i8253_channel_t *c = &i8253.channel[channel];
 
@@ -289,10 +312,6 @@ void i8253_init() {
   set_port_read_redirector(0x40, 0x43, i8253_port_read);
   set_port_write_redirector(0x40, 0x43, i8253_port_write);
 }
-
-// 182Hz threshold
-static const int64_t irq0_thresh = CYCLES_PER_SECOND / 182;
-static int64_t irq0_accum = 0;
 
 static void update_mode_0(struct i8253_channel_t *c, uint32_t cycles) {
   if (c->inhibit_count > 0) {
@@ -378,42 +397,12 @@ static void update_mode_5(struct i8253_channel_t *c, uint32_t cycles) {
   assert(false);
 }
 
-#if 1
-static uint32_t accum = 0;
-static uint32_t old_time = 0;
-#endif
-
-void i8253_tick(uint64_t cycles) {
-#if 0
-  // TODO: Remove when channel 0 is working correctly
-  // Generate an interupt every 18.2Hz on IRQ0
-  irq0_accum += cycles;
-  if (irq0_accum >= irq0_thresh * 10) {
-    irq0_accum -= irq0_thresh * 10;
-    i8259_doirq(0);
-#if 0
-    accum += 1;
-#endif
-  }
-#endif
-
-#if 0
-  const uint32_t new_time = SDL_GetTicks();
-  if (new_time - old_time > 1000) {
-    old_time = new_time;
-    printf("PIT 0: %d\n", accum);
-    accum = 0;
-  }
-#endif
+static void _i8253_tick_partial(uint64_t cycles) {
 
   // Channel2 generates a DREQ0 for the DMA controller?
 
   // Channel3 drives the speaker but is gated by the 8255-PB1
 
-#if 1
-  const uint64_t pit_speed = 1193182;
-
-  // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
   // Convert from the CPU cycles to PIT CLK
   // note: we keep track of the error for the next cycles this process
   const int64_t in_cycles = cycles + i8253.left_over;
@@ -438,10 +427,33 @@ void i8253_tick(uint64_t cycles) {
     case 7: update_mode_3(c, (uint32_t)pit_cycles); break;
     }
   }
-#endif
+}
+
+// update the timer between slices
+static void _i8253_tick_update(void) {
+  const uint32_t slice = cpu_slice_ticks();
+  assert(slice >= i8253.last_ticks);
+  const uint64_t diff = slice - i8253.last_ticks;
+  if (diff > 0) {
+    _i8253_tick_partial(diff);
+  }
+  i8253.last_ticks = slice;
+}
+
+// new slice, update timer
+void i8253_tick(uint64_t cycles) {
+  assert(i8253.last_ticks <= cycles);
+  const uint64_t remain = cycles - i8253.last_ticks;
+  if (remain > 0) {
+    _i8253_tick_partial(remain);
+  }
+  i8253.last_ticks = 0;
 }
 
 int64_t i8253_cycles_before_irq(void) {
+
+  _i8253_tick_update();
+
   const struct i8253_channel_t *c0 = &i8253.channel[0];
   if (c0->rvalue == 0) {
     return 0xffffff;
@@ -450,6 +462,7 @@ int64_t i8253_cycles_before_irq(void) {
     return 0xffffff;
   }
   // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
-  const int64_t cycles = (((uint64_t)c0->counter * CYCLES_PER_SECOND) / 1193182);
+  const int64_t cycles =
+    (((uint64_t)c0->counter * CYCLES_PER_SECOND) / pit_speed);
   return cycles - i8253.left_over;
 }

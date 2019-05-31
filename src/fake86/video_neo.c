@@ -379,9 +379,6 @@ static void _write_port_3c0(const uint8_t value) {
     // if this is a palette write
     if (_3c0_addr < 16) {
       _ega_dac[_3c0_addr] = _ega_attr_to_rgb(value);
-
-      printf("%02d -> %02d -> %06x\n", _3c0_addr, value, _ega_dac[_3c0_addr]);
-
     }
     // other register
     else {

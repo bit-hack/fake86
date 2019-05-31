@@ -289,7 +289,7 @@ static void _neo_render_mode_0e(void) {
 }
 
 static void _neo_render_mode_0d(void) {
-  const uint32_t *dac = neo_vga_dac();
+  const uint32_t *dac = neo_ega_dac();
   // clear temp buffer
   memset(_temp, 0, 320 * 240 * 4);
   // video ram at 0xA0000

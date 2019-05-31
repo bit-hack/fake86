@@ -78,4 +78,4 @@
 
 // do adlib emulation
 #define USE_AUDIO_ADLIB   1
-#define USE_AUDIO_SPEAKER 0
+#define USE_AUDIO_SPEAKER 1
