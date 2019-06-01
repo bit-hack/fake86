@@ -29,6 +29,7 @@
 //   -fd0 *
 
 #include "common.h"
+#include "../frontend/frontend.h"
 
 #if DISK_PASS_THROUGH
 #define WIN32_LEAN_AND_MEAN
@@ -72,8 +73,12 @@ struct struct_drive {
   uint32_t cyls;
   uint32_t sects;
   uint32_t heads;
+  // last seek offset
+  uint32_t seek_pos;
 };
 
+static uint8_t lastdiskah[256];
+static uint8_t lastdiskcf[256];
 uint8_t bootdrive;
 uint8_t hdcount;
 uint8_t fdcount;
@@ -344,16 +349,41 @@ void disk_eject(uint8_t drivenum) {
   d->filesize = 0;
 }
 
-static bool _disk_seek(struct struct_drive *d, uint32_t offset) {
+static bool _do_seek(struct struct_drive *d, uint32_t offset) {
+  assert(d);
+
+  // sector difference
+  uint32_t diff = SDL_abs(offset - d->seek_pos) / 512;
+  uint32_t scale = 2;
+  // update disk offset tracking
+  d->seek_pos = offset;
+  // simulate disk latency
+  if (diff) {
+    if (d->type == disk_type_hdd_file ||
+        d->type == disk_type_hdd_direct) {
+      // hard disks seek faster
+      scale = 1;
+    }
+    // 1ms per sector
+    cpu_delay(scale * diff * CYCLES_PER_SECOND / 2000);
+  }
+
   switch (d->type) {
   case disk_type_fdd_file:
+    osd_disk_fdd_used();
+    assert(d->diskfile);
+    if (fseek(d->diskfile, offset, SEEK_SET))
+      return false;
+    break;
   case disk_type_hdd_file:
+    osd_disk_hdd_used();
     assert(d->diskfile);
     if (fseek(d->diskfile, offset, SEEK_SET))
       return false;
     break;
 #if DISK_PASS_THROUGH
   case disk_type_hdd_direct:
+    osd_disk_hdd_used();
     assert(d->handle);
     if (INVALID_SET_FILE_POINTER ==
         SetFilePointer(d->handle, offset, NULL, FILE_BEGIN))
@@ -361,6 +391,7 @@ static bool _disk_seek(struct struct_drive *d, uint32_t offset) {
     break;
 #endif
   case disk_type_fdd_mem:
+    osd_disk_fdd_used();
     assert(d->memory && d->filesize);
     if (offset >= d->filesize)
       return false;
@@ -372,7 +403,10 @@ static bool _disk_seek(struct struct_drive *d, uint32_t offset) {
   return true;
 }
 
-static bool _disk_read(struct struct_drive *d, uint8_t *dst, uint32_t size) {
+static bool _do_read(struct struct_drive *d, uint8_t *dst, uint32_t size) {
+
+  cpu_delay(CYCLES_PER_SECOND / 1000); // 1ms
+
   switch (d->type) {
   case disk_type_fdd_file:
   case disk_type_hdd_file:
@@ -404,8 +438,12 @@ static bool _disk_read(struct struct_drive *d, uint8_t *dst, uint32_t size) {
   return true;
 }
 
-static bool _disk_write(struct struct_drive *d, const uint8_t *src,
-                        uint32_t size) {
+static bool _do_write(struct struct_drive *d,
+                      const uint8_t *src,
+                      uint32_t size) {
+
+  cpu_delay(CYCLES_PER_SECOND / 1000); // 1ms
+
   switch (d->type) {
   case disk_type_fdd_file:
   case disk_type_hdd_file:
@@ -440,8 +478,13 @@ static bool _disk_write(struct struct_drive *d, const uint8_t *src,
   return true;
 }
 
-void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
-               uint16_t sect, uint16_t head, uint16_t sectcount) {
+static void _disk_read(uint8_t drivenum,
+                       uint16_t dstseg,
+                       uint16_t dstoff,
+                       uint16_t cyl,
+                       uint16_t sect,
+                       uint16_t head,
+                       uint16_t sectcount) {
 
   struct struct_drive *d = &disk[drivenum];
   uint8_t sectorbuffer[512];
@@ -456,7 +499,7 @@ void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
   if (fileoffset > d->filesize) {
     return;
   }
-  if (!_disk_seek(d, fileoffset)) {
+  if (!_do_seek(d, fileoffset)) {
     // ERROR
   }
   uint32_t memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
@@ -467,7 +510,7 @@ void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
   // data from a disk over BIOS or other ROM code that it shouldn't be able to.
   uint32_t cursect = 0;
   for (; cursect < sectcount; cursect++) {
-    if (!_disk_read(d, sectorbuffer, 512)) {
+    if (!_do_read(d, sectorbuffer, 512)) {
       // ERROR
       break;
     }
@@ -480,9 +523,13 @@ void disk_read(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff, uint16_t cyl,
   cpu_regs.ah = 0;
 }
 
-void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff,
-                uint16_t cyl, uint16_t sect, uint16_t head,
-                uint16_t sectcount) {
+static void _disk_write(uint8_t drivenum,
+                        uint16_t dstseg,
+                        uint16_t dstoff,
+                        uint16_t cyl,
+                        uint16_t sect,
+                        uint16_t head,
+                        uint16_t sectcount) {
 
   struct struct_drive *d = &disk[drivenum];
   uint8_t sectorbuffer[512];
@@ -498,7 +545,7 @@ void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff,
     // ERROR
     return;
   }
-  if (!_disk_seek(d, fileoffset)) {
+  if (!_do_seek(d, fileoffset)) {
     // ERROR
     return;
   }
@@ -507,7 +554,7 @@ void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff,
     for (sectoffset = 0; sectoffset < 512; sectoffset++) {
       sectorbuffer[sectoffset] = read86(memdest++);
     }
-    if (!_disk_write(d, sectorbuffer, 512)) {
+    if (!_do_write(d, sectorbuffer, 512)) {
       // ERROR
       return;
     }
@@ -517,81 +564,112 @@ void disk_write(uint8_t drivenum, uint16_t dstseg, uint16_t dstoff,
   cpu_regs.ah = 0;
 }
 
-// BIOS disk services
-void disk_int_handler(int intnum) {
-  static uint8_t lastdiskah[256], lastdiskcf[256];
-  switch (cpu_regs.ah) {
-  case 0: // reset disk system
-    cpu_regs.ah = 0;
-    cpu_flags.cf =
-        0; // useless function in an emulator. say success and return.
-    break;
-  case 1: // return last status
-    cpu_regs.ah = lastdiskah[cpu_regs.dl];
-    cpu_flags.cf = 1 & lastdiskcf[cpu_regs.dl];
-    return;
-  case 2: // read sector(s) into memory
-    if (disk[cpu_regs.dl].inserted) {
-      disk_read(cpu_regs.dl,
+static void _disk_reset(void) {
+  // useless function in an emulator. say success and return.
+  cpu_regs.ah = 0;
+  cpu_flags.cf = 0;
+}
+
+static void _disk_return_status(void) {
+  cpu_regs.ah = lastdiskah[cpu_regs.dl];
+  cpu_flags.cf = 1 & lastdiskcf[cpu_regs.dl];
+}
+
+static void _disk_read_sect(void) {
+  if (disk[cpu_regs.dl].inserted) {
+    _disk_read(cpu_regs.dl,
                 cpu_regs.es,
                 cpu_regs.bx,
                 cpu_regs.ch + (cpu_regs.cl / 64) * 256,
                 cpu_regs.cl & 63,
                 cpu_regs.dh,
                 cpu_regs.al);
-      cpu_flags.cf = 0;
-      cpu_regs.ah = 0;
-    } else {
-      cpu_flags.cf = 1;
-      cpu_regs.ah = 1;
-    }
+    cpu_flags.cf = 0;
+    cpu_regs.ah = 0;
+  } else {
+    cpu_flags.cf = 1;
+    cpu_regs.ah = 1;
+  }
+}
+
+static void _disk_write_sect(void) {
+  if (disk[cpu_regs.dl].inserted) {
+    _disk_write(cpu_regs.dl,
+                cpu_regs.es,
+                cpu_regs.bx,
+                cpu_regs.ch + (cpu_regs.cl / 64) * 256,
+                cpu_regs.cl & 63,
+                cpu_regs.dh,
+                cpu_regs.al);
+    cpu_flags.cf = 0;
+    cpu_regs.ah = 0;
+  } else {
+    cpu_flags.cf = 1;
+    cpu_regs.ah = 1;
+  }
+}
+
+static void _disk_format_track(void) {
+  cpu_flags.cf = 0;
+  cpu_regs.ah = 0;
+}
+
+static void _disk_get_params(void) {
+  if (disk[cpu_regs.dl].inserted) {
+    cpu_flags.cf = 0;
+    cpu_regs.ah = 0;
+    cpu_regs.ch = disk[cpu_regs.dl].cyls - 1;
+    cpu_regs.cl = disk[cpu_regs.dl].sects & 63;
+    cpu_regs.cl = cpu_regs.cl + (disk[cpu_regs.dl].cyls / 256) * 64;
+    cpu_regs.dh = disk[cpu_regs.dl].heads - 1;
+    if (cpu_regs.dl < 0x80) {
+      cpu_regs.bl = 4;
+      cpu_regs.dl = 2;
+    } else
+      cpu_regs.dl = hdcount;
+  } else {
+    cpu_flags.cf = 1;
+    cpu_regs.ah = 0xAA;
+  }
+}
+
+// BIOS disk services
+void disk_int_handler(int intnum) {
+
+  const uint8_t drive_num = cpu_regs.dl;
+
+  switch (cpu_regs.ah) {
+  case 0: // reset disk system
+    _disk_reset();
+    break;
+  case 1: // return last status
+    _disk_return_status();
+    return;
+  case 2: // read sector(s) into memory
+    _disk_read_sect();
     break;
   case 3: // write sector(s) from memory
-    if (disk[cpu_regs.dl].inserted) {
-      disk_write(cpu_regs.dl,
-                 cpu_regs.es,
-                 cpu_regs.bx,
-                 cpu_regs.ch + (cpu_regs.cl / 64) * 256,
-                 cpu_regs.cl & 63,
-                 cpu_regs.dh,
-                 cpu_regs.al);
-      cpu_flags.cf = 0;
-      cpu_regs.ah = 0;
-    } else {
-      cpu_flags.cf = 1;
-      cpu_regs.ah = 1;
-    }
+    _disk_write_sect();
     break;
   case 4:
   case 5: // format track
-    cpu_flags.cf = 0;
-    cpu_regs.ah = 0;
+    _disk_format_track();
     break;
   case 8: // get drive parameters
-    if (disk[cpu_regs.dl].inserted) {
-      cpu_flags.cf = 0;
-      cpu_regs.ah = 0;
-      cpu_regs.ch = disk[cpu_regs.dl].cyls - 1;
-      cpu_regs.cl = disk[cpu_regs.dl].sects & 63;
-      cpu_regs.cl = cpu_regs.cl + (disk[cpu_regs.dl].cyls / 256) * 64;
-      cpu_regs.dh = disk[cpu_regs.dl].heads - 1;
-      if (cpu_regs.dl < 0x80) {
-        cpu_regs.bl = 4;
-        cpu_regs.dl = 2;
-      } else
-        cpu_regs.dl = hdcount;
-    } else {
-      cpu_flags.cf = 1;
-      cpu_regs.ah = 0xAA;
-    }
+    _disk_get_params();
     break;
   default:
     cpu_flags.cf = 1;
   }
-  lastdiskah[cpu_regs.dl] = cpu_regs.ah;
-  lastdiskcf[cpu_regs.dl] = cpu_flags.cf;
-  if (cpu_regs.dl & 0x80) {
-    // todo: raw write?
+
+  // store for get status call
+  lastdiskah[drive_num] = cpu_regs.ah;
+  lastdiskcf[drive_num] = cpu_flags.cf;
+
+  const bool is_hdd = drive_num >= 0x80;
+  if (is_hdd) {
+    // bios data area write
+    // set status of last hard disk operation
     write86(0x474, cpu_regs.ah);
   }
 }
@@ -608,16 +686,17 @@ void disk_bootstrap(int intnum) {
     }
   }
 
-  // read first sector of boot drive into 07C0:0000 and execute it
   if (bootdrive < 255) {
+    // read first sector of boot drive into 07C0:0000 and execute it
     log_printf(LOG_CHAN_DISK, "booting from disk %d", bootdrive);
     cpu_regs.dl = bootdrive;
-    disk_read(cpu_regs.dl, 0x07C0, 0x0000, 0, 1, 0, 1);
+    _disk_read(cpu_regs.dl, 0x07C0, 0x0000, 0, 1, 0, 1);
     cpu_regs.cs = 0x0000;
     ip = 0x7C00;
   } else {
+    // start ROM BASIC at bootstrap if requested
     log_printf(LOG_CHAN_DISK, "booting into ROM BASIC");
-    cpu_regs.cs = 0xF600; // start ROM BASIC at bootstrap if requested
+    cpu_regs.cs = 0xF600;
     ip = 0x0000;
   }
 }

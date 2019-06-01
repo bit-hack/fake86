@@ -259,7 +259,7 @@ void adjust_rate(void) {
 uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
 
   // rapid quit when not running (system is going down)
-  if (!running) {
+  if (!cpu_running) {
     return num_samples;
   }
 

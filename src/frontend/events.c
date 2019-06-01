@@ -61,7 +61,7 @@ static void on_key_down(const SDL_Event *event) {
 
   // alt + F4 quit
   if (keys[SDLK_LALT] && keys[SDLK_F4]) {
-    running = false;
+    cpu_running = false;
   }
 
   // alt + enter to toggle full screen
@@ -150,7 +150,7 @@ void tick_events() {
       break;
     case SDL_QUIT:
       log_printf(LOG_CHAN_SDL, "received SDL_QUIT");
-      running = false;
+      cpu_running = false;
       break;
     default:
       break;

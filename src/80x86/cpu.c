@@ -40,9 +40,7 @@ uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
 uint32_t temp1, temp2, temp3, temp32, ea;
 
 // cpu is running
-bool running;
-
-static bool _cpu_preempt;
+bool cpu_running;
 
 static uint64_t _cycles;
 
@@ -1230,10 +1228,6 @@ bool cpu_in_hlt_state(void) {
   return in_hlt_state;
 }
 
-void cpu_preempt(void) {
-  _cpu_preempt = true;
-}
-
 static void _on_illegal_instruction(void) {
 #ifdef CPU_ALLOW_ILLEGAL_OP_EXCEPTION
   // trip invalid opcode exception (this occurs on the 80186+,
@@ -1254,25 +1248,23 @@ static void _on_illegal_instruction(void) {
 #endif
 }
 
+static uint32_t _delay_cycles;
+
+void cpu_delay(uint32_t cycles) {
+#if USE_DISK_DELAY
+  _delay_cycles += cycles;
+#endif
+}
+
+
 // cycles is target cycles
 // return executed cycles
-int32_t cpu_exec86(int32_t cycle_target) {
+int32_t cpu_exec86(int32_t target) {
 
   static uint16_t trap_toggle = 0;
-
-  _cpu_preempt = false;
   _cycles = 0;
 
-  // set ourselves some cycle targets
-  const uint64_t target =
-    SDL_max(1, SDL_min(i8253_cycles_before_irq(), cycle_target));
-
-  while (running && _cycles < target) {
-
-    // exit if we are being pre-empted
-    if (_cpu_preempt) {
-      break;
-    }
+  while (cpu_running && _cycles < target) {
 
     // if trap is asserted
     if (trap_toggle) {
@@ -1290,9 +1282,20 @@ int32_t cpu_exec86(int32_t cycle_target) {
     }
 
     if (in_hlt_state) {
-      _cycles += target;
+      _cycles = target;
       break;
     }
+
+#if USE_DISK_DELAY
+    // if needed, delay when we are not handling an interupt
+    if (_delay_cycles) {
+      --_delay_cycles;
+      if (!cpu_flags.ifl) {
+        ++_cycles;
+        continue;
+      }
+    }
+#endif
 
     reptype = 0;
     segoverride = 0;
@@ -1300,6 +1303,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
     uint8_t docontinue = 0;
     uint16_t firstip = ip;
 
+    // handle prefix bytes
     while (!docontinue) {
       cpu_regs.cs &= 0xFFFF;
       ip &= 0xFFFF;
@@ -2199,7 +2203,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      --_cycles;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2225,7 +2229,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      --_cycles;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -2251,7 +2255,7 @@ int32_t cpu_exec86(int32_t cycle_target) {
         cpu_regs.cx = cpu_regs.cx - 1;
       }
 
-      --_cycles;
+      ++_cycles;
       if (!reptype) {
         break;
       }
@@ -3179,10 +3183,6 @@ int32_t cpu_exec86(int32_t cycle_target) {
       ip = cpu_pop();
       cpu_regs.cs = cpu_pop();
       decodeflagsword(cpu_pop());
-
-      /*
-       * if (net.enabled) net.canrecv = 1;
-       */
       break;
 
     case 0xD0: /* D0 GRP2 Eb 1 */
@@ -3445,7 +3445,9 @@ int32_t cpu_exec86(int32_t cycle_target) {
     }
   }
   // retired cycles
-  return (uint32_t)_cycles;
+  const uint32_t out = (uint32_t)_cycles;
+  _cycles = 0;
+  return out;
 }
 
 void cpu_prep_interupt(uint16_t intnum) {

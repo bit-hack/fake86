@@ -63,7 +63,8 @@ union cpu_flags_t {
 
 extern union cpu_flags_t cpu_flags;
 
-extern bool running;
+extern bool cpu_running;
 
-// tell the cpu we need to pause its loop and tick the hardware
-void cpu_preempt(void);
+// delay non ISR routines for number of cycles
+// used to simulate disk drive latency
+void cpu_delay(uint32_t cycles);

@@ -26,8 +26,17 @@
 extern SDL_Surface *_surface;
 
 extern bool do_fullscreen;
-extern bool running;
+extern bool cpu_running;
 extern const char *biosfile;
 extern uint8_t bootdrive;
 extern bool do_fullscreen;
 extern uint32_t frame_skip;
+
+// on screen display
+void osd_disk_fdd_used(void);
+void osd_disk_hdd_used(void);
+
+bool osd_should_draw_disk(void);
+
+// assets.c
+extern const uint8_t asset_disk_pic[256];

@@ -33,6 +33,9 @@ bool do_fullscreen;
 // offscreen render target
 static uint32_t _temp[320 * 240];
 
+uint32_t frame_skip;
+static uint32_t frame_index;
+
 
 void neo_render_fs_toggle(void) {
   assert(_surface);
@@ -43,7 +46,6 @@ void neo_render_fs_toggle(void) {
   }
   SDL_WM_SetCaption(BUILD_STRING, NULL);
 }
-
 
 bool neo_render_init() {
 
@@ -506,8 +508,19 @@ static void blit_2x(uint32_t w, uint32_t h) {
   }
 }
 
-uint32_t frame_skip;
-static uint32_t frame_index;
+static void _draw_disk(void) {
+  const uint8_t *src = asset_disk_pic;
+  uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  uint32_t *dst = (uint32_t*)_surface->pixels;
+  dst += 8 + pitch * 8;
+  for (int y = 0; y < 16; ++y) {
+    for (int x = 0; x < 16; ++x) {
+      dst[x] = palette_cga_3_rgb[*src];
+      ++src;
+    }
+    dst += pitch;
+  }
+}
 
 void neo_render_tick(void) {
 
@@ -515,6 +528,8 @@ void neo_render_tick(void) {
   if (frame_index >= frame_skip) {
     frame_index = 0;
   }
+
+  SDL_FillRect(_surface, NULL, 0x151515);
 
   switch (neo_get_video_mode()) {
   case 0x02: _neo_render_mode_02(); break;
@@ -531,5 +546,11 @@ void neo_render_tick(void) {
     _neo_render_mode_unknown();
     break;
   }
+
+  // indicate disk activity
+  if (osd_should_draw_disk()) {
+    _draw_disk();
+  }
+
   SDL_Flip(_surface);
 }

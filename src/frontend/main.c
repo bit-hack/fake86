@@ -87,49 +87,42 @@ static void emulate_loop(void) {
 #define MSTOCYCLES(X) ((X) * (CYCLES_PER_SECOND / 1000))
 
   int64_t cpu_acc = 0;
-  uint64_t bench_acc = 0;
-
   uint64_t old_ms = get_ticks();
 
-  uint64_t old_bench = get_ticks();
-
-  while (running) {
+  // enter main emulation loop
+  while (cpu_running) {
 
     // diff cycle time
     const uint64_t new_ms = get_ticks();
     const uint64_t new_cycles = MSTOCYCLES(new_ms - old_ms);
-
     // avoid fastforwaring on lag
     if (new_ms - old_ms > 1000) {
       old_ms = new_ms;
       continue;
     }
-
     bool video_redraw = false;
-
     // update cpu
     while (cpu_acc <= 0) {
-      const uint64_t executed = tick_cpu(CYCLES_PER_SLICE);
-      bench_acc += executed;
+      // set ourselves some cycle targets
+      const uint64_t target =
+        SDL_max(1, SDL_min(i8253_cycles_before_irq(), CYCLES_PER_SLICE));
+      // run for some cycles
+      const uint64_t executed = tick_cpu(target);
       cpu_acc += executed;
-
+      // keep track of if the video needs refreshed
       if (vga_timing_should_flip()) {
         video_redraw = true;
         vga_timing_did_flip();
       }
-
       // tick peripherals
       tick_hardware(executed);
     }
-
     // refresh the screen buffer
     if (video_redraw) {
       tick_render();
     }
-
     // parse events from host
     tick_events();
-
     // advance cpu or sleep
     if ((int64_t)new_cycles >= cpu_acc) {
       cpu_acc -= new_cycles;
@@ -138,15 +131,6 @@ static void emulate_loop(void) {
     else {
       SDL_Delay(1);
     }
-
-#if 0
-    // benchmark cps
-    if ((get_ticks() - old_bench) > 1000) {
-      old_bench += 1000;
-      printf("cps: %d\n", (uint32_t)bench_acc);
-      bench_acc = 0;
-    }
-#endif
   }
 }
 
@@ -271,7 +255,7 @@ int main(int argc, char *argv[]) {
 
   // enter the emulation loop
   SDL_PauseAudio(0);
-  running = true;
+  cpu_running = true;
   emulate_loop();
 
   // close the audio device
