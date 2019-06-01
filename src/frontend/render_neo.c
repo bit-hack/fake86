@@ -529,7 +529,7 @@ void neo_render_tick(void) {
     frame_index = 0;
   }
 
-  SDL_FillRect(_surface, NULL, 0x151515);
+  SDL_FillRect(_surface, NULL, 0x050505);
 
   switch (neo_get_video_mode()) {
   case 0x02: _neo_render_mode_02(); break;

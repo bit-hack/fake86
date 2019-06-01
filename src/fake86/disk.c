@@ -354,7 +354,7 @@ static bool _do_seek(struct struct_drive *d, uint32_t offset) {
 
   // sector difference
   uint32_t diff = SDL_abs(offset - d->seek_pos) / 512;
-  uint32_t scale = 2;
+  uint32_t scale = 3;
   // update disk offset tracking
   d->seek_pos = offset;
   // simulate disk latency
@@ -365,7 +365,7 @@ static bool _do_seek(struct struct_drive *d, uint32_t offset) {
       scale = 1;
     }
     // 1ms per sector
-    cpu_delay(scale * diff * CYCLES_PER_SECOND / 2000);
+    cpu_delay(scale * diff * CYCLES_PER_SECOND / 3000);
   }
 
   switch (d->type) {

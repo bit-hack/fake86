@@ -943,24 +943,18 @@ static void op_div8(uint16_t valdiv, uint8_t divisor) {
 
 static void op_idiv8(uint16_t valdiv, uint8_t divisor) {
 
-  uint16_t s1;
-  uint16_t s2;
-  uint16_t d1;
-  uint16_t d2;
-  int sign;
-
   if (divisor == 0) {
     _intcall_handler(0);
     return;
   }
 
-  s1 = valdiv;
-  s2 = divisor;
-  sign = (((s1 ^ s2) & 0x8000) != 0);
+  uint16_t s1 = valdiv;
+  uint16_t s2 = divisor;
+  int sign = (((s1 ^ s2) & 0x8000) != 0);
   s1 = (s1 < 0x8000) ? s1 : ((~s1 + 1) & 0xffff);
   s2 = (s2 < 0x8000) ? s2 : ((~s2 + 1) & 0xffff);
-  d1 = s1 / s2;
-  d2 = s1 % s2;
+  uint16_t d1 = s1 / s2;
+  uint16_t d2 = s1 % s2;
   if (d1 & 0xFF00) {
     _intcall_handler(0);
     return;
@@ -3212,10 +3206,11 @@ int32_t cpu_exec86(int32_t target) {
     case 0xD4: /* D4 AAM I0 */
       oper1 = getmem8(cpu_regs.cs, ip);
       StepIP(1);
+      // division by zero!
       if (!oper1) {
         _intcall_handler(0);
         break;
-      } /* division by zero */
+      }
 
       cpu_regs.ah = (cpu_regs.al / oper1) & 255;
       cpu_regs.al = (cpu_regs.al % oper1) & 255;

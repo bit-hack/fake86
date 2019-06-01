@@ -277,6 +277,13 @@ static uint32_t _vga_sr_value(void) {
   return _vga_reg_data[0x0] & 0x0f;
 }
 
+// vga colour compare register
+// 0x3CE  03  ....**** lsb
+//
+static uint32_t _vga_colour_comp(void) {
+  return _vga_reg_data[0x2] & 0x0f;
+}
+
 // vga alu logical operation
 // 0x3CE  03  ...**... lsb
 //
@@ -289,6 +296,13 @@ static uint32_t _vga_logic_op(void) {
 //
 static uint32_t _vga_rot_count(void) {
   return _vga_reg_data[0x3] & 0x07;
+}
+
+// vga colour dont care
+// 0x3CE  03  ....**** lsb
+//
+static uint32_t _vga_colour_dont_care(void) {
+  return _vga_reg_data[0x7] & 0x0f;
 }
 
 // vga bit mask register
@@ -653,6 +667,7 @@ static uint32_t _vga_latch;
 // data from the memory plane selected by bits 1 and 0 of the Read Plane Select
 // Register (GR04).
 static uint8_t _neo_vga_read_0(uint32_t addr) {
+  // since the latch has just been updates these are fresh read values
   switch (_vga_read_map_select()) {
   case 0: return (_vga_latch >>  0) & 0xff;
   case 1: return (_vga_latch >>  8) & 0xff;
@@ -678,7 +693,20 @@ static uint8_t _neo_vga_read_1(uint32_t addr) {
   // https://www.phatcode.net/res/224/files/html/ch28/28-03.html#Heading4
 
   //XXX: needed by CIV when it gets to the menu screen
-  UNREACHABLE();
+
+  const uint8_t ccr = _vga_colour_comp();
+
+  const uint8_t b0 = (ccr & 1) ? 0xff : 0;
+  const uint8_t b1 = (ccr & 2) ? 0xff : 0;
+  const uint8_t b2 = (ccr & 4) ? 0xff : 0;
+  const uint8_t b3 = (ccr & 8) ? 0xff : 0;
+
+  const uint8_t m0 = (_vga_latch >>  0) & b0;
+  const uint8_t m1 = (_vga_latch >>  8) & b1;
+  const uint8_t m2 = (_vga_latch >> 16) & b1;
+  const uint8_t m3 = (_vga_latch >> 24) & b1;
+
+  return m0 & m1 & m2 & m3 & _vga_colour_dont_care();
 }
 
 // EGA/VGA
@@ -735,7 +763,6 @@ static void _neo_vga_write_alu(uint32_t addr, uint32_t input) {
 
   // mux between tmp0 or alu results
   // todo: precompute this
-//  const uint32_t bm_mux = _make_mask(_vga_bit_mask());
   const uint32_t bm_mux = _broadcast(_vga_bit_mask());
   uint32_t tmp2 = (tmp1 & bm_mux) | (_vga_latch & ~bm_mux);
 
