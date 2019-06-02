@@ -18,7 +18,7 @@
   USA.
 */
 
-#include "common.h"
+#include "../fake86/common.h"
 #include "../80x86/cpu.h"
 #include "../external/opl3.h"
 

@@ -23,7 +23,7 @@
 
 
 #include "../fake86/common.h"
-#include "../fake86/video.h"
+#include "../video/video.h"
 #include "frontend.h"
 
 

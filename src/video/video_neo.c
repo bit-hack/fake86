@@ -18,8 +18,7 @@
   USA.
 */
 
-#include "common.h"
-
+#include "../fake86/common.h"
 #include "../80x86/cpu.h"
 
 // References:

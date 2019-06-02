@@ -26,4 +26,10 @@ add_library(lib_fake86 ${SOURCE_F86})
 file(GLOB SOURCE_FRONTEND src/frontend/*.h src/frontend/*.c)
 add_executable(fake86 ${SOURCE_FRONTEND})
 
-target_link_libraries(fake86 lib_fake86 lib_80x86  lib_extern ${SDL_LIBRARY})
+target_link_libraries(fake86
+    lib_fake86
+    lib_80x86
+    lib_extern
+    lib_video
+    lib_audio
+    ${SDL_LIBRARY})
