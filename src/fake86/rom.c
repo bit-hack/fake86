@@ -29,7 +29,7 @@
 // option rom info:
 // http://etherboot.sourceforge.net/doc/html/devman/extension.html
 
-#include "common.h"
+#include "../common/common.h"
 
 
 extern uint8_t hdcount;

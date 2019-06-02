@@ -21,9 +21,9 @@
 /* cpu.c: functions to emulate the 8086/V20 CPU in software. the heart cpu_flags.of
  * Fake86. */
 
-#include "../fake86/common.h"
-
+#include "../common/common.h"
 #include "cpu.h"
+
 
 struct cpu_regs_t cpu_regs;
 union cpu_flags_t cpu_flags;

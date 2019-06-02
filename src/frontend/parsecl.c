@@ -20,7 +20,7 @@
 
 /* parsecl.c: Fake86 command line parsing for runtime options. */
 
-#include "../fake86/common.h"
+#include "../common/common.h"
 #include "frontend.h"
 
 

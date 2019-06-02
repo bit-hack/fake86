@@ -23,9 +23,9 @@
 
 #include <math.h>
 
-#include "../fake86/common.h"
-
+#include "../common/common.h"
 #include "../80x86/cpu.h"
+
 
 bool render_init(void);
 void tick_events(void);

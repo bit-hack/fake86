@@ -20,7 +20,7 @@
 
 // i8237 Direct Memory Access controller
 
-#include "common.h"
+#include "../common/common.h"
 
 
 struct dmachan_s dmachan[4];

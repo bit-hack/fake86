@@ -25,7 +25,7 @@
 // for a good list of ports see:
 // http://bochs.sourceforge.net/techspec/PORTS.LST
 
-#include "common.h"
+#include "../common/common.h"
 
 
 // IBM 5150 technical reference 2-25

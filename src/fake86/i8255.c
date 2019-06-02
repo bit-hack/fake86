@@ -20,7 +20,7 @@
 
 // i8255 Peripheral Interface Adapter
 
-#include "common.h"
+#include "../common/common.h"
 
 
 // PORTA

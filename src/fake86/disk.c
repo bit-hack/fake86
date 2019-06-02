@@ -28,8 +28,9 @@
 //   -fd0 *disk.img
 //   -fd0 *
 
-#include "common.h"
+#include "../common/common.h"
 #include "../frontend/frontend.h"
+
 
 #if DISK_PASS_THROUGH
 #define WIN32_LEAN_AND_MEAN

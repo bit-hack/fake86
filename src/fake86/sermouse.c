@@ -21,7 +21,8 @@
 /* sermouse.c: functions to emulate a standard Microsoft-compatible serial
  * mouse. */
 
-#include "common.h"
+#include "../common/common.h"
+
 
 struct sermouse_s sermouse;
 

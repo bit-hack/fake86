@@ -20,7 +20,7 @@
 
 // i8253 Prioritized Interrupt Controller
 
-#include "common.h"
+#include "../common/common.h"
 
 
 struct structpic i8259;

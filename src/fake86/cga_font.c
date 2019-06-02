@@ -18,7 +18,7 @@
   USA.
 */
 
-#include "common.h"
+#include "../common/common.h"
 
 
 // 512 characters from codepage 437

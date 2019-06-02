@@ -18,7 +18,7 @@
   USA.
 */
 
-#include "common.h"
+#include "../common/common.h"
 
 
 // video.c

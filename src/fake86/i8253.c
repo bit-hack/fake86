@@ -23,9 +23,9 @@
 // NOTE: it seems now like we should buffer the cycles and compute the timer
 //       state on the fly as needed.
 
-#include "common.h"
-
+#include "../common/common.h"
 #include "../80x86/cpu.h"
+
 
 static void _i8253_tick_update(void);
 

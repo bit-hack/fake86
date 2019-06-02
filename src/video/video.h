@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "../fake86/common.h"
+#include "../common/common.h"
 
 
 // crt driver access

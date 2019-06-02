@@ -18,7 +18,7 @@
   USA.
 */
 
-#include "../fake86/common.h"
+#include "../common/common.h"
 
 
 static const uint8_t scancode_table[0x200] = {

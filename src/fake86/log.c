@@ -18,9 +18,9 @@
   USA.
 */
 
-#include "common.h"
-
 #include <stdarg.h>
+
+#include "../common/common.h"
 
 
 static FILE *log_fd = NULL;

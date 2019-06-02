@@ -22,7 +22,7 @@
 // http://www.minuszerodegrees.net/video/bios_video_modes.htm
 
 
-#include "../fake86/common.h"
+#include "../common/common.h"
 #include "../video/video.h"
 #include "frontend.h"
 
