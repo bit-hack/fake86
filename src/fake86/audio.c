@@ -53,6 +53,8 @@ enum audio_event_type_t {
   event_speaker,
   // adlib ym3812 event
   event_adlib,
+  // floppy disk event
+  event_floppy,
 };
 
 // pc speaker update
@@ -258,6 +260,9 @@ void adjust_rate(void) {
 
 uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
 
+  // TODO: we should use a 32bit mixdown buffer here and use some nice
+  //       SSE clipping, etc.
+
   // rapid quit when not running (system is going down)
   if (!cpu_running) {
     return num_samples;
@@ -353,4 +358,8 @@ void audio_tick(const uint64_t cycles) {
   }
 
   _last_update = 0;
+}
+
+void audio_disk_seek(const uint32_t sects) {
+  // TODO: push event for stepper noise
 }

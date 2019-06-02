@@ -662,10 +662,6 @@ int neo_get_video_mode(void) {
 static uint32_t _vga_latch;
 
 // Read Mode 0
-//
-// During a CPU read from the frame buffer, the value returned to the CPU is
-// data from the memory plane selected by bits 1 and 0 of the Read Plane Select
-// Register (GR04).
 static uint8_t _neo_vga_read_0(uint32_t addr) {
   // since the latch has just been updates these are fresh read values
   switch (_vga_read_map_select()) {
@@ -679,20 +675,12 @@ static uint8_t _neo_vga_read_0(uint32_t addr) {
 }
 
 // Read Mode 1
-// 
-// During a CPU read from the frame buffer, all 8 bits of the byte in each of
-// the 4 memory planes corresponding to the address from which a CPU read
-// access is being performed are compared to the corresponding bits in this
-// register (if the corresponding bit in the Color Don’t Care Register (GR07)
-// is set to 1). The value that the CPU receives from the read access is an
-// 8-bit value that shows the result of this comparison. A value of 1 in a
-// given bit position indicates that all of the corresponding bits in the bytes
-// across all 4 of the memory planes that were included in the comparison had
-// the same value as their memory plane’s respective bits in this register.
 static uint8_t _neo_vga_read_1(uint32_t addr) {
   // https://www.phatcode.net/res/224/files/html/ch28/28-03.html#Heading4
 
   //XXX: needed by CIV when it gets to the menu screen
+
+  // TODO: verify me!
 
   const uint8_t ccr = _vga_colour_comp();
 
@@ -800,15 +788,7 @@ static void _neo_vga_write_0(uint32_t addr, uint8_t value) {
 }
 
 // 01 = Write Mode 1
-//
-// During a CPU write to the frame buffer, the addressed byte in each of the 4
-// memory planes is written to with the data stored in the memory read latches.
-// (The memory read latches stores an unaltered copy of the data last read from
-// any location in the frame buffer.)
 static void _neo_vga_write_1(uint32_t addr, uint8_t value) {
-  //XXX: called by INDY
-
-  // untested!
   _neo_vga_write_planes(addr, _vga_latch);
 }
 
@@ -850,7 +830,8 @@ static void _neo_vga_write_3(uint32_t addr, uint8_t value) {
   // rotate input bits
   value = _ror8(value, _vga_rot_count());
 
-  //XXX: not just be AND, use function select register bits 3-4 for func
+  //TODO: verify this please
+  //XXX: not just AND, use function select register bits 3-4 for func
   //see: https://cs.nyu.edu/~yap/classes/machineOrg/info/video.htm
 
   // The resulting value is ANDed with the Bit Mask Register, resulting in the

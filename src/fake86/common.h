@@ -57,6 +57,7 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples);
 void audio_tick(const uint64_t cycles);
 void audio_pc_speaker_freq(const uint32_t freq);
 void audio_pc_speaker_enable(bool enable);
+void audio_disk_seek(const uint32_t sects);
 
 extern bool audio_enable;
 
