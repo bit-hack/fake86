@@ -11,6 +11,12 @@ add_definitions("-D_CRT_SECURE_NO_WARNINGS")
 file(GLOB SOURCE_EXTERN src/external/*.h src/external/*.c)
 add_library(lib_extern ${SOURCE_EXTERN})
 
+file(GLOB SOURCE_AUDIO src/external/*.h src/audio/*.c)
+add_library(lib_audio ${SOURCE_AUDIO})
+
+file(GLOB SOURCE_VIDEO src/external/*.h src/video/*.c)
+add_library(lib_video ${SOURCE_VIDEO})
+
 file(GLOB SOURCE_CPU src/80x86/*.h src/80x86/*.c)
 add_library(lib_80x86 ${SOURCE_CPU})
 
