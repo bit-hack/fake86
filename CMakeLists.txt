@@ -8,16 +8,16 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
 add_definitions("-D_CRT_SECURE_NO_WARNINGS")
 
-file(GLOB SOURCE_COMMON src/external/*.h src/common/*.c)
+file(GLOB SOURCE_COMMON src/common/*.h src/common/*.c)
 add_library(lib_common ${SOURCE_COMMON})
 
 file(GLOB SOURCE_EXTERN src/external/*.h src/external/*.c)
 add_library(lib_extern ${SOURCE_EXTERN})
 
-file(GLOB SOURCE_AUDIO src/external/*.h src/audio/*.c)
+file(GLOB SOURCE_AUDIO src/audio/*.h src/audio/*.c)
 add_library(lib_audio ${SOURCE_AUDIO})
 
-file(GLOB SOURCE_VIDEO src/external/*.h src/video/*.c)
+file(GLOB SOURCE_VIDEO src/video/*.h src/video/*.c)
 add_library(lib_video ${SOURCE_VIDEO})
 
 file(GLOB SOURCE_CPU src/80x86/*.h src/80x86/*.c)

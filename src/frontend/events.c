@@ -22,7 +22,7 @@
 #include "frontend.h"
 
 
-static uint32_t usegrabmode;
+static uint32_t is_grabbed;
 
 extern void set_window_title(uint8_t *extra);
 
@@ -32,27 +32,24 @@ void neo_render_fs_toggle(void);
 
 
 static void toggle_mouse_grab() {
-  if (usegrabmode == SDL_GRAB_ON) {
-    usegrabmode = SDL_GRAB_OFF;
+  if (!is_grabbed) {
     SDL_WM_GrabInput(SDL_GRAB_OFF);
     SDL_ShowCursor(SDL_ENABLE);
     SDL_WM_SetCaption("", NULL);
   } else {
-    usegrabmode = SDL_GRAB_ON;
     SDL_WM_GrabInput(SDL_GRAB_ON);
     SDL_ShowCursor(SDL_DISABLE);
     SDL_WM_SetCaption(" (press Ctrl + Alt to release mouse)", NULL);
   }
+  is_grabbed = !is_grabbed;
 }
 
 static void on_key_down(const SDL_Event *event) {
+
   // convert scancode
   const uint8_t scancode = translate_scancode(event->key.keysym.sym);
-
-  i8255_key_push(scancode);
-  i8259_doirq(1);
-
   const uint8_t *keys = SDL_GetKeyState(NULL);
+
   // ctrl + alt to release mouse
   if (keys[SDLK_LCTRL] && keys[SDLK_LALT]) {
     toggle_mouse_grab();
@@ -62,11 +59,27 @@ static void on_key_down(const SDL_Event *event) {
   // alt + F4 quit
   if (keys[SDLK_LALT] && keys[SDLK_F4]) {
     cpu_running = false;
+    return;
   }
 
   // alt + enter to toggle full screen
   if (keys[SDLK_LALT] && keys[SDLK_RETURN]) {
     neo_render_fs_toggle();
+    return;
+  }
+
+  if (keys[SDLK_F12]) {
+    if (!osd_is_active()) {
+      osd_open();
+    }
+  }
+
+  if (!osd_is_active()) {
+    i8255_key_push(scancode);
+    i8259_doirq(1);
+  }
+  else {
+    osd_on_event(event);
   }
 }
 

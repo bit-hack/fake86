@@ -38,7 +38,7 @@ static bool _cl_do_help(const char *opt, const char *arg[]);
 
 static bool _cl_do_fd(const char *opt, const char *arg[]) {
   const int num = opt[3] - '0';
-  if (num < 0 || num > 2) {
+  if (num < 0 || num > 5) {
     return false;
   }
   return disk_insert((uint8_t)num, *arg);

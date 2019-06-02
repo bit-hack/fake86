@@ -37,6 +37,10 @@ void osd_disk_fdd_used(void);
 void osd_disk_hdd_used(void);
 
 bool osd_should_draw_disk(void);
+bool osd_is_active(void);
+void osd_open(void);
+void osd_close(void);
+void osd_on_event(const SDL_Event *t);
 
 // assets.c
 extern const uint8_t asset_disk_pic[256];
