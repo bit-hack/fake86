@@ -8,6 +8,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
 add_definitions("-D_CRT_SECURE_NO_WARNINGS")
 
+file(GLOB SOURCE_COMMON src/external/*.h src/common/*.c)
+add_library(lib_common ${SOURCE_COMMON})
+
 file(GLOB SOURCE_EXTERN src/external/*.h src/external/*.c)
 add_library(lib_extern ${SOURCE_EXTERN})
 
@@ -27,6 +30,7 @@ file(GLOB SOURCE_FRONTEND src/frontend/*.h src/frontend/*.c)
 add_executable(fake86 ${SOURCE_FRONTEND})
 
 target_link_libraries(fake86
+    lib_common
     lib_fake86
     lib_80x86
     lib_extern
