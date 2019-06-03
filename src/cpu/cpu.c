@@ -24,7 +24,6 @@
 #include "../common/common.h"
 #include "cpu.h"
 
-
 struct cpu_regs_t cpu_regs;
 union cpu_flags_t cpu_flags;
 
@@ -33,16 +32,15 @@ extern struct structpic i8259;
 bool in_hlt_state;
 
 uint8_t opcode, segoverride, reptype;
-uint16_t segregs[4], savecs, saveip, ip, useseg, oldsp;
+uint16_t segregs[4], savecs, saveip, useseg, oldsp;
 uint8_t mode, reg, rm;
 uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
 uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
 uint32_t temp1, temp2, temp3, temp32, ea;
 
-// cpu is running
 bool cpu_running;
-
 static uint64_t _cycles;
+static uint32_t _delay_cycles;
 
 uint64_t cpu_slice_ticks(void) {
   return _cycles;
@@ -50,7 +48,7 @@ uint64_t cpu_slice_ticks(void) {
 
 #define modregrm()                                                             \
   {                                                                            \
-    addrbyte = getmem8(cpu_regs.cs, ip);                                       \
+    addrbyte = getmem8(cpu_regs.cs, cpu_regs.ip);                              \
     StepIP(1);                                                                 \
     mode = addrbyte >> 6;                                                      \
     reg = (addrbyte >> 3) & 7;                                                 \
@@ -58,7 +56,7 @@ uint64_t cpu_slice_ticks(void) {
     switch (mode) {                                                            \
     case 0:                                                                    \
       if (rm == 6) {                                                           \
-        disp16 = getmem16(cpu_regs.cs, ip);                                    \
+        disp16 = getmem16(cpu_regs.cs, cpu_regs.ip);                           \
         StepIP(2);                                                             \
       }                                                                        \
       if (((rm == 2) || (rm == 3)) && !segoverride) {                          \
@@ -67,7 +65,7 @@ uint64_t cpu_slice_ticks(void) {
       break;                                                                   \
                                                                                \
     case 1:                                                                    \
-      disp16 = signext(getmem8(cpu_regs.cs, ip));                              \
+      disp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));                     \
       StepIP(1);                                                               \
       if (((rm == 2) || (rm == 3) || (rm == 6)) && !segoverride) {             \
         useseg = cpu_regs.ss;                                                  \
@@ -75,7 +73,7 @@ uint64_t cpu_slice_ticks(void) {
       break;                                                                   \
                                                                                \
     case 2:                                                                    \
-      disp16 = getmem16(cpu_regs.cs, ip);                                      \
+      disp16 = getmem16(cpu_regs.cs, cpu_regs.ip);                             \
       StepIP(2);                                                               \
       if (((rm == 2) || (rm == 3) || (rm == 6)) && !segoverride) {             \
         useseg = cpu_regs.ss;                                                  \
@@ -98,7 +96,7 @@ void cpu_set_intcall_handler(cpu_intcall_t handler) {
   _intcall_handler = handler;
 }
 
-#define StepIP(x) (ip += (x))
+#define StepIP(x) (cpu_regs.ip += (x))
 
 #define segbase(x) ((uint32_t)x << 4)
 
@@ -110,6 +108,12 @@ void cpu_set_intcall_handler(cpu_intcall_t handler) {
 
 #define signext(value) ((int16_t)(int8_t)(value))
 #define signext32(value) ((int32_t)(int16_t)(value))
+
+void cpu_delay(uint32_t cycles) {
+#if USE_DISK_DELAY
+  _delay_cycles += cycles;
+#endif
+}
 
 static inline uint16_t getsegreg(const int regid) {
   switch (regid) {
@@ -639,7 +643,7 @@ uint16_t cpu_pop() {
 void cpu_reset() {
   log_printf(LOG_CHAN_CPU, "reset");
   cpu_regs.cs = 0xFFFF;
-  ip = 0x0000;
+  cpu_regs.ip = 0x0000;
   in_hlt_state = false;
 }
 
@@ -975,7 +979,7 @@ static void op_grp3_8() {
   switch (reg) {
   case 0:
   case 1: /* TEST */
-    flag_log8(oper1b & getmem8(cpu_regs.cs, ip));
+    flag_log8(oper1b & getmem8(cpu_regs.cs, cpu_regs.ip));
     StepIP(1);
     break;
 
@@ -1099,7 +1103,7 @@ static void op_grp3_16() {
   switch (reg) {
   case 0:
   case 1: /* TEST */
-    flag_log16(oper1 & getmem16(cpu_regs.cs, ip));
+    flag_log16(oper1 & getmem16(cpu_regs.cs, cpu_regs.ip));
     StepIP(2);
     break;
 
@@ -1190,25 +1194,25 @@ static void op_grp5() {
     break;
 
   case 2: /* CALL Ev */
-    cpu_push(ip);
-    ip = oper1;
+    cpu_push(cpu_regs.ip);
+    cpu_regs.ip = oper1;
     break;
 
   case 3: /* CALL Mp */
     cpu_push(cpu_regs.cs);
-    cpu_push(ip);
+    cpu_push(cpu_regs.ip);
     getea(rm);
-    ip = readw86(ea);
+    cpu_regs.ip = readw86(ea + 0);
     cpu_regs.cs = readw86(ea + 2);
     break;
 
   case 4: /* JMP Ev */
-    ip = oper1;
+    cpu_regs.ip = oper1;
     break;
 
   case 5: /* JMP Mp */
     getea(rm);
-    ip = readw86(ea);
+    cpu_regs.ip = readw86(ea + 0);
     cpu_regs.cs = readw86(ea + 2);
     break;
 
@@ -1242,15 +1246,6 @@ static void _on_illegal_instruction(void) {
 #endif
 }
 
-static uint32_t _delay_cycles;
-
-void cpu_delay(uint32_t cycles) {
-#if USE_DISK_DELAY
-  _delay_cycles += cycles;
-#endif
-}
-
-
 // cycles is target cycles
 // return executed cycles
 int32_t cpu_exec86(int32_t target) {
@@ -1259,6 +1254,11 @@ int32_t cpu_exec86(int32_t target) {
   _cycles = 0;
 
   while (cpu_running && _cycles < target) {
+
+#if 1
+    // trace testing
+    cpu_udis_exec(RAM + ((cpu_regs.cs << 4) + cpu_regs.ip));
+#endif
 
     // if trap is asserted
     if (trap_toggle) {
@@ -1295,15 +1295,15 @@ int32_t cpu_exec86(int32_t target) {
     segoverride = 0;
     useseg = cpu_regs.ds;
     uint8_t docontinue = 0;
-    uint16_t firstip = ip;
+    const uint16_t firstip = cpu_regs.ip;
 
     // handle prefix bytes
     while (!docontinue) {
       cpu_regs.cs &= 0xFFFF;
-      ip &= 0xFFFF;
+      cpu_regs.ip &= 0xFFFF;
       savecs = cpu_regs.cs;
-      saveip = ip;
-      opcode = getmem8(cpu_regs.cs, ip);
+      saveip = cpu_regs.ip;
+      opcode = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
 
       switch (opcode) {
@@ -1380,7 +1380,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x4: /* 04 ADD cpu_regs.al] Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       op_add8();
       cpu_regs.al = res8;
@@ -1388,7 +1388,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x5: /* 05 ADD eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       op_add16();
       cpu_regs.ax = res16;
@@ -1444,7 +1444,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0xC: /* 0C OR cpu_regs.al Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       op_or8();
       cpu_regs.al = res8;
@@ -1452,7 +1452,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0xD: /* 0D OR eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       op_or16();
       cpu_regs.ax = res16;
@@ -1502,7 +1502,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x14: /* 14 ADC cpu_regs.al Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       op_adc8();
       cpu_regs.al = res8;
@@ -1510,7 +1510,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x15: /* 15 ADC eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       op_adc16();
       cpu_regs.ax = res16;
@@ -1558,7 +1558,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x1C: /* 1C SBB cpu_regs.al Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       op_sbb8();
       cpu_regs.al = res8;
@@ -1566,7 +1566,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x1D: /* 1D SBB eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       op_sbb16();
       cpu_regs.ax = res16;
@@ -1614,7 +1614,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x24: /* 24 AND cpu_regs.al] Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       op_and8();
       cpu_regs.al = res8;
@@ -1622,7 +1622,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x25: /* 25 AND eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       op_and16();
       cpu_regs.ax = res16;
@@ -1688,7 +1688,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x2C: /* 2C SUB cpu_regs.al Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       op_sub8();
       cpu_regs.al = res8;
@@ -1696,7 +1696,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x2D: /* 2D SUB eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       op_sub16();
       cpu_regs.ax = res16;
@@ -1758,7 +1758,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x34: /* 34 XOR cpu_regs.al Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       op_xor8();
       cpu_regs.al = res8;
@@ -1766,7 +1766,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x35: /* 35 XOR eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       op_xor16();
       cpu_regs.ax = res16;
@@ -1815,14 +1815,14 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0x3C: /* 3C CMP cpu_regs.al Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       flag_sub8(oper1b, oper2b);
       break;
 
     case 0x3D: /* 3D CMP eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       flag_sub16(oper1, oper2);
       break;
@@ -2122,14 +2122,14 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0x68: /* 68 PUSH Iv (80186+) */
-      cpu_push(getmem16(cpu_regs.cs, ip));
+      cpu_push(getmem16(cpu_regs.cs, cpu_regs.ip));
       StepIP(2);
       break;
 
     case 0x69: /* 69 IMUL Gv Ev Iv (80186+) */
       modregrm();
       temp1 = readrm16(rm);
-      temp2 = getmem16(cpu_regs.cs, ip);
+      temp2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       if ((temp1 & 0x8000L) == 0x8000L) {
         temp1 = temp1 | 0xFFFF0000L;
@@ -2151,14 +2151,14 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0x6A: /* 6A PUSH Ib (80186+) */
-      cpu_push(getmem8(cpu_regs.cs, ip));
+      cpu_push(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       break;
 
     case 0x6B: /* 6B IMUL Gv Eb Ib (80186+) */
       modregrm();
       temp1 = readrm16(rm);
-      temp2 = signext(getmem8(cpu_regs.cs, ip));
+      temp2 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if ((temp1 & 0x8000L) == 0x8000L) {
         temp1 = temp1 | 0xFFFF0000L;
@@ -2202,7 +2202,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0x6D: /* 6F INSW */
@@ -2228,7 +2228,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0x6E: /* 6E OUTSB */
@@ -2254,7 +2254,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0x6F: /* 6F OUTSW */
@@ -2280,135 +2280,135 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 #endif
 
     case 0x70: /* 70 JO Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (cpu_flags.of) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x71: /* 71 JNO Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (!cpu_flags.of) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x72: /* 72 JB Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (cpu_flags.cf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x73: /* 73 JNB Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (!cpu_flags.cf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x74: /* 74 JZ Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (cpu_flags.zf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x75: /* 75 JNZ Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (!cpu_flags.zf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x76: /* 76 JBE Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (cpu_flags.cf || cpu_flags.zf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x77: /* 77 JA Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (!cpu_flags.cf && !cpu_flags.zf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x78: /* 78 JS Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (cpu_flags.sf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x79: /* 79 JNS Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (!cpu_flags.sf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x7A: /* 7A JPE Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (cpu_flags.pf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x7B: /* 7B JPO Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (!cpu_flags.pf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x7C: /* 7C JL Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (cpu_flags.sf != cpu_flags.of) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x7D: /* 7D JGE Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (cpu_flags.sf == cpu_flags.of) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x7E: /* 7E JLE Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if ((cpu_flags.sf != cpu_flags.of) || cpu_flags.zf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0x7F: /* 7F JG Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (!cpu_flags.zf && (cpu_flags.sf == cpu_flags.of)) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
@@ -2416,7 +2416,7 @@ int32_t cpu_exec86(int32_t target) {
     case 0x82: /* 80/82 GRP1 Eb Ib */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       switch (reg) {
       case 0:
@@ -2457,10 +2457,10 @@ int32_t cpu_exec86(int32_t target) {
       modregrm();
       oper1 = readrm16(rm);
       if (opcode == 0x81) {
-        oper2 = getmem16(cpu_regs.cs, ip);
+        oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
         StepIP(2);
       } else {
-        oper2 = signext(getmem8(cpu_regs.cs, ip));
+        oper2 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
         StepIP(1);
       }
 
@@ -2629,13 +2629,13 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0x9A: /* 9A CALL Ap */
-      oper1 = getmem16(cpu_regs.cs, ip);
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       cpu_push(cpu_regs.cs);
-      cpu_push(ip);
-      ip = oper1;
+      cpu_push(cpu_regs.ip);
+      cpu_regs.ip = oper1;
       cpu_regs.cs = oper2;
       break;
 
@@ -2664,23 +2664,23 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0xA0: /* A0 MOV cpu_regs.al Ob */
-      cpu_regs.al = getmem8(useseg, getmem16(cpu_regs.cs, ip));
+      cpu_regs.al = getmem8(useseg, getmem16(cpu_regs.cs, cpu_regs.ip));
       StepIP(2);
       break;
 
     case 0xA1: /* A1 MOV eAX Ov */
-      oper1 = getmem16(useseg, getmem16(cpu_regs.cs, ip));
+      oper1 = getmem16(useseg, getmem16(cpu_regs.cs, cpu_regs.ip));
       StepIP(2);
       cpu_regs.ax = oper1;
       break;
 
     case 0xA2: /* A2 MOV Ob cpu_regs.al */
-      putmem8(useseg, getmem16(cpu_regs.cs, ip), cpu_regs.al);
+      putmem8(useseg, getmem16(cpu_regs.cs, cpu_regs.ip), cpu_regs.al);
       StepIP(2);
       break;
 
     case 0xA3: /* A3 MOV Ov eAX */
-      putmem16(useseg, getmem16(cpu_regs.cs, ip), cpu_regs.ax);
+      putmem16(useseg, getmem16(cpu_regs.cs, cpu_regs.ip), cpu_regs.ax);
       StepIP(2);
       break;
 
@@ -2708,7 +2708,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xA5: /* A5 MOVSW */
@@ -2735,7 +2735,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xA6: /* A6 CMPSB */
@@ -2769,7 +2769,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xA7: /* A7 CMPSW */
@@ -2805,19 +2805,19 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xA8: /* A8 TEST cpu_regs.al Ib */
       oper1b = cpu_regs.al;
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       flag_log8(oper1b & oper2b);
       break;
 
     case 0xA9: /* A9 TEST eAX Iv */
       oper1 = cpu_regs.ax;
-      oper2 = getmem16(cpu_regs.cs, ip);
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       flag_log16(oper1 & oper2);
       break;
@@ -2843,7 +2843,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xAB: /* AB STOSW */
@@ -2867,7 +2867,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xAC: /* AC LODSB */
@@ -2891,7 +2891,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xAD: /* AD LODSW */
@@ -2916,7 +2916,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xAE: /* AE SCASB */
@@ -2948,7 +2948,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xAF: /* AF SCASW */
@@ -2980,97 +2980,97 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      ip = firstip;
+      cpu_regs.ip = firstip;
       break;
 
     case 0xB0: /* B0 MOV cpu_regs.al Ib */
-      cpu_regs.al = getmem8(cpu_regs.cs, ip);
+      cpu_regs.al = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       break;
 
     case 0xB1: /* B1 MOV cpu_regs.cl Ib */
-      cpu_regs.cl = getmem8(cpu_regs.cs, ip);
+      cpu_regs.cl = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       break;
 
     case 0xB2: /* B2 MOV cpu_regs.dl Ib */
-      cpu_regs.dl = getmem8(cpu_regs.cs, ip);
+      cpu_regs.dl = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       break;
 
     case 0xB3: /* B3 MOV cpu_regs.bl Ib */
-      cpu_regs.bl = getmem8(cpu_regs.cs, ip);
+      cpu_regs.bl = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       break;
 
     case 0xB4: /* B4 MOV cpu_regs.ah Ib */
-      cpu_regs.ah = getmem8(cpu_regs.cs, ip);
+      cpu_regs.ah = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       break;
 
     case 0xB5: /* B5 MOV cpu_regs.ch Ib */
-      cpu_regs.ch = getmem8(cpu_regs.cs, ip);
+      cpu_regs.ch = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       break;
 
     case 0xB6: /* B6 MOV cpu_regs.dh Ib */
-      cpu_regs.dh = getmem8(cpu_regs.cs, ip);
+      cpu_regs.dh = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       break;
 
     case 0xB7: /* B7 MOV cpu_regs.bh Ib */
-      cpu_regs.bh = getmem8(cpu_regs.cs, ip);
+      cpu_regs.bh = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       break;
 
     case 0xB8: /* B8 MOV eAX Iv */
-      oper1 = getmem16(cpu_regs.cs, ip);
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       cpu_regs.ax = oper1;
       break;
 
     case 0xB9: /* B9 MOV eCX Iv */
-      oper1 = getmem16(cpu_regs.cs, ip);
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       cpu_regs.cx = oper1;
       break;
 
     case 0xBA: /* BA MOV eDX Iv */
-      oper1 = getmem16(cpu_regs.cs, ip);
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       cpu_regs.dx = oper1;
       break;
 
     case 0xBB: /* BB MOV eBX Iv */
-      oper1 = getmem16(cpu_regs.cs, ip);
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       cpu_regs.bx = oper1;
       break;
 
     case 0xBC: /* BC MOV eSP Iv */
-      cpu_regs.sp = getmem16(cpu_regs.cs, ip);
+      cpu_regs.sp = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       break;
 
     case 0xBD: /* BD MOV eBP Iv */
-      cpu_regs.bp = getmem16(cpu_regs.cs, ip);
+      cpu_regs.bp = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       break;
 
     case 0xBE: /* BE MOV eSI Iv */
-      cpu_regs.si = getmem16(cpu_regs.cs, ip);
+      cpu_regs.si = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       break;
 
     case 0xBF: /* BF MOV eDI Iv */
-      cpu_regs.di = getmem16(cpu_regs.cs, ip);
+      cpu_regs.di = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
       break;
 
     case 0xC0: /* C0 GRP2 byte imm8 (80186+) */
       modregrm();
       oper1b = readrm8(rm);
-      oper2b = getmem8(cpu_regs.cs, ip);
+      oper2b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       writerm8(rm, op_grp2_8(oper2b));
       break;
@@ -3078,19 +3078,19 @@ int32_t cpu_exec86(int32_t target) {
     case 0xC1: /* C1 GRP2 word imm8 (80186+) */
       modregrm();
       oper1 = readrm16(rm);
-      oper2 = getmem8(cpu_regs.cs, ip);
+      oper2 = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       writerm16(rm, op_grp2_16((uint8_t)oper2));
       break;
 
     case 0xC2: /* C2 RET Iw */
-      oper1 = getmem16(cpu_regs.cs, ip);
-      ip = cpu_pop();
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
+      cpu_regs.ip = cpu_pop();
       cpu_regs.sp = cpu_regs.sp + oper1;
       break;
 
     case 0xC3: /* C3 RET */
-      ip = cpu_pop();
+      cpu_regs.ip = cpu_pop();
       break;
 
     case 0xC4: /* C4 LES Gv Mp */
@@ -3109,20 +3109,20 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0xC6: /* C6 MOV Eb Ib */
       modregrm();
-      writerm8(rm, getmem8(cpu_regs.cs, ip));
+      writerm8(rm, getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       break;
 
     case 0xC7: /* C7 MOV Ev Iv */
       modregrm();
-      writerm16(rm, getmem16(cpu_regs.cs, ip));
+      writerm16(rm, getmem16(cpu_regs.cs, cpu_regs.ip));
       StepIP(2);
       break;
 
     case 0xC8: /* C8 ENTER (80186+) */
-      stacksize = getmem16(cpu_regs.cs, ip);
+      stacksize = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
-      nestlev = getmem8(cpu_regs.cs, ip);
+      nestlev = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       cpu_push(cpu_regs.bp);
       frametemp = cpu_regs.sp;
@@ -3145,15 +3145,14 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0xCA: /* CA RETF Iw */
-      oper1 = getmem16(cpu_regs.cs, ip);
-      ip = cpu_pop();
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
+      cpu_regs.ip = cpu_pop();
       cpu_regs.cs = cpu_pop();
       cpu_regs.sp = cpu_regs.sp + oper1;
       break;
 
     case 0xCB: /* CB RETF */
-      ip = cpu_pop();
-      ;
+      cpu_regs.ip = cpu_pop();
       cpu_regs.cs = cpu_pop();
       break;
 
@@ -3162,7 +3161,7 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0xCD: /* CD INT Ib */
-      oper1b = getmem8(cpu_regs.cs, ip);
+      oper1b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       _intcall_handler(oper1b);
       break;
@@ -3174,7 +3173,7 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0xCF: /* CF IRET */
-      ip = cpu_pop();
+      cpu_regs.ip = cpu_pop();
       cpu_regs.cs = cpu_pop();
       decodeflagsword(cpu_pop());
       break;
@@ -3204,7 +3203,7 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0xD4: /* D4 AAM I0 */
-      oper1 = getmem8(cpu_regs.cs, ip);
+      oper1 = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       // division by zero!
       if (!oper1) {
@@ -3212,16 +3211,15 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      cpu_regs.ah = (cpu_regs.al / oper1) & 255;
-      cpu_regs.al = (cpu_regs.al % oper1) & 255;
+      cpu_regs.ah = (cpu_regs.al / oper1) & 0xff;
+      cpu_regs.al = (cpu_regs.al % oper1) & 0xff;
       flag_szp16(cpu_regs.ax);
       break;
 
     case 0xD5: /* D5 AAD I0 */
-      oper1 = getmem8(cpu_regs.cs, ip);
+      oper1 = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
-      cpu_regs.al =
-          (cpu_regs.ah * oper1 + cpu_regs.al) & 255;
+      cpu_regs.al = (cpu_regs.ah * oper1 + cpu_regs.al) & 0xff;
       cpu_regs.ah = 0;
       flag_szp16(cpu_regs.ah * oper1 + cpu_regs.al);
       cpu_flags.sf = 0;
@@ -3250,89 +3248,89 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0xE0: /* E0 LOOPNZ Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       cpu_regs.cx = cpu_regs.cx - 1;
       if ((cpu_regs.cx) && !cpu_flags.zf) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0xE1: /* E1 LOOPZ Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       cpu_regs.cx = cpu_regs.cx - 1;
       if (cpu_regs.cx && (cpu_flags.zf == 1)) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0xE2: /* E2 LOOP Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       cpu_regs.cx = cpu_regs.cx - 1;
       if (cpu_regs.cx) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0xE3: /* E3 JCXZ Jb */
-      temp16 = signext(getmem8(cpu_regs.cs, ip));
+      temp16 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
       if (!cpu_regs.cx) {
-        ip = ip + temp16;
+        cpu_regs.ip += temp16;
       }
       break;
 
     case 0xE4: /* E4 IN cpu_regs.al Ib */
-      oper1b = getmem8(cpu_regs.cs, ip);
+      oper1b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       cpu_regs.al = (uint8_t)portin(oper1b);
       break;
 
     case 0xE5: /* E5 IN AX Ib */
-      oper1b = getmem8(cpu_regs.cs, ip);
+      oper1b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       cpu_regs.ax = portin16(oper1b);
       break;
 
     case 0xE6: /* E6 OUT Ib cpu_regs.al */
-      oper1b = getmem8(cpu_regs.cs, ip);
+      oper1b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       portout(oper1b, cpu_regs.al);
       break;
 
     case 0xE7: /* E7 OUT Ib eAX */
-      oper1b = getmem8(cpu_regs.cs, ip);
+      oper1b = getmem8(cpu_regs.cs, cpu_regs.ip);
       StepIP(1);
       portout16(oper1b, cpu_regs.ax);
       break;
 
     case 0xE8: /* E8 CALL Jv */
-      oper1 = getmem16(cpu_regs.cs, ip);
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
-      cpu_push(ip);
-      ip = ip + oper1;
+      cpu_push(cpu_regs.ip);
+      cpu_regs.ip += oper1;
       break;
 
     case 0xE9: /* E9 JMP Jv */
-      oper1 = getmem16(cpu_regs.cs, ip);
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
-      ip = ip + oper1;
+      cpu_regs.ip += oper1;
       break;
 
     case 0xEA: /* EA JMP Ap */
-      oper1 = getmem16(cpu_regs.cs, ip);
+      oper1 = getmem16(cpu_regs.cs, cpu_regs.ip);
       StepIP(2);
-      oper2 = getmem16(cpu_regs.cs, ip);
-      ip = oper1;
+      oper2 = getmem16(cpu_regs.cs, cpu_regs.ip);
+      cpu_regs.ip = oper1;
       cpu_regs.cs = oper2;
       break;
 
     case 0xEB: /* EB JMP Jb */
-      oper1 = signext(getmem8(cpu_regs.cs, ip));
+      oper1 = signext(getmem8(cpu_regs.cs, cpu_regs.ip));
       StepIP(1);
-      ip = ip + oper1;
+      cpu_regs.ip += oper1;
       break;
 
     case 0xEC: /* EC IN cpu_regs.al regdx */
@@ -3451,11 +3449,11 @@ void cpu_prep_interupt(uint16_t intnum) {
   // push cs register
   cpu_push(cpu_regs.cs);
   // push ip
-  cpu_push(ip);
+  cpu_push(cpu_regs.ip);
   // new cs reguster
   cpu_regs.cs = getmem16(0, (uint16_t)intnum * 4 + 2);
   // new ip
-  ip = getmem16(0, (uint16_t)intnum * 4);
+  cpu_regs.ip = getmem16(0, (uint16_t)intnum * 4);
   // clear flags
   cpu_flags.ifl = 0;
   cpu_flags.tf = 0;

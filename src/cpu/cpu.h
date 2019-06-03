@@ -34,6 +34,8 @@ struct cpu_regs_t {
   uint16_t sp, bp, si, di;
   // segment registers
   uint16_t es, cs, ss, ds;
+  // instruction pointer
+  uint16_t ip;
 };
 extern struct cpu_regs_t cpu_regs;
 #pragma pack(pop)
@@ -68,3 +70,5 @@ extern bool cpu_running;
 // delay non ISR routines for number of cycles
 // used to simulate disk drive latency
 void cpu_delay(uint32_t cycles);
+
+void cpu_udis_exec(const uint8_t *stream);

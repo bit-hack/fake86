@@ -692,11 +692,11 @@ void disk_bootstrap(int intnum) {
     cpu_regs.dl = bootdrive;
     _disk_read(cpu_regs.dl, 0x07C0, 0x0000, 0, 1, 0, 1);
     cpu_regs.cs = 0x0000;
-    ip = 0x7C00;
+    cpu_regs.ip = 0x7C00;
   } else {
     // start ROM BASIC at bootstrap if requested
     log_printf(LOG_CHAN_DISK, "booting into ROM BASIC");
     cpu_regs.cs = 0xF600;
-    ip = 0x0000;
+    cpu_regs.ip = 0x0000;
   }
 }
