@@ -38,7 +38,7 @@
 #include <winioctl.h>
 #endif
 
-#include "../80x86/cpu.h"
+#include "../cpu/cpu.h"
 
 
 enum disk_type_t {

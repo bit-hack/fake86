@@ -19,7 +19,7 @@
 */
 
 #include "../common/common.h"
-#include "../80x86/cpu.h"
+#include "../cpu/cpu.h"
 
 // References:
 //   http://www.osdever.net/FreeVGA/vga/vgareg.htm

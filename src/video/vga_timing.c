@@ -19,7 +19,7 @@
 */
 
 #include "../common/common.h"
-#include "../80x86/cpu.h"
+#include "../cpu/cpu.h"
 
 
 struct vga_timing_t {

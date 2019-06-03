@@ -17,8 +17,8 @@ add_library(lib_audio ${SOURCE_AUDIO})
 file(GLOB SOURCE_VIDEO src/video/*.h src/video/*.c)
 add_library(lib_video ${SOURCE_VIDEO})
 
-file(GLOB SOURCE_CPU src/80x86/*.h src/80x86/*.c)
-add_library(lib_80x86 ${SOURCE_CPU})
+file(GLOB SOURCE_CPU src/cpu/*.h src/cpu/*.c)
+add_library(lib_cpu ${SOURCE_CPU})
 
 file(GLOB SOURCE_F86 src/fake86/*.h src/fake86/*.c)
 add_library(lib_fake86 ${SOURCE_F86})
@@ -34,7 +34,7 @@ target_link_libraries(lib_audio
 target_link_libraries(fake86
     lib_common
     lib_fake86
-    lib_80x86
+    lib_cpu
     lib_video
     lib_audio
     ${SDL_LIBRARY})

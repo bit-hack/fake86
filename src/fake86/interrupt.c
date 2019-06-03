@@ -19,7 +19,7 @@
 */
 
 #include "../common/common.h"
-#include "../80x86/cpu.h"
+#include "../cpu/cpu.h"
 
 
 bool video_int_handler(int intnum);

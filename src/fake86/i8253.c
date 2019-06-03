@@ -24,7 +24,7 @@
 //       state on the fly as needed.
 
 #include "../common/common.h"
-#include "../80x86/cpu.h"
+#include "../cpu/cpu.h"
 
 
 static void _i8253_tick_update(void);
