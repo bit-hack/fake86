@@ -20,7 +20,7 @@
 
 #include "../common/common.h"
 #include "../80x86/cpu.h"
-#include "../external/opl3.h"
+#include "../external/nukedopl/opl3.h"
 
 
 // audio enabled
