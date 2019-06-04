@@ -52,8 +52,6 @@ uint64_t cpu_slice_ticks(void);
 typedef void (*cpu_intcall_t)(const uint8_t int_num);
 void cpu_set_intcall_handler(cpu_intcall_t handler);
 
-extern uint16_t segregs[4];
-
 // cpu instruction pointer
 extern uint16_t ip;
 

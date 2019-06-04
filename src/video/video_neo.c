@@ -59,7 +59,7 @@ static struct cursor_t _cursor[MAX_PAGES];
 // current video mode
 static uint8_t _video_mode = 0x00;
 static enum system_t _system = video_mda;
-static enum system_t _mode = mode_text;
+static enum mode_t _mode = mode_text;
 // screen resolution
 static uint32_t _width = 320, _height = 240;
 // text mode rows and columns
@@ -690,8 +690,8 @@ static uint8_t _neo_vga_read_1(uint32_t addr) {
 
   const uint8_t m0 = (_vga_latch >>  0) & b0;
   const uint8_t m1 = (_vga_latch >>  8) & b1;
-  const uint8_t m2 = (_vga_latch >> 16) & b1;
-  const uint8_t m3 = (_vga_latch >> 24) & b1;
+  const uint8_t m2 = (_vga_latch >> 16) & b2;
+  const uint8_t m3 = (_vga_latch >> 24) & b3;
 
   return m0 & m1 & m2 & m3 & _vga_colour_dont_care();
 }

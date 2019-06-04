@@ -82,7 +82,6 @@ uint8_t mouse_port_read(uint16_t portnum) {
     if (sermouse.bufptr > 0) {
       temp = 1;
     } else {
-      temp = 0;
       return 0x1;
     }
     return 0x60 | temp;

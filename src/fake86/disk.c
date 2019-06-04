@@ -354,7 +354,7 @@ static bool _do_seek(struct struct_drive *d, uint32_t offset) {
   assert(d);
 
   // sector difference
-  const uint32_t diff = SDL_abs(offset - d->seek_pos) / 512;
+  const uint32_t diff = SDL_abs((int)offset - (int)d->seek_pos) / 512;
   // update disk offset tracking
   d->seek_pos = offset;
   // simulate disk latency

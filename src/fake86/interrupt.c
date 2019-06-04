@@ -22,7 +22,21 @@
 #include "../cpu/cpu.h"
 
 
-bool video_int_handler(int intnum);
+static void _on_dos_load_exec(void) {
+  const uint32_t offset = (cpu_regs.ds << 4) + cpu_regs.dx;
+  const char *name = (const char*)(RAM + offset);
+  log_printf(LOG_CHAN_DOS, "load and execute '%s'", name);
+}
+
+static void _on_dos_int(void) {
+  switch (cpu_regs.ah) {
+  case 0x4B:  // EXEC
+    if (cpu_regs.al == 0) {
+      _on_dos_load_exec();
+    }
+    break;
+  }
+}
 
 void intcall86(uint8_t intnum) {
 
@@ -42,6 +56,10 @@ void intcall86(uint8_t intnum) {
   case 0xFD:
     disk_int_handler(intnum);
     return;
+  // DOS services
+  case 0x21:
+    _on_dos_int();
+    break;
   }
 
   // if interupt was not handled then let the CPU

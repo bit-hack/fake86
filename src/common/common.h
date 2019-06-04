@@ -174,6 +174,7 @@ enum {
   LOG_CHAN_VIDEO,
   LOG_CHAN_AUDIO,
   LOG_CHAN_PORT,
+  LOG_CHAN_DOS,
 };
 
 void log_init();

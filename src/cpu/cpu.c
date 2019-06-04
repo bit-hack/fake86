@@ -32,10 +32,10 @@ extern struct structpic i8259;
 static bool in_hlt_state;
 
 static uint8_t opcode, segoverride, reptype;
-static uint16_t segregs[4], savecs, saveip, useseg, oldsp;
+static uint16_t savecs, saveip, useseg, oldsp;
 static uint8_t mode, reg, rm;
 static uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
-static uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
+static uint8_t oper1b, oper2b, res8, addrbyte;
 static uint32_t temp1, temp2, temp3, temp32, ea;
 
 bool cpu_running;
@@ -1397,11 +1397,16 @@ int32_t cpu_exec86(int32_t target) {
       oper1 = cpu_getreg16(reg);
       oper2 = readrm16(rm);
       op_or16();
+
 #if (CPU == CPU_286)
+
+      // TODO: check why this is needed?
+
       if ((oper1 == 0xF802) && (oper2 == 0xF802)) {
         cpu_flags.sf = 0; /* cheap hack to make Wolf 3D think we're a 286 so it plays */
       }
 #endif
+
       cpu_setreg16(reg, res16);
       break;
 
@@ -2358,7 +2363,7 @@ int32_t cpu_exec86(int32_t target) {
         flag_sub8(oper1b, oper2b);
         break;
       default:
-        break; /* to avoid compiler warnings */
+        UNREACHABLE();
       }
 
       if (reg < 7) {
@@ -2405,6 +2410,7 @@ int32_t cpu_exec86(int32_t target) {
         break; /* to avoid compiler warnings */
       }
 
+      // XXX: would reg ever be >= 7
       if (reg < 7) {
         writerm16(rm, res16);
       }
@@ -2955,6 +2961,7 @@ int32_t cpu_exec86(int32_t target) {
       cpu_regs.di = _read_code_u16();
       break;
 
+#if (CPU >= CPU_186)
     case 0xC0: /* C0 GRP2 byte imm8 (80186+) */
       modregrm();
       oper1b = readrm8(rm);
@@ -2968,6 +2975,7 @@ int32_t cpu_exec86(int32_t target) {
       oper2 = _read_code_u8();
       writerm16(rm, op_grp2_16((uint8_t)oper2));
       break;
+#endif
 
     case 0xC2: /* C2 RET Iw */
       // TODO: _read_code_u16();
@@ -3005,8 +3013,9 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0xC8: /* C8 ENTER (80186+) */
+    {
       stacksize = _read_code_u16();
-      nestlev = _read_code_u8();
+      const uint8_t nestlev = _read_code_u8();
       cpu_push(cpu_regs.bp);
       frametemp = cpu_regs.sp;
       if (nestlev) {
@@ -3016,10 +3025,9 @@ int32_t cpu_exec86(int32_t target) {
         }
         cpu_push(cpu_regs.sp);
       }
-
       cpu_regs.bp = frametemp;
       cpu_regs.sp = cpu_regs.bp - stacksize;
-
+    }
       break;
 
     case 0xC9: /* C9 LEAVE (80186+) */
