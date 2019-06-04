@@ -29,14 +29,14 @@ union cpu_flags_t cpu_flags;
 
 extern struct structpic i8259;
 
-bool in_hlt_state;
+static bool in_hlt_state;
 
-uint8_t opcode, segoverride, reptype;
-uint16_t segregs[4], savecs, saveip, useseg, oldsp;
-uint8_t mode, reg, rm;
-uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
-uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
-uint32_t temp1, temp2, temp3, temp32, ea;
+static uint8_t opcode, segoverride, reptype;
+static uint16_t segregs[4], savecs, saveip, useseg, oldsp;
+static uint8_t mode, reg, rm;
+static uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
+static uint8_t oper1b, oper2b, res8, nestlev, addrbyte;
+static uint32_t temp1, temp2, temp3, temp32, ea;
 
 bool cpu_running;
 static uint64_t _cycles;
@@ -223,16 +223,18 @@ static const uint8_t parity[0x100] = {
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1};
 
 static inline uint16_t makeflagsword(void) {
-  return 2 |
-    (cpu_flags.cf  << 0) |
-    (cpu_flags.pf  << 2) |
-    (cpu_flags.af  << 4) |
-    (cpu_flags.zf  << 6) |
-    (cpu_flags.sf  << 7) |
-    (cpu_flags.tf  << 8) |
-    (cpu_flags.ifl << 9) |
+  return
+    (cpu_flags.cf  <<  0) |
+    (1             <<  1) |  // reserved
+    (cpu_flags.pf  <<  2) |
+    (cpu_flags.af  <<  4) |
+    (cpu_flags.zf  <<  6) |
+    (cpu_flags.sf  <<  7) |
+    (cpu_flags.tf  <<  8) |
+    (cpu_flags.ifl <<  9) |
     (cpu_flags.df  << 10) |
-    (cpu_flags.of  << 11);
+    (cpu_flags.of  << 11) |
+    ((CPU <= CPU_186) ? 0x8000 : 0);
 }
 
 static inline void decodeflagsword(const uint16_t x) {
@@ -694,244 +696,209 @@ static void writerm8(uint8_t rmval, uint8_t value) {
 
 static uint8_t op_grp2_8(uint8_t cnt) {
 
-  uint16_t shift;
-  uint16_t oldcf;
-  uint16_t msb;
-
   uint16_t s = oper1b;
-//  oldcf = cpu_flags.cf;
-#ifdef CPU_LIMIT_SHIFT_COUNT
-  cnt &= 0x1F;
-#endif
+
   switch (reg) {
   case 0: /* ROL r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      if (s & 0x80) {
-        cpu_flags.cf = 1;
-      } else {
-        cpu_flags.cf = 0;
-      }
-
-      s = s << 1;
-      s = s | cpu_flags.cf;
+    cnt &= 0x7;
+    for (int i = 1; i <= cnt; i++) {
+      cpu_flags.cf = (s & 0x80) ? 1 : 0;
+      s = (s << 1) | ((s >> 7) & 1);
     }
-
-    cpu_flags.of = 0;
     if (cnt == 1) {
-      // cpu_flags.of = cpu_flags.cf ^ ( (s >> 7) & 1);
-      if ((s & 0x80) && cpu_flags.cf) {
-        cpu_flags.of = 1;
-      }
+      const uint8_t bit = (s & 0x80) ? 1 : 0;
+      cpu_flags.of = (bit != cpu_flags.cf) ? 1 : 0;
     }
-    break;
+    return s & 0xFF;
 
   case 1: /* ROR r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
+    cnt &= 0x7;
+    for (int i = 1; i <= cnt; i++) {
       cpu_flags.cf = s & 1;
-      s = (s >> 1) | ((int)cpu_flags.cf << 7);
+      s = (s >> 1) | ((s << 7) & 0x80);
     }
-
     if (cnt == 1) {
-      cpu_flags.of = (s >> 7) ^ ((s >> 6) & 1);
+      // two highest bits are different
+      cpu_flags.of = !((s & 0x80) == ((s << 1) & 0x80));
     }
-    break;
+    return s & 0xFF;
 
   case 2: /* RCL r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      oldcf = cpu_flags.cf;
-      if (s & 0x80) {
-        cpu_flags.cf = 1;
-      } else {
-        cpu_flags.cf = 0;
-      }
-
-      s = s << 1;
-      s = s | oldcf;
+    cnt &= 0x7;
+    for (int i = 1; i <= cnt; i++) {
+      const uint8_t c = cpu_flags.cf;
+      cpu_flags.cf = (s & 0x80) ? 1 : 0;
+      s = (s << 1) | c;
     }
-
     if (cnt == 1) {
-      cpu_flags.of = 1 & (cpu_flags.cf ^ ((s >> 7) & 1));
+      const uint8_t bit = (s & 0x80) ? 1 : 0;
+      cpu_flags.of = (bit != cpu_flags.cf) ? 1 : 0;
     }
-    break;
+    return s & 0xFF;
 
   case 3: /* RCR r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      oldcf = cpu_flags.cf;
+    cnt &= 0x7;
+    for (int i = 1; i <= cnt; i++) {
+      const uint8_t c = cpu_flags.cf;
       cpu_flags.cf = s & 1;
-      s = (s >> 1) | (oldcf << 7);
+      s = (s >> 1) | (c << 7);
     }
-
     if (cnt == 1) {
-      cpu_flags.of = 1 & ((s >> 7) ^ ((s >> 6) & 1));
+      // two highest bits are different
+      cpu_flags.of = !((s & 0x80) == ((s << 1) & 0x80));
     }
-    break;
+    return s & 0xFF;
 
-  case 4:
-  case 6: /* SHL r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      if (s & 0x80) {
-        cpu_flags.cf = 1;
-      } else {
-        cpu_flags.cf = 0;
+  case 4: /* SHL r/m8 */
+    cnt &= 0x7;
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = (s & 0x80) ? 1 : 0;
+        s = (s << 1) & 0xff;
       }
-
-      s = (s << 1) & 0xFF;
+      if (cnt == 1) {
+        const uint8_t bit = (s & 0x80) ? 1 : 0;
+        cpu_flags.of = (bit != cpu_flags.cf) ? 1 : 0;
+      }
+      flag_szp8(s & 0xff);
     }
-
-    if ((cnt == 1) && (cpu_flags.cf == (1 & (s >> 7)))) {
-      cpu_flags.of = 0;
-    } else {
-      cpu_flags.of = 1;
-    }
-
-    flag_szp8((uint8_t)s);
-    break;
+    return s & 0xFF;
 
   case 5: /* SHR r/m8 */
-    if ((cnt == 1) && (s & 0x80)) {
-      cpu_flags.of = 1;
-    } else {
-      cpu_flags.of = 0;
+    cnt &= 0x7;
+    if (cnt != 0) {
+      cpu_flags.of = ((cnt == 1) && (s & 0x80)) ? 1 : 0;
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = (s & 1);
+        s = s >> 1;
+      }
+      flag_szp8(s & 0xff);
     }
+    return s & 0xFF;
 
-    for (shift = 1; shift <= cnt; shift++) {
-      cpu_flags.cf = s & 1;
-      s = s >> 1;
-    }
-
-    flag_szp8((uint8_t)s);
-    break;
+  case 6:
+    UNREACHABLE();
 
   case 7: /* SAR r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      msb = s & 0x80;
-      cpu_flags.cf = s & 1;
-      s = (s >> 1) | msb;
+    cnt &= 0x7;
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = s & 1;
+        s = (s >> 1) | (s & 0x80);
+      }
+      cpu_flags.of = 0;
+      flag_szp8((uint8_t)s);
     }
+    return s & 0xFF;
 
-    cpu_flags.of = 0;
-    flag_szp8((uint8_t)s);
-    break;
+  default:
+    UNREACHABLE();
   }
 
-  return s & 0xFF;
 }
 
 static uint16_t op_grp2_16(uint8_t cnt) {
 
-  uint32_t s;
-  uint32_t shift;
-  uint32_t oldcf;
-  uint32_t msb;
+  uint32_t s = oper1;
 
-  s = oper1;
-//  oldcf = cpu_flags.cf;
-#ifdef CPU_LIMIT_SHIFT_COUNT
-  cnt &= 0x1F;
-#endif
   switch (reg) {
   case 0: /* ROL r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      cpu_flags.cf = (0 != (s & 0x8000));
-      s = s << 1;
-      s = s | cpu_flags.cf;
-    }
-
-    if (cnt == 1) {
-      cpu_flags.of = 1 & (cpu_flags.cf ^ ((s >> 15) & 1));
+    cnt &= 0xf;
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = (s & 0x8000) ? 1 : 0;
+        s = (s << 1) | (cpu_flags.cf);
+      }
+      if (cnt == 1) {
+        cpu_flags.of = (cpu_flags.cf ^ ((s >> 15) & 1));
+      }
     }
     break;
 
   case 1: /* ROR r/m8 */
-
-    // TODO: Init s?
-    
-    for (shift = 1; shift <= cnt; shift++) {
-      cpu_flags.cf = s & 1;
-      s = (s >> 1) | ((int)cpu_flags.cf << 15);
+    cnt &= 0xf;
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = s & 1;
+        s = (s >> 1) | ((s << 15) & 0x8000);
+      }
+      if (cnt == 1) {
+        cpu_flags.of = (s >> 15) ^ ((s >> 14) & 1);
+      }
     }
-
-    if (cnt == 1) {
-      cpu_flags.of = (s >> 15) ^ ((s >> 14) & 1);
-    }
-    break;
+    return s & 0xffff;
 
   case 2: /* RCL r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      oldcf = cpu_flags.cf;
-      if (s & 0x8000) {
-        cpu_flags.cf = 1;
-      } else {
-        cpu_flags.cf = 0;
+    cnt &= 0xf;
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        const uint16_t c = cpu_flags.cf;
+        cpu_flags.cf = (s & 0x8000) ? 1 : 0;
+        s = (s << 1) | c;
       }
-
-      s = s << 1;
-      s = s | oldcf;
+      if (cnt == 1) {
+        cpu_flags.of = (cpu_flags.cf ^ ((s >> 15) & 1));
+      }
     }
-
-    if (cnt == 1) {
-      cpu_flags.of = 1 & (cpu_flags.cf ^ ((s >> 15) & 1));
-    }
-    break;
+    return s & 0xffff;
 
   case 3: /* RCR r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      oldcf = cpu_flags.cf;
-      cpu_flags.cf = s & 1;
-      s = (s >> 1) | (oldcf << 15);
-    }
-
-    if (cnt == 1) {
-      cpu_flags.of = 1 & ((s >> 15) ^ ((s >> 14) & 1));
-    }
-    break;
-
-  case 4:
-  case 6: /* SHL r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      if (s & 0x8000) {
-        cpu_flags.cf = 1;
-      } else {
-        cpu_flags.cf = 0;
+    cnt &= 0xf;
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        const uint16_t c = cpu_flags.cf;
+        cpu_flags.cf = s & 1;
+        s = (s >> 1) | ((c << 15) & 0x8000);
       }
-
-      s = (s << 1) & 0xFFFF;
+      if (cnt == 1) {
+        cpu_flags.of = 1 & ((s >> 15) ^ ((s >> 14) & 1));
+      }
     }
+    return s & 0xffff;
 
-    if ((cnt == 1) && (cpu_flags.cf == (1 & (s >> 15)))) {
-      cpu_flags.of = 0;
-    } else {
-      cpu_flags.of = 1;
+  case 4: /* SHL r/m8 */
+    cnt &= 0xf;
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = (s & 0x8000) ? 1 : 0;
+        s = (s << 1) & 0xFFFF;
+      }
+      if (cnt == 1) {
+        cpu_flags.of = (cpu_flags.cf != ((s & 0x8000) ? 1 : 0));
+      }
+      flag_szp16((uint16_t)s);
     }
-
-    flag_szp16((uint16_t)s);
-    break;
+    return s & 0xffff;
 
   case 5: /* SHR r/m8 */
-    if ((cnt == 1) && (s & 0x8000)) {
-      cpu_flags.of = 1;
-    } else {
-      cpu_flags.of = 0;
+    cnt &= 0xf;
+    if (cnt != 0) {
+      cpu_flags.of = ((cnt == 1) && (s & 0x8000)) ? 1 : 0;
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = s & 1;
+        s = s >> 1;
+      }
+      flag_szp16((uint16_t)s);
     }
+    return s & 0xffff;
 
-    for (shift = 1; shift <= cnt; shift++) {
-      cpu_flags.cf = s & 1;
-      s = s >> 1;
-    }
-
-    flag_szp16((uint16_t)s);
-    break;
+  case 6:
+    UNREACHABLE();
 
   case 7: /* SAR r/m8 */
-    for (shift = 1; shift <= cnt; shift++) {
-      msb = s & 0x8000;
-      cpu_flags.cf = s & 1;
-      s = (s >> 1) | msb;
+    cnt &= 0xf;
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = s & 1;
+        s = (s >> 1) | (s & 0x8000);
+      }
+      cpu_flags.of = 0;
+      flag_szp16((uint16_t)s);
     }
+    return s & 0xffff;
 
-    cpu_flags.of = 0;
-    flag_szp16((uint16_t)s);
-    break;
+  default:
+    UNREACHABLE();
   }
 
   return (uint16_t)s & 0xFFFF;
@@ -1629,29 +1596,21 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0x27: /* 27 DAA */
-      if (((cpu_regs.al & 0xF) > 9) || (cpu_flags.af == 1)) {
-        oper1 = cpu_regs.al + 6;
-        cpu_regs.al = oper1 & 255;
-        if (oper1 & 0xFF00) {
-          cpu_flags.cf = 1;
-        } else {
-          cpu_flags.cf = 0;
+      {
+        const uint8_t c = cpu_flags.cf;
+        const uint8_t al = cpu_regs.al;
+        if (((cpu_regs.al & 0xF) > 9) || (cpu_flags.af == 1)) {
+          const uint16_t temp = cpu_regs.al + 6;
+          cpu_regs.al = temp & 0xff;
+          cpu_flags.cf = c | (temp > 255);
         }
-        cpu_flags.af = 1;
-      } else {
-        // cpu_flags.af = 0;
+        cpu_flags.cf = 0;
+        if (al > 0x99 || c == 1) {
+          cpu_regs.al += 0x60;
+          cpu_flags.cf = 1;
+        }
+        flag_szp8(cpu_regs.al);
       }
-
-      if ((cpu_regs.al > 0x9F) || cpu_flags.cf) {
-        cpu_regs.al = cpu_regs.al + 0x60;
-        cpu_flags.cf = 1;
-      } else {
-        // TODO: Check this
-        // cpu_flags.cf = 0;
-      }
-
-      cpu_regs.al = cpu_regs.al & 255;
-      flag_szp8(cpu_regs.al);
       break;
 
     case 0x28: /* 28 SUB Eb Gb */
@@ -2027,7 +1986,7 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0x54: /* 54 PUSH eSP */
-#ifdef USE_286_STYLE_PUSH_SP
+#ifdef CPU_USE_286_STYLE_PUSH_SP
       cpu_push(cpu_regs.sp);
 #else
       cpu_push(cpu_regs.sp - 2);
@@ -2080,15 +2039,17 @@ int32_t cpu_exec86(int32_t target) {
 
 #if (CPU != CPU_8086)
     case 0x60: /* 60 PUSHA (80186+) */
-      oldsp = cpu_regs.sp;
+    {
+      const uint16_t sp = cpu_regs.sp;
       cpu_push(cpu_regs.ax);
       cpu_push(cpu_regs.cx);
       cpu_push(cpu_regs.dx);
       cpu_push(cpu_regs.bx);
-      cpu_push(oldsp);
+      cpu_push(sp);
       cpu_push(cpu_regs.bp);
       cpu_push(cpu_regs.si);
       cpu_push(cpu_regs.di);
+    }
       break;
 
     case 0x61: /* 61 POPA (80186+) */
@@ -2120,26 +2081,22 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0x69: /* 69 IMUL Gv Ev Iv (80186+) */
+      // https://c9x.me/x86/html/file_module_x86_id_138.html
+    {
       modregrm();
-      temp1 = readrm16(rm);
-      temp2 = _read_code_u16();
-      if ((temp1 & 0x8000L) == 0x8000L) {
-        temp1 = temp1 | 0xFFFF0000L;
-      }
-
-      if ((temp2 & 0x8000L) == 0x8000L) {
-        temp2 = temp2 | 0xFFFF0000L;
-      }
-
-      temp3 = temp1 * temp2;
-      cpu_setreg16(reg, temp3 & 0xFFFFL);
-      if (temp3 & 0xFFFF0000L) {
+      const int16_t t1 = readrm16(rm);
+      const int16_t t2 = _read_code_u16();
+      const int32_t t3 = (int32_t)t1 * (int32_t)t2;
+      const int16_t t4 = t1 * t2;
+      cpu_setreg16(reg, t3 & 0xFFFF);
+      if (t3 != t4) {
         cpu_flags.cf = 1;
         cpu_flags.of = 1;
       } else {
         cpu_flags.cf = 0;
         cpu_flags.of = 0;
       }
+    }
       break;
 
     case 0x6A: /* 6A PUSH Ib (80186+) */
@@ -2147,26 +2104,22 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0x6B: /* 6B IMUL Gv Eb Ib (80186+) */
+      // https://c9x.me/x86/html/file_module_x86_id_138.html
+    {
       modregrm();
-      temp1 = readrm16(rm);
-      temp2 = signext(_read_code_u8());
-      if ((temp1 & 0x8000L) == 0x8000L) {
-        temp1 = temp1 | 0xFFFF0000L;
-      }
-
-      if ((temp2 & 0x8000L) == 0x8000L) {
-        temp2 = temp2 | 0xFFFF0000L;
-      }
-
-      temp3 = temp1 * temp2;
-      cpu_setreg16(reg, temp3 & 0xFFFFL);
-      if (temp3 & 0xFFFF0000L) {
+      const int16_t t1 = readrm16(rm);
+      const int16_t t2 = signext(_read_code_u8());
+      const int32_t t3 = (int32_t)t1 * (int32_t)t2;
+      const int16_t t4 = t1 * t2;
+      cpu_setreg16(reg, t3 & 0xFFFF);
+      if (t3 != t4) {
         cpu_flags.cf = 1;
         cpu_flags.of = 1;
       } else {
         cpu_flags.cf = 0;
         cpu_flags.of = 0;
       }
+    }
       break;
 
     case 0x6C: /* 6E INSB */

@@ -40,6 +40,8 @@
 //   write 00h to I/O address A0h (disable DMI)
 
 
+bool log_all;
+
 static const bool _notify_unknown_ports = true;
 
 uint8_t portram[0x10000];
@@ -63,6 +65,9 @@ static void _ignore_range(uint16_t start, uint16_t end) {
 
 // 8bit port write
 void portout(uint16_t portnum, uint8_t value) {
+  if (log_all && portnum != 0x20 && portnum != 0x3d4 && portnum != 0x3d5) {
+    printf("%04xh <- %02x\n", portnum, value);
+  }
 
   portram[portnum] = value;
 
@@ -80,6 +85,9 @@ void portout(uint16_t portnum, uint8_t value) {
 
 // 8bit port read
 uint8_t portin(uint16_t portnum) {
+  if (log_all && portnum != 0x3ba && portnum != 0x3d4 && portnum != 0x3d5) {
+    printf("%04xh ->\n", portnum);
+  }
 
   const port_read_b_t cb = port_read_callback[portnum];
   if (cb) {
