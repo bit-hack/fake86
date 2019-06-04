@@ -685,6 +685,7 @@ static void writerm16(uint8_t rmval, uint16_t value) {
   }
 }
 
+// write to rm specified location
 static void writerm8(uint8_t rmval, uint8_t value) {
   if (mode < 3) {
     getea(rmval);
@@ -694,6 +695,7 @@ static void writerm8(uint8_t rmval, uint8_t value) {
   }
 }
 
+// 8 bit shifts
 static uint8_t op_grp2_8(uint8_t cnt) {
 
   uint16_t s = oper1b;
@@ -797,6 +799,7 @@ static uint8_t op_grp2_8(uint8_t cnt) {
 
 }
 
+// 16 bit shifts
 static uint16_t op_grp2_16(uint8_t cnt) {
 
   uint32_t s = oper1;
@@ -947,6 +950,7 @@ static void op_idiv8(uint16_t valdiv, uint8_t divisor) {
   cpu_regs.al = (uint8_t)d1;
 }
 
+// opcode group 0xF6 ...
 static void op_grp3_8() {
   oper1 = signext(oper1b);
   oper2 = signext(oper2b);
@@ -974,45 +978,29 @@ static void op_grp3_8() {
     break;
 
   case 4: /* MUL */
-    temp1 = (uint32_t)oper1b * (uint32_t)cpu_regs.al;
-    cpu_regs.ax = temp1 & 0xFFFF;
-    flag_szp8((uint8_t)temp1);
-    if (cpu_regs.ah) {
-      cpu_flags.cf = 1;
-      cpu_flags.of = 1;
-    } else {
-      cpu_flags.cf = 0;
-      cpu_flags.of = 0;
-    }
+  {
+    const uint32_t t = (uint32_t)oper1b * (uint32_t)cpu_regs.al;
+    cpu_regs.ax = t & 0xFFFF;
+    flag_szp8((uint8_t)t);
+    cpu_flags.cf = cpu_flags.of = (cpu_regs.ah ? 1 : 0);
 #ifdef CPU_CLEAR_ZF_ON_MUL
     cpu_flags.zf = 0;
 #endif
+  }
     break;
 
   case 5: /* IMUL */
-    oper1 = signext(oper1b);
-    temp1 = signext(cpu_regs.al);
-    temp2 = oper1;
-    if ((temp1 & 0x80) == 0x80) {
-      temp1 = temp1 | 0xFFFFFF00;
-    }
-
-    if ((temp2 & 0x80) == 0x80) {
-      temp2 = temp2 | 0xFFFFFF00;
-    }
-
-    temp3 = (temp1 * temp2) & 0xFFFF;
-    cpu_regs.ax = temp3 & 0xFFFF;
-    if (cpu_regs.ah) {
-      cpu_flags.cf = 1;
-      cpu_flags.of = 1;
-    } else {
-      cpu_flags.cf = 0;
-      cpu_flags.of = 0;
-    }
+  {
+    const int16_t x = signext(oper1b);
+    const int16_t y = signext(cpu_regs.al);
+    const int16_t z = x * y;
+    cpu_regs.ax = (uint16_t)z;
+    // TODO: 0x00.. or 0xff..
+    cpu_flags.cf = cpu_flags.of = (cpu_regs.ah ? 1 : 0);
 #ifdef CPU_CLEAR_ZF_ON_MUL
     cpu_flags.zf = 0;
 #endif
+  }
     break;
 
   case 6: /* DIV */
