@@ -22,9 +22,6 @@
 
 #include "../common/common.h"
 
-
-extern SDL_Surface *_surface;
-
 extern bool do_fullscreen;
 extern bool cpu_running;
 extern const char *biosfile;

@@ -18,6 +18,11 @@
   USA.
 */
 
+#pragma once
+
+#include "../common/common.h"
+
+
 #pragma pack(push, 1)
 struct cpu_regs_t {
   union {
@@ -69,4 +74,4 @@ extern bool cpu_running;
 // used to simulate disk drive latency
 void cpu_delay(uint32_t cycles);
 
-void cpu_udis_exec(const uint8_t *stream);
+bool cpu_udis_exec(const uint8_t *stream);

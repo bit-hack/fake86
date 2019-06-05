@@ -204,7 +204,7 @@ static bool load_roms(void) {
   return true;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, const char *argv[]) {
   // setup exit handler
   atexit(exit_handler);
   // initialize the log file

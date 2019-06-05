@@ -38,6 +38,8 @@ static uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
 static uint8_t oper1b, oper2b, res8, addrbyte;
 static uint32_t temp1, temp2, temp3, temp32, ea;
 
+static bool _use_udis_emu = true;
+
 bool cpu_running;
 static uint64_t _cycles;
 static uint32_t _delay_cycles;
@@ -1176,11 +1178,6 @@ int32_t cpu_exec86(int32_t target) {
 
   while (cpu_running && _cycles < target) {
 
-#if 1
-    // trace testing
-    cpu_udis_exec(RAM + ((cpu_regs.cs << 4) + cpu_regs.ip));
-#endif
-
     // if trap is asserted
     if (trap_toggle) {
       _intcall_handler(1);
@@ -1211,6 +1208,14 @@ int32_t cpu_exec86(int32_t target) {
       }
     }
 #endif
+
+    if (_use_udis_emu) {
+      // trace testing
+      if (cpu_udis_exec(RAM + ((cpu_regs.cs << 4) + cpu_regs.ip))) {
+        ++_cycles;
+        continue;
+      }
+    }
 
     reptype = 0;
     segoverride = 0;
