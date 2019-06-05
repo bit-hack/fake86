@@ -27,53 +27,24 @@
 #include "frontend.h"
 
 
-SDL_Surface *_surface;
-bool do_fullscreen;
-
 // offscreen render target
 static uint32_t _temp[320 * 240];
 
-uint32_t frame_skip;
-static uint32_t frame_index;
-
-
-void neo_render_fs_toggle(void) {
-  assert(_surface);
-  const int flags = _surface->flags ^ SDL_FULLSCREEN;
-  _surface = SDL_SetVideoMode(_surface->w, _surface->h, 32, flags);
-  if (!_surface) {
-    log_printf(LOG_CHAN_VIDEO, "SDL_SetVideoMode failed");
-  }
-  SDL_WM_SetCaption(BUILD_STRING, NULL);
-}
-
-bool neo_render_init() {
-
-  const int flags =
-    (do_fullscreen ? SDL_FULLSCREEN : 0);
-
-  _surface = SDL_SetVideoMode(640, 480, 32, flags);
-  if (!_surface) {
-    log_printf(LOG_CHAN_VIDEO, "SDL_SetVideoMode failed");
-    return false;
-  }
-  SDL_WM_SetCaption(BUILD_STRING, NULL);
-  return true;
-}
 
 // render a grey/black dither pattern
-static void _neo_render_mode_unknown(void) {
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  for (uint32_t y = 0; y < (uint32_t)_surface->h; ++y) {
+static void _neo_render_mode_unknown(const struct render_target_t *target) {
+  uint32_t *dsty = target->dst;
+  for (uint32_t y = 0; y < target->h; ++y) {
     uint32_t *dstx = dsty;
-    for (uint32_t x = 0; x < (uint32_t)_surface->w; ++x) {
+    for (uint32_t x = 0; x < target->w; ++x) {
       dstx[x] = (1 & (x ^ y)) ? 0x000000 : 0x808080;
     }
-    dsty += (_surface->pitch) / sizeof(uint32_t);
+    dsty += target->pitch;
   }
 }
 
-static void _neo_draw_cursor(const uint8_t chw, const uint8_t chh,
+static void _neo_draw_cursor(const struct render_target_t *target,
+                             const uint8_t chw, const uint8_t chh,
                              const uint8_t w, const uint8_t h,
                              const uint32_t yoffset) {
 
@@ -90,8 +61,8 @@ static void _neo_draw_cursor(const uint8_t chw, const uint8_t chh,
     return;
   }
   // draw target
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  uint32_t *dst = (uint32_t*)_surface->pixels;
+  const uint32_t pitch = target->pitch;
+  uint32_t *dst = target->dst;
   dst += yoffset * pitch;
   dst += chw * x + chh * y * pitch;
   // scanline locations
@@ -109,7 +80,7 @@ static void _neo_draw_cursor(const uint8_t chw, const uint8_t chh,
 }
 
 // 80x25 greyscale text mode
-static void _neo_render_mode_02(void) {
+static void _neo_render_mode_02(const struct render_target_t *target) {
   // text mode buffer address
   uint32_t src = 0xB8000;
   // cga/PCjr = 8x8  char px
@@ -120,9 +91,9 @@ static void _neo_render_mode_02(void) {
   // step through VGA text-mode buffer
   const int rows = 25, cols = 80;
   // screen buffer position
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  const uint32_t yoffset = (_surface->h - (chh * rows)) / 2;
+  const uint32_t pitch = target->pitch;
+  uint32_t *dsty = target->dst;
+  const uint32_t yoffset = (target->h - (chh * rows)) / 2;
   dsty += pitch * yoffset;
   // blit loop
   for (int y = 0; y < rows; ++y) {
@@ -145,11 +116,11 @@ static void _neo_render_mode_02(void) {
     dsty += pitch * chh;
   }
   // this is text mode so draw the cursor if needed
-  _neo_draw_cursor(chw, chh, cols, rows, yoffset);
+  _neo_draw_cursor(target, chw, chh, cols, rows, yoffset);
 }
 
 // 80x25 16-colour text mode
-static void _neo_render_mode_03(void) {
+static void _neo_render_mode_03(const struct render_target_t *target) {
   const uint32_t base = 0xB8000;
   // text mode buffer address
   uint32_t src = 0xB8000;
@@ -161,9 +132,9 @@ static void _neo_render_mode_03(void) {
   // step through VGA text-mode buffer
   const int rows = 25, cols = 80;
   // screen buffer position
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  const uint32_t yoffset = (_surface->h - (chh * rows)) / 2;
+  const uint32_t pitch = target->pitch;
+  uint32_t *dsty = target->dst;
+  const uint32_t yoffset = (target->h - (chh * rows)) / 2;
   dsty += pitch * yoffset;
   // blit loop
   for (int y=0; y<rows; ++y) {
@@ -186,7 +157,7 @@ static void _neo_render_mode_03(void) {
     dsty += pitch * chh;
   }
   // this is text mode so draw the cursor if needed
-  _neo_draw_cursor(chw, chh, cols, rows, yoffset);
+  _neo_draw_cursor(target, chw, chh, cols, rows, yoffset);
 }
 
 // 320x200 4-colour graphics mode interleaved
@@ -244,7 +215,7 @@ static void _neo_render_mode_05(void) {
 
 // 80x25 greyscale text mode
 // XXX: untested
-static void _neo_render_mode_07(void) {
+static void _neo_render_mode_07(const struct render_target_t *target) {
   // text mode buffer address
   uint32_t src = 0xB8000;
   // cga/PCjr = 9x14  char px
@@ -252,9 +223,9 @@ static void _neo_render_mode_07(void) {
   // step through VGA text-mode buffer
   const int rows = 25, cols = 80;
   // screen buffer position
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  dsty += pitch * ((_surface->h - (chh * rows)) / 2);
+  const uint32_t pitch = target->pitch;
+  uint32_t *dsty = target->dst;
+  dsty += pitch * ((target->h - (chh * rows)) / 2);
   // blit loop
   for (int y=0; y<rows; ++y) {
     uint32_t *dstx = dsty;
@@ -274,7 +245,7 @@ static void _neo_render_mode_07(void) {
   }
 }
 
-static void _neo_render_mode_0e(void) {
+static void _neo_render_mode_0e(const struct render_target_t *target) {
   //
   static const uint32_t width = 640;
   static const uint32_t height = 200;
@@ -286,10 +257,10 @@ static void _neo_render_mode_0e(void) {
   const uint8_t *plane2 = vga_ram() + 0x10000 * 2;
   const uint8_t *plane3 = vga_ram() + 0x10000 * 3;
   // target memory
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
+  uint32_t *dsty = target->dst;
+  const uint32_t pitch = target->pitch;
   // center
-  dsty += ((_surface->h - (height * 2)) / 2) * pitch;
+  dsty += ((target->h - (height * 2)) / 2) * pitch;
   // blit loop
   for (uint32_t y = 0; y < height; ++y) {
     uint32_t *dstx = dsty;
@@ -370,7 +341,7 @@ static void _neo_render_mode_0d(void) {
   }
 }
 
-static void _neo_render_mode_10(void) {
+static void _neo_render_mode_10(const struct render_target_t *target) {
   //
   static const uint32_t width = 640;
   static const uint32_t height = 350;
@@ -382,9 +353,9 @@ static void _neo_render_mode_10(void) {
   const uint8_t *plane2 = vga_ram() + 0x10000 * 2;
   const uint8_t *plane3 = vga_ram() + 0x10000 * 3;
   // destination
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  dsty += pitch * ((_surface->h - height) / 2);
+  uint32_t *dsty = target->dst;
+  const uint32_t pitch = target->pitch;
+  dsty += pitch * ((target->h - height) / 2);
   // blit loop
   for (uint32_t y = 0; y < height; ++y) {
     uint32_t *dstx = dsty;
@@ -436,7 +407,7 @@ static void _neo_render_mode_13(void) {
   }
 }
 
-static void _neo_render_mode_12(void) {
+static void _neo_render_mode_12(const struct render_target_t *target) {
   //
   static const uint32_t width = 640;
   static const uint32_t height = 480;
@@ -448,9 +419,9 @@ static void _neo_render_mode_12(void) {
   const uint8_t *plane2 = vga_ram() + 0x10000 * 2;
   const uint8_t *plane3 = vga_ram() + 0x10000 * 3;
   // destination
-  uint32_t *dsty = (uint32_t*)_surface->pixels;
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  dsty += pitch * ((_surface->h - height) / 2);
+  uint32_t *dsty = target->dst;
+  const uint32_t pitch = target->pitch;
+  dsty += pitch * ((target->h - height) / 2);
   // blit loop
   for (uint32_t y = 0; y < height; ++y) {
     uint32_t *dstx = dsty;
@@ -484,12 +455,15 @@ static void _neo_render_mode_12(void) {
 }
 
 // blit offscreen render target to screen
-static void blit_2x(uint32_t w, uint32_t h) {
-  const uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  uint32_t *dst = (uint32_t *)_surface->pixels;
+static void blit_2x(uint32_t w, uint32_t h, const struct render_target_t *target) {
+
+  // TODO: check bounds
+
+  const uint32_t pitch = target->pitch;
+  uint32_t *dst = target->dst;
   // offset to centre
-  if (_surface->h > (int)(2 * h)) {
-    dst += pitch * ((_surface->h - h * 2) / 2);
+  if (target->h > (int32_t)(2 * h)) {
+    dst += pitch * ((target->h - h * 2) / 2);
   }
   // blit loop
   const uint32_t *src = _temp;
@@ -504,53 +478,45 @@ static void blit_2x(uint32_t w, uint32_t h) {
       dstx += 2;
     }
     dst += pitch * 2;
-    src += 320;
+    src += w;
   }
 }
 
-static void _draw_disk(void) {
+static void _draw_disk(const struct render_target_t *target) {
   const uint8_t *src = asset_disk_pic;
-  uint32_t pitch = _surface->pitch / sizeof(uint32_t);
-  uint32_t *dst = (uint32_t*)_surface->pixels;
+  const uint32_t pitch = target->pitch;
+  uint32_t *dst = target->dst;
   dst += 8 + pitch * 8;
   for (int y = 0; y < 16; ++y) {
     for (int x = 0; x < 16; ++x) {
-      dst[x] = palette_cga_3_rgb[*src];
+      const uint32_t rgb = palette_cga_3_rgb[*src];
+      dst[x] = ((dst[x] >> 1) & 0x7f7f7f) | ((rgb >> 1) & 0x7f7f7f);
       ++src;
     }
     dst += pitch;
   }
 }
 
-void neo_render_tick(void) {
-
-  ++frame_index;
-  if (frame_index >= frame_skip) {
-    frame_index = 0;
-  }
-
-  SDL_FillRect(_surface, NULL, 0x050505);
+void neo_render_tick(const struct render_target_t *target) {
 
   switch (neo_get_video_mode()) {
-  case 0x02: _neo_render_mode_02(); break;
-  case 0x03: _neo_render_mode_03(); break;
-  case 0x04: _neo_render_mode_04(); blit_2x(320, 200); break;
-  case 0x05: _neo_render_mode_05(); blit_2x(320, 200); break;
-  case 0x07: _neo_render_mode_07(); break;
-  case 0x0d: _neo_render_mode_0d(); blit_2x(320, 200); break;
-  case 0x0e: _neo_render_mode_0e(); break;
-  case 0x10: _neo_render_mode_10(); break;
-  case 0x12: _neo_render_mode_12(); break;
-  case 0x13: _neo_render_mode_13(); blit_2x(320, 200); break;
+  case 0x02: _neo_render_mode_02(target); break;
+  case 0x03: _neo_render_mode_03(target); break;
+  case 0x04: _neo_render_mode_04(); blit_2x(320, 200, target); break;
+  case 0x05: _neo_render_mode_05(); blit_2x(320, 200, target); break;
+  case 0x07: _neo_render_mode_07(target); break;
+  case 0x0d: _neo_render_mode_0d(); blit_2x(320, 200, target); break;
+  case 0x0e: _neo_render_mode_0e(target); break;
+  case 0x10: _neo_render_mode_10(target); break;
+  case 0x12: _neo_render_mode_12(target); break;
+  case 0x13: _neo_render_mode_13(); blit_2x(320, 200, target); break;
   default:
-    _neo_render_mode_unknown();
+    _neo_render_mode_unknown(target);
     break;
   }
 
   // indicate disk activity
   if (osd_should_draw_disk()) {
-    _draw_disk();
+    _draw_disk(target);
   }
-
-  SDL_Flip(_surface);
 }

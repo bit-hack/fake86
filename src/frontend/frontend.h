@@ -44,3 +44,24 @@ void osd_on_event(const SDL_Event *t);
 
 // assets.c
 extern const uint8_t asset_disk_pic[256];
+
+// window.c
+void win_fs_toggle(void);
+bool win_init(void);
+void win_render(void);
+void win_size(uint32_t *w, uint32_t *h);
+
+// TODO: push back to video.h
+
+struct render_target_t {
+  uint32_t *dst;
+  uint32_t w, h, pitch;
+};
+
+void neo_render_tick(const struct render_target_t *target);
+
+// events.c
+void tick_events(void);
+
+// parsecl.c
+bool cl_parse(const int argc, const char **args);

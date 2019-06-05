@@ -65,10 +65,6 @@ static void _ignore_range(uint16_t start, uint16_t end) {
 
 // 8bit port write
 void portout(uint16_t portnum, uint8_t value) {
-  if (log_all && portnum != 0x20 && portnum != 0x3d4 && portnum != 0x3d5) {
-    printf("%04xh <- %02x\n", portnum, value);
-  }
-
   portram[portnum] = value;
 
   const port_write_b_t cb = port_write_callback[portnum];
@@ -85,23 +81,24 @@ void portout(uint16_t portnum, uint8_t value) {
 
 // 8bit port read
 uint8_t portin(uint16_t portnum) {
-  if (log_all && portnum != 0x3ba && portnum != 0x3d4 && portnum != 0x3d5) {
-    printf("%04xh ->\n", portnum);
-  }
-
   const port_read_b_t cb = port_read_callback[portnum];
   if (cb) {
     return cb(portnum);
   }
 
-  // notify of unhandled port access
-  if (_notify_unknown_ports && !_port_ignore[portnum]) {
-    log_printf(LOG_CHAN_PORT, "byte read from unknown port %03xh", portnum);
-    _port_ignore[portnum] = true;
-  }
+  // TODO Ports:
+  switch (portnum) {
+  case 0x64:      // keyboard status port
+    return 0xff;  // msdos wants there to be a keyboard controller
 
-  // send back dummy value
-  return 0xff;
+  default:
+    // notify of unhandled port access
+    if (_notify_unknown_ports && !_port_ignore[portnum]) {
+      log_printf(LOG_CHAN_PORT, "byte read from unknown port %03xh", portnum);
+      _port_ignore[portnum] = true;
+    }
+    return 0x0;
+  }
 }
 
 // 16bit port write

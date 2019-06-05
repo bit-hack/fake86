@@ -151,3 +151,14 @@ uint32_t mem_loadbios(const char *filename) {
 
   return readsize;
 }
+
+void mem_dump(const char *path) {
+  FILE *fd = fopen(path, "wb");
+  if (!fd) {
+    log_printf(LOG_CHAN_MEM, "error opening dump file");
+    return;
+  }
+  fwrite(RAM, 1, sizeof(RAM), fd);
+  fclose(fd);
+  log_printf(LOG_CHAN_MEM, "memory dump written to '%s'", path);
+}

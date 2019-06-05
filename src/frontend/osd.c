@@ -24,6 +24,11 @@
 static uint32_t _last_disk_tick;
 static bool _is_active;
 
+// text screen buffer
+static char *_buffer[80 * 40];
+
+static uint32_t _head;
+
 
 void osd_disk_fdd_used(void) {
   _last_disk_tick = SDL_GetTicks();
@@ -45,7 +50,15 @@ void osd_open(void) {
 }
 
 void osd_close(void) {
+  _is_active = false;
 }
 
 void osd_on_event(const SDL_Event *t) {
+  assert(t);
+  if (t->type == SDL_KEYUP) {
+    // TODO
+    if (t->key.keysym.sym == SDLK_RETURN) {
+      osd_close();
+    }
+  }
 }

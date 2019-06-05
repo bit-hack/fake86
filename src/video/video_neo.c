@@ -78,6 +78,12 @@ static uint8_t _vga_ram[0x40000];
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
+bool is_non_blanking(void) {
+  return no_blanking;
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 // rotate right
 static inline uint8_t _ror8(uint8_t in, uint8_t rot) {
   rot &= 7;
@@ -541,6 +547,22 @@ static void cga_port_write(uint16_t portnum, uint8_t value) {
     switch (portnum) {
     case 0x3d8:
       cga_control = value;
+
+      // https://www.seasip.info/VintagePC/cga.html
+
+      if (value & 0x01) {
+        // high res mode
+      }
+
+      if (value & 0x02) {
+        // setting graphics mode
+      }
+
+      if (value & 0x10) {
+        // high res mode
+        // selects 2-colour graphics (640 pixels wide) rather than 4-colour (320 pixel wide)
+      }
+
       break;
     case 0x3d9:
       cga_palette = value;

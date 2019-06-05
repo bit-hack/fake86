@@ -49,3 +49,6 @@ extern const uint32_t palette_cga_2_rgb[];
 extern const uint32_t palette_cga_3_rgb[];
 extern const uint32_t palette_cga_4_rgb[];
 extern const uint32_t palette_vga_16_rgb[];
+
+// video mode is &0x80, non blanking
+bool is_non_blanking(void);

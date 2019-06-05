@@ -66,26 +66,6 @@ const uint32_t palette_cga_3_rgb[16] = {
   0xffffff
 };
 
-// TODO: flip this to native ARGB format, (currently in BGA format)
-uint32_t palettecga[] = {
-  0x00000000,
-  0x00aa0000,
-  0x0000aa00,
-  0x00aaaa00,
-  0x000000aa,
-  0x00aa00aa,
-  0x000055aa,
-  0x00aaaaaa,
-  0x00555555,
-  0x00ff5555,
-  0x0055ff55,
-  0x00ffff55,
-  0x005555ff,
-  0x00ff55ff,
-  0x0055ffff,
-  0x00ffffff
-};
-
 const uint32_t palette_vga_16_rgb[] = {
   0x000000,
   0x0000a9,

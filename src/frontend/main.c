@@ -24,24 +24,11 @@
 #include <math.h>
 
 #include "../common/common.h"
+#include "frontend.h"
 #include "../cpu/cpu.h"
 
 
-bool render_init(void);
-void tick_events(void);
-void handlevideo();
-
-bool neo_render_init();
-void neo_render_tick();
-
 const char *biosfile = "pcxtbios.bin";
-
-extern bool cl_parse(int argc, char *argv[]);
-extern void initVideoPorts();
-extern void initsermouse(uint16_t baseport, uint8_t irq);
-
-void render_update(void);
-void render_check_for_mode_change(void);
 
 static void exit_handler(void) {
   log_close();
@@ -52,7 +39,7 @@ static int64_t tick_cpu(int64_t num_cycles) {
 }
 
 static void tick_render() {
-  neo_render_tick();
+  win_render();
 }
 
 static uint64_t get_ticks() {
@@ -188,7 +175,7 @@ static bool emulate_init() {
   // initalize vga refresh timing
   vga_timing_init();
   // initalize new video renderer
-  if (!neo_render_init()) {
+  if (!win_init()) {
     return false;
   }
   if (!neo_init()) {

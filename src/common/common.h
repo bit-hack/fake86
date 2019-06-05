@@ -116,6 +116,7 @@ void mem_init(void);
 uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag);
 uint32_t mem_loadrom(uint32_t addr32, const char *filename, uint8_t failure_fatal);
 uint32_t mem_loadbios(const char *filename);
+void mem_dump(const char *path);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8237.c
 struct dmachan_s {

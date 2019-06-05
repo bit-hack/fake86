@@ -64,8 +64,12 @@ static void on_key_down(const SDL_Event *event) {
 
   // alt + enter to toggle full screen
   if (keys[SDLK_LALT] && keys[SDLK_RETURN]) {
-    neo_render_fs_toggle();
+    win_fs_toggle();
     return;
+  }
+
+  if (keys[SDLK_F11]) {
+    mem_dump("mem_dump.bin");
   }
 
   if (keys[SDLK_F12]) {
@@ -115,8 +119,12 @@ static void on_mouse_button_up(const SDL_Event *event) {
 static void on_mouse_motion(const SDL_Event *event) {
   if (SDL_WM_GrabInput(SDL_GRAB_QUERY) == SDL_GRAB_OFF)
     return;
-  const int midx = _surface->w / 2;
-  const int midy = _surface->h / 2;
+
+  uint32_t midx, midy;
+  win_size(&midx, &midy);
+  midx /= 2;
+  midy /= 2;
+
   int mx = 0, my = 0;
   const uint8_t buttons = SDL_GetMouseState(&mx, &my);
   const int dx = mx - midx;
@@ -139,7 +147,7 @@ static void on_active_event(const SDL_Event *event) {
   }
 }
 
-void tick_events() {
+void tick_events(void) {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     switch (event.type) {
