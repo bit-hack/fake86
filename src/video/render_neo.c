@@ -24,7 +24,7 @@
 
 #include "../common/common.h"
 #include "../video/video.h"
-#include "frontend.h"
+#include "../frontend/frontend.h"
 
 
 // offscreen render target
