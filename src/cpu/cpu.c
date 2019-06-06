@@ -653,6 +653,7 @@ void cpu_reset() {
   cpu_regs.cs = 0xFFFF;
   cpu_regs.ip = 0x0000;
   in_hlt_state = false;
+  _delay_cycles = 0;
 }
 
 static uint16_t readrm16(uint8_t rmval) {

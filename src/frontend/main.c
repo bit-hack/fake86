@@ -197,10 +197,11 @@ static bool load_roms(void) {
     if (!mem_loadrom(0xF6000UL, rom_basic, 0)) {
       log_printf(LOG_CHAN_MEM, "unable to load '%s'", rom_basic);
     }
-    const char *rom_video = false ? "ibm_vga.bin" : "videorom.bin";
-    if (!mem_loadrom(0xC0000UL, rom_video, 1)) {
-      log_printf(LOG_CHAN_MEM, "unable to load '%s'", rom_video);
-    }
+  }
+  // load the video bios
+  const char *rom_video = false ? "ibm_vga.bin" : "videorom.bin";
+  if (!mem_loadrom(0xC0000UL, rom_video, 1)) {
+    log_printf(LOG_CHAN_MEM, "unable to load '%s'", rom_video);
   }
   return true;
 }

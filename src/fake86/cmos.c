@@ -28,7 +28,7 @@ static uint8_t _cmos_addr;
 static uint8_t _cmos_ram[128];
 
 
-static uint8_t _cmos_rtc_read(port) {
+static uint8_t _cmos_rtc_read(uint16_t port) {
   switch (port) {
   case 0x00: // seconds
   case 0x01: // second alarm

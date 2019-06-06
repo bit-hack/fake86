@@ -48,6 +48,9 @@ void osd_close(void);
 void osd_on_event(const SDL_Event *t);
 void osd_render(const struct render_target_t *);
 
+void osd_vprintf(const char *fmt, va_list list);
+void osd_printf(const char *fmt, ...);
+
 // assets.c
 extern const uint8_t asset_disk_pic[256];
 
@@ -62,3 +65,4 @@ void tick_events(void);
 
 // parsecl.c
 bool cl_parse(const int argc, const char **args);
+

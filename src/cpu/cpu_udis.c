@@ -208,7 +208,7 @@ static enum ir_reg_t _map_reg(enum ud_type reg) {
   };
 }
 
-static _inst_push(uint8_t type, uint8_t op0, uint8_t op1, uint8_t op2) {
+static void _inst_push(uint8_t type, uint8_t op0, uint8_t op1, uint8_t op2) {
   _ir_buf[_ir_head].type = type;
   _ir_buf[_ir_head].opr[0] = op0;
   _ir_buf[_ir_head].opr[1] = op1;
@@ -216,7 +216,7 @@ static _inst_push(uint8_t type, uint8_t op0, uint8_t op1, uint8_t op2) {
   ++_ir_head;
 }
 
-static _inst_push_16(uint8_t type, uint8_t op0, uint16_t op1_2) {
+static void _inst_push_16(uint8_t type, uint8_t op0, uint16_t op1_2) {
   _ir_buf[_ir_head].type = type;
   _ir_buf[_ir_head].opr[0] = op0;
   _ir_buf[_ir_head].opr[1] = (op1_2 >> 8) & 0xff;

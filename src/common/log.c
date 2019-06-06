@@ -21,6 +21,7 @@
 #include <stdarg.h>
 
 #include "../common/common.h"
+#include "../frontend/frontend.h"
 
 
 static FILE *log_fd = NULL;
@@ -58,6 +59,12 @@ void log_close() {
 void log_printf(int channel, const char *fmt, ...) {
   if (!log_fd) {
     log_init();
+  }
+  {
+    va_list vargs;
+    va_start(vargs, fmt);
+    osd_vprintf(fmt, vargs);
+    va_end(vargs);
   }
   if (log_fd) {
     va_list vargs;

@@ -22,9 +22,6 @@
 #include "../video/video.h"
 
 
-// TODO: just render the cmd buffer under the ring buffer it will be simpler
-
-
 static uint32_t _last_disk_tick;
 static bool _is_active;
 
@@ -35,10 +32,13 @@ static bool _is_active;
 static char _buffer[WIDTH * HEIGHT];
 static uint32_t _head;
 
-void _new_line(void) {
+static char *_get_line(uint32_t index) {
+  const uint32_t y = (index + _head) % HEIGHT;
+  return _buffer + y * WIDTH;
+}
+
+static void _new_line(void) {
   ++_head;
-  const uint32_t y = (_head - 2) % HEIGHT;
-  memset(_buffer + y * WIDTH, 0, WIDTH);
 }
 
 void osd_disk_fdd_used(void) {
@@ -61,13 +61,6 @@ void osd_open(void) {
   _is_active = true;
 
   char *src = _buffer;
-#if 0
-  for (int y = 0; y < HEIGHT; ++y) {
-    for (int x = 0; x < WIDTH; ++x) {
-      *(src++) = rand() & 0xff;
-    }
-  }
-#endif
 }
 
 void osd_close(void) {
@@ -77,8 +70,81 @@ void osd_close(void) {
 uint8_t _cmd_buf[WIDTH];
 uint32_t _cmd_head;
 
+static int _parse(const char *line, const char *out[32]) {
+  memset(out, 0, sizeof(char*) * 32);
+  int head = 0;
+  char prev = ' ';
+  for (int i=0; i<WIDTH && head < 32; ++i) {
+    if (prev == ' ' && line[i] != ' ') {
+      out[head] = line + i;
+      ++head;
+    }
+  }
+  return head;
+}
+
+static bool _pstrcmp(const char *input, const char *word) {
+  for (;*input; ++input, ++word) {
+    if (*word == '\0')
+      return true;
+    if (*input != *word)
+      return false;
+  }
+}
+
+// root level command handler
+static void _on_cmd(int level, int num, const char *tokens[32]) {
+  if (num <= level) {
+    return;
+  }
+  const char *t0 = tokens[0];
+  switch (*t0) {
+  case 'c':
+    if (_pstrcmp(t0, "cpu")) {
+      osd_printf("_on_cmd_cpu()");
+    }
+    break;
+  case 'd':
+    if (_pstrcmp(t0, "disk")) {
+      osd_printf("_on_cmd_disk()");
+    }
+    break;
+  case 'e':
+    if (_pstrcmp(t0, "exit")) {
+      osd_printf("_on_cmd_exit()");
+    }
+    break;
+  case 'm':
+    if (_pstrcmp(t0, "memory")) {
+      osd_printf("_on_cmd_memory()");
+    }
+    break;
+  case 's':
+    if (_pstrcmp(t0, "state")) {
+      osd_printf("_on_cmd_state()");
+    }
+    break;
+  default:
+    osd_printf("unexpected token '%s'", t0);
+    break;
+  }
+}
+
 static void _exec(void) {
+
+  // put the executed line in the output
+  memcpy(_get_line(0), _cmd_buf, WIDTH);
   _new_line();
+
+  // parse executed line into tokens
+  const char *tokens[32];
+  const int num = _parse(_cmd_buf, tokens);
+
+  _on_cmd(0, num, tokens);
+
+  // last act clear the command buffer (NOT BEFORE)
+  memset(_cmd_buf, 0, WIDTH);
+  _cmd_head = 0;
 }
 
 static void _buf_on_char(const uint8_t ch) {
@@ -93,11 +159,44 @@ static void _buf_on_del() {
   }
 }
 
+static uint32_t _get_ascii(const SDL_Event *t) {
+  uint32_t ch = t->key.keysym.sym;
+  // very crude caps
+  if (SDL_GetKeyState(NULL)[SDLK_LSHIFT]) {
+    if (ch >= 0x60 && ch <= 0x7f) {
+      return ch - 0x20;
+    }
+    switch (ch) {
+    case '1':  return '!';
+    case '2':  return '\"';
+    case '3':  return 35;
+    case '4':  return '$';
+    case '5':  return '%';
+    case '6':  return '^';
+    case '7':  return '&';
+    case '8':  return '*';
+    case '9':  return '(';
+    case '0':  return ')';
+    case '[':  return '{';
+    case ']':  return '}';
+    case '\'': return '@';
+    case '#':  return '~';
+    case '/':  return '?';
+    case '.':  return '>';
+    case ',':  return '<';
+    case '\\': return '|';
+    case '`':  return '~';
+    }
+  }
+  return ch;
+}
+
 void osd_on_event(const SDL_Event *t) {
   assert(t);
   if (t->type == SDL_KEYDOWN) {
 
-    const uint8_t ch = t->key.keysym.sym;
+    const uint32_t ch = _get_ascii(t);
+
     if (ch <= 0x7f && ch >= 0x20) {
       // printable ascii
       _buf_on_char(ch);
@@ -136,7 +235,6 @@ void osd_render(const struct render_target_t *target) {
       dstx += 8;
     }
     dst += target->pitch * 16;
-    ch += WIDTH;
   }
 #if 1
   // render the cmd buffer
@@ -144,4 +242,18 @@ void osd_render(const struct render_target_t *target) {
     font_draw_glyph_8x16_gliss(dst + x*8, target->pitch, _cmd_buf[x], ~0);
   }
 #endif
+}
+
+void osd_vprintf(const char *fmt, va_list list) {
+  char *line = _get_line(_head);
+  memset(line, 0, WIDTH);
+  vsnprintf(line, WIDTH, fmt, list);
+  ++_head;
+}
+
+void osd_printf(const char *fmt, ...) {
+  va_list list;
+  va_start(list, fmt);
+  osd_vprintf(fmt, list);
+  va_end(list);
 }
