@@ -313,6 +313,10 @@ bool disk_insert(uint8_t drivenum, const char *filename) {
 
 void disk_eject(uint8_t drivenum) {
   struct struct_drive *d = &disk[drivenum];
+  if (!d->inserted) {
+    return;
+  }
+  log_printf(LOG_CHAN_DISK, "ejecting disk %02xh", drivenum);
   switch (d->type) {
   case disk_type_none:
     // disk is already closed nothing to do here

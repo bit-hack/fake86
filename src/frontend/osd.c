@@ -19,6 +19,7 @@
 */
 
 #include "frontend.h"
+#include "../cpu/cpu.h"
 #include "../video/video.h"
 
 
@@ -71,7 +72,6 @@ uint8_t _cmd_buf[WIDTH];
 uint32_t _cmd_head;
 
 static int _parse(const char *line, const char *out[32]) {
-  memset(out, 0, sizeof(char*) * 32);
   int head = 0;
   char prev = ' ';
   for (int i=0; i<WIDTH && head < 32; ++i) {
@@ -79,53 +79,222 @@ static int _parse(const char *line, const char *out[32]) {
       out[head] = line + i;
       ++head;
     }
+    prev = line[i];
   }
   return head;
 }
 
 static bool _pstrcmp(const char *input, const char *word) {
-  for (;*input; ++input, ++word) {
+  for (;; ++input, ++word) {
     if (*word == '\0')
       return true;
     if (*input != *word)
       return false;
   }
+  UNREACHABLE();
 }
 
-// root level command handler
-static void _on_cmd(int level, int num, const char *tokens[32]) {
-  if (num <= level) {
+static void _on_cmd_exit(int num, const char **tokens) {
+  osd_printf("cpu being stopped");
+  cpu_running = false;
+}
+
+static bool _drive_num(const char *token, uint8_t *out) {
+  if (_pstrcmp(token, "fd")) {
+    *out = atoi(token + 2);
+    return true;
+  }
+  if (_pstrcmp(token, "hd")) {
+    *out = atoi(token + 2) + 0x80;
+    return true;
+  }
+  osd_printf("'%s' is not a valid drive specifier", token);
+  return false;
+}
+
+static void _on_cmd_disk_eject(int num, const char **tokens) {
+  if (num <= 0) {
+    osd_printf("usage: disk eject [fd0,hd0...]");
     return;
   }
-  const char *t0 = tokens[0];
-  switch (*t0) {
-  case 'c':
-    if (_pstrcmp(t0, "cpu")) {
-      osd_printf("_on_cmd_cpu()");
-    }
-    break;
-  case 'd':
-    if (_pstrcmp(t0, "disk")) {
-      osd_printf("_on_cmd_disk()");
-    }
-    break;
+  uint8_t drive = 0;
+  if (_drive_num(tokens[0], &drive)) {
+    disk_eject(drive);
+  }
+}
+
+static void _on_cmd_disk_insert(int num, const char **tokens) {
+  if (num <= 1) {
+    osd_printf("usage: disk insert [fd0,hd0...] [path]");
+    return;
+  }
+  const char *path  = tokens[1];
+  uint8_t drive = 0;
+  if (_drive_num(tokens[0], &drive)) {
+    disk_insert(drive, path);
+  }
+}
+
+static void _on_cmd_disk_info(int num, const char **tokens) {
+  // show which disks are inserted, etc
+}
+
+static void _on_cmd_disk(int num, const char **tokens) {
+  if (num <= 0) {
+    return;
+  }
+  const char *tok = *tokens;
+  switch (*tok) {
   case 'e':
-    if (_pstrcmp(t0, "exit")) {
-      osd_printf("_on_cmd_exit()");
+    if (_pstrcmp(tok, "eject")) {
+      _on_cmd_disk_eject(num - 1, tokens + 1);
     }
     break;
-  case 'm':
-    if (_pstrcmp(t0, "memory")) {
-      osd_printf("_on_cmd_memory()");
+  case 'i':
+    if (_pstrcmp(tok, "insert")) {
+      _on_cmd_disk_insert(num - 1, tokens + 1);
+    }
+    if (_pstrcmp(tok, "info")) {
+      _on_cmd_disk_info(num - 1, tokens + 1);
+    }
+    break;
+  default:
+    osd_printf("unexpected input '%s'", tok);
+    break;
+  }}
+
+static void _on_cmd_cpu(int num, const char **tokens) {
+  if (num <= 0) {
+    return;
+  }
+  const char *tok = *tokens;
+  switch (*tok) {
+  case 'r':
+    if (_pstrcmp(tok, "reset")) {
+      cpu_reset();
+    }
+    if (_pstrcmp(tok, "run")) {
+      // start execution
+    }
+    break;
+  case 'h':
+    if (_pstrcmp(tok, "halt")) {
+      // stop execution
     }
     break;
   case 's':
-    if (_pstrcmp(t0, "state")) {
+    if (_pstrcmp(tok, "state")) {
+      // display registers
+    }
+    if (_pstrcmp(tok, "step")) {
+      // single step
+    }
+    break;
+  default:
+    osd_printf("unexpected input '%s'", tok);
+    break;
+  }
+}
+
+static void _on_cmd_inst(int num, const char **tokens) {
+  if (num <= 0) {
+    return;
+  }
+  const char *tok = *tokens;
+  switch (*tok) {
+  case 'd':
+    if (_pstrcmp(tok, "dis")) {
+      // disassemble
+    }
+    break;
+  default:
+    osd_printf("unexpected input '%s'", tok);
+    break;
+  }
+}
+
+static void _on_cmd_memory(int num, const char **tokens) {
+  if (num <= 0) {
+    return;
+  }
+  const char *tok = *tokens;
+  switch (*tok) {
+  case 'd':
+    if (_pstrcmp(tok, "dump")) {
+      osd_printf("doing memory dump");
+    }
+    break;
+  case 'r':
+    if (_pstrcmp(tok, "read")) {
+      osd_printf("doing memory read");
+    }
+    break;
+  default:
+    osd_printf("unexpected input '%s'", tok);
+    break;
+  }
+}
+
+static void _on_cmd_state(int num, const char **tokens) {
+  if (num <= 0) {
+    return;
+  }
+  const char *tok = *tokens;
+  switch (*tok) {
+  case 'l':
+    if (_pstrcmp(tok, "load")) {
+      osd_printf("doing state load");
+    }
+    break;
+  case 's':
+    if (_pstrcmp(tok, "save")) {
+      osd_printf("doing state save");
+    }
+    break;
+  default:
+    osd_printf("unexpected input '%s'", tok);
+    break;
+  }
+}
+
+// root level command handler
+static void _on_cmd(int num, const char **tokens) {
+  if (num <= 0) {
+    return;
+  }
+  const char *tok = *tokens;
+  switch (*tok) {
+  case 'c':
+    if (_pstrcmp(tok, "cpu")) {
+      _on_cmd_cpu(num-1, tokens+1);
+    }
+    break;
+  case 'd':
+    if (_pstrcmp(tok, "disk")) {
+      _on_cmd_disk(num-1, tokens+1);
+    }
+  case 'e':
+    if (_pstrcmp(tok, "exit")) {
+      _on_cmd_exit(num-1, tokens+1);
+    }
+    break;
+  case 'i':
+    if (_pstrcmp(tok, "inst")) {
+      _on_cmd_inst(num-1, tokens+1);
+    }
+    break;
+  case 'm':
+    if (_pstrcmp(tok, "memory")) {
+      _on_cmd_memory(num-1, tokens+1);
+    }
+    break;
+  case 's':
+    if (_pstrcmp(tok, "state")) {
       osd_printf("_on_cmd_state()");
     }
     break;
   default:
-    osd_printf("unexpected token '%s'", t0);
+    osd_printf("unexpected input '%s'", tok);
     break;
   }
 }
@@ -137,10 +306,11 @@ static void _exec(void) {
   _new_line();
 
   // parse executed line into tokens
-  const char *tokens[32];
+  char *tokens[32];
+  memset(tokens, 0, sizeof(char*) * 32);
   const int num = _parse(_cmd_buf, tokens);
 
-  _on_cmd(0, num, tokens);
+  _on_cmd(num, tokens);
 
   // last act clear the command buffer (NOT BEFORE)
   memset(_cmd_buf, 0, WIDTH);
@@ -228,8 +398,7 @@ void osd_render(const struct render_target_t *target) {
 
   for (int y = 0; y < HEIGHT; ++y) {
     uint32_t *dstx = dst;
-    const uint32_t index = ((y + _head) % HEIGHT) * WIDTH;
-    const uint8_t *ch = _buffer + index;
+    const uint8_t *ch = (const uint8_t*)_get_line(y);
     for (int x = 0; x < WIDTH; ++x) {
       font_draw_glyph_8x16_gliss(dstx, target->pitch, ch[x], ~0);
       dstx += 8;
@@ -245,7 +414,7 @@ void osd_render(const struct render_target_t *target) {
 }
 
 void osd_vprintf(const char *fmt, va_list list) {
-  char *line = _get_line(_head);
+  char *line = _get_line(0);
   memset(line, 0, WIDTH);
   vsnprintf(line, WIDTH, fmt, list);
   ++_head;
