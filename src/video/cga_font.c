@@ -585,3 +585,22 @@ void font_draw_glyph_8x16(
     dst += pitch;
   }
 }
+
+void font_draw_glyph_8x16_gliss(
+  uint32_t *dst, const uint32_t pitch, uint16_t ch, uint32_t rgb)
+{
+  const uint8_t *src = &cga_font_8x8[(ch & 0x1ff) * 8];
+
+  rgb = (rgb >> 1) & 0x7f7f7f;
+
+  for (int y=0; y<16; ++y) {
+    uint8_t mask = *src;
+    for (int x=0; x<8; ++x) {
+      const uint32_t clr = (mask & 0x80) ? rgb : 0;
+      dst[x] = ((dst[x] >> 2) & 0x3f3f3f) + clr;
+      mask <<= 1;
+    }
+    src += (y & 1);
+    dst += pitch;
+  }
+}

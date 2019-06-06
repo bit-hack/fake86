@@ -33,8 +33,11 @@ enum ir_type_t {
   // reg[ op0 ] = reg[ op1 ]
   opc_mov,
 
+  // reg[ op0 ] = op1
+  opc_mov_imm8,
+
   // reg[ op0 ] = (op1 << 8) | op2
-  opc_mov_imm,
+  opc_mov_imm16,
 
   // reg[ op0 ] = memory[ (reg[op1] << 4) + reg[op2] ]
   opc_load_b,
@@ -59,7 +62,7 @@ enum ir_type_t {
   opc_push_w,
 
   // reg[ op0 ] += (op1 << 8) | op2
-  opc_add_imm,
+  opc_add_imm16,
 };
 
 enum ir_reg_t {
@@ -95,19 +98,90 @@ struct ir_inst_t {
 static struct ir_inst_t _ir_buf[1028];
 static uint32_t _ir_head;
 
+static void _set_reg(const uint8_t reg, uint32_t value) {
+  switch (reg) {
+  case reg_al: cpu_regs.al = value; return;
+  case reg_cl: cpu_regs.cl = value; return;
+  case reg_dl: cpu_regs.dl = value; return;
+  case reg_bl: cpu_regs.bl = value; return;
+  case reg_ah: cpu_regs.ah = value; return;
+  case reg_ch: cpu_regs.ch = value; return;
+  case reg_dh: cpu_regs.dh = value; return;
+  case reg_bh: cpu_regs.bh = value; return;
+  case reg_ax: cpu_regs.ax = value; return;
+  case reg_cx: cpu_regs.cx = value; return;
+  case reg_dx: cpu_regs.dx = value; return;
+  case reg_bx: cpu_regs.bx = value; return;
+  case reg_sp: cpu_regs.sp = value; return;
+  case reg_bp: cpu_regs.bp = value; return;
+  case reg_si: cpu_regs.si = value; return;
+  case reg_di: cpu_regs.di = value; return;
+  case reg_es: cpu_regs.es = value; return;
+  case reg_cs: cpu_regs.cs = value; return;
+  case reg_ss: cpu_regs.ss = value; return;
+  case reg_ds: cpu_regs.ds = value; return;
+  case reg_ip: cpu_regs.ip = value; return;
+  default:
+    UNREACHABLE();
+  };
+}
+
+static uint32_t _get_reg(const uint8_t reg) {
+  switch (reg) {
+  case reg_al: return cpu_regs.al;
+  case reg_cl: return cpu_regs.cl;
+  case reg_dl: return cpu_regs.dl;
+  case reg_bl: return cpu_regs.bl;
+  case reg_ah: return cpu_regs.ah;
+  case reg_ch: return cpu_regs.ch;
+  case reg_dh: return cpu_regs.dh;
+  case reg_bh: return cpu_regs.bh;
+  case reg_ax: return cpu_regs.ax;
+  case reg_cx: return cpu_regs.cx;
+  case reg_dx: return cpu_regs.dx;
+  case reg_bx: return cpu_regs.bx;
+  case reg_sp: return cpu_regs.sp;
+  case reg_bp: return cpu_regs.bp;
+  case reg_si: return cpu_regs.si;
+  case reg_di: return cpu_regs.di;
+  case reg_es: return cpu_regs.es;
+  case reg_cs: return cpu_regs.cs;
+  case reg_ss: return cpu_regs.ss;
+  case reg_ds: return cpu_regs.ds;
+  case reg_ip: return cpu_regs.ip;
+  default:
+    UNREACHABLE();
+  };
+}
 
 static void _exec_ir(void) {
   for (int i=0; ;++i) {
-    switch (_ir_buf[i].type) {
+    const struct ir_inst_t *c = _ir_buf + i;
+    switch (c->type) {
     case opc_finish:
       return;
     case opc_nop:
       continue;
+    case opc_mov_imm8:
+      _set_reg(c->opr[0], c->opr[1]);
+      break;
+    case opc_mov_imm16:
+    {
+      const uint16_t imm16 = (c->opr[1] << 8) | c->opr[2];
+      _set_reg(c->opr[0], imm16);
+    }
+      break;
+    case opc_add_imm16:
+    {
+      const uint16_t imm16 = (c->opr[1] << 8) | c->opr[2];
+      _set_reg(c->opr[0], _get_reg(c->opr[0]) + imm16);
+    }
+      break;
     }
   }
 }
 
-static enum ir_reg_t map_reg(enum ud_type reg) {
+static enum ir_reg_t _map_reg(enum ud_type reg) {
   switch (reg) {
   case UD_R_AL: return reg_al;
   case UD_R_CL: return reg_cl;
@@ -142,31 +216,43 @@ static _inst_push(uint8_t type, uint8_t op0, uint8_t op1, uint8_t op2) {
   ++_ir_head;
 }
 
+static _inst_push_16(uint8_t type, uint8_t op0, uint16_t op1_2) {
+  _ir_buf[_ir_head].type = type;
+  _ir_buf[_ir_head].opr[0] = op0;
+  _ir_buf[_ir_head].opr[1] = (op1_2 >> 8) & 0xff;
+  _ir_buf[_ir_head].opr[2] = (op1_2 >> 0) & 0xff;
+  ++_ir_head;
+}
+
 static bool _on_inst_mov(const ud_t *ud) {
   // https://c9x.me/x86/html/file_module_x86_id_176.html
   switch (ud->primary_opcode) {
-  case 0x88:
-  case 0x89:
-  case 0x8A:
-  case 0x8B:
-  case 0x8C:
-  case 0x8E:
-  case 0xA0:
-  case 0xA1:
-  case 0xA2:
-  case 0xA3:
   case 0xB0:
+  case 0xB2:
+    assert(ud->operand[1].size == 8);
+    _inst_push(opc_mov_imm8,
+               _map_reg(ud->operand[0].base),
+               0,
+               ud->operand[1].lval.ubyte);
+    break;
   case 0xB8:
-  case 0xC6:
-  case 0xC7:
+  case 0xBA:
+    assert(ud->operand[1].size == 16);
+    _inst_push_16(opc_mov_imm16,
+                  _map_reg(ud->operand[0].base),
+                  ud->operand[1].lval.uword);
+    break;
+  default:
     printf("\t%s\n", ud_insn_asm(ud));
     return false;
-  default:
     UNREACHABLE();
   }
 
   // step the IP
-  _inst_push(opc_add_imm, reg_ip, 0, ud->pc);
+  const uint8_t inst_size = (uint32_t)ud->pc;
+  _inst_push(opc_add_imm16, reg_ip, 0, (uint8_t)inst_size);
+  // end of code buffer
+  _inst_push(opc_finish, 0, 0, 0);
   return true;
 }
 

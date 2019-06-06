@@ -70,11 +70,13 @@ static void on_key_down(const SDL_Event *event) {
 
   if (keys[SDLK_F11]) {
     mem_dump("mem_dump.bin");
+    return;
   }
 
   if (keys[SDLK_F12]) {
     if (!osd_is_active()) {
       osd_open();
+      return;
     }
   }
 

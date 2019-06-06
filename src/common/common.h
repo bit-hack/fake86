@@ -222,3 +222,7 @@ void vga_timing_advance(const uint64_t cycles);
 uint8_t vga_timing_get_3da(void);
 bool vga_timing_should_flip(void);
 void vga_timing_did_flip(void);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- cmos.c
+void cmos_init(void);
+bool cmos_nmi_enabled(void);

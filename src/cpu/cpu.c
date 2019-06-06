@@ -38,7 +38,7 @@ static uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
 static uint8_t oper1b, oper2b, res8, addrbyte;
 static uint32_t temp1, temp2, temp3, temp32, ea;
 
-static bool _use_udis_emu = true;
+static bool _use_udis_emu = false;
 
 bool cpu_running;
 static uint64_t _cycles;

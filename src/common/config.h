@@ -79,6 +79,7 @@
 // do adlib emulation
 #define USE_AUDIO_ADLIB   1
 #define USE_AUDIO_SPEAKER 1
+#define USE_AUDIO_FLOPPY  0
 
 // emulate disk delay
 #define USE_DISK_DELAY    1

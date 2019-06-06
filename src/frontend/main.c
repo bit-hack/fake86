@@ -171,6 +171,7 @@ static bool emulate_init() {
   i8259_init();
   i8237_init();
   i8255_init();
+  cmos_init();
   mouse_init(0x3F8, 4);
   // initalize vga refresh timing
   vga_timing_init();

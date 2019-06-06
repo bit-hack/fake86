@@ -108,6 +108,9 @@ static bool _pop_event(struct audio_event_t *out) {
 }
 
 static bool _push_event(const struct audio_event_t *event) {
+  if (!audio_enable) {
+    return true;
+  }
   assert(_audio_mux && event);
   SDL_mutexP(_audio_mux);
   // if ring is full
@@ -202,6 +205,10 @@ static uint32_t _at_spk_accum;
 
 static uint32_t _at_adjust = 1000;
 
+uint16_t _at_fd_accum;
+uint32_t _at_fd_enable;
+const uint32_t _at_fd_delta = (0xffff * 475) / 22100;
+
 uint32_t cycles_to_samples(uint32_t cycles) {
   const uint32_t todo = (cycles * _sample_rate) / CYCLES_PER_SECOND;
   return (todo * _at_adjust) / 1000;
@@ -223,6 +230,9 @@ static void _next_event(void) {
     break;
   case event_adlib:
     OPL3_WriteRegBuffered(&_adlib_chip, event.adlib.reg, event.adlib.data);
+    break;
+  case event_floppy:
+    _at_fd_enable = (_sample_rate * 5) / 1000;
     break;
   }
 }
@@ -308,6 +318,20 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
   }
 #endif
 
+#if USE_AUDIO_FLOPPY
+  for (int32_t i = 0; i < to_do; i += 2) {
+    _at_fd_enable -= (_at_fd_enable > 0);
+    if (_at_fd_enable == 0) {
+      break;
+    }
+    _at_fd_accum += _at_fd_delta;
+    const int16_t out = (_at_fd_accum & 0x8000) ? -0x0800 : 0x800;
+    // fill left and right
+    samples[i + 0] += out;
+    samples[i + 1] += out;
+  }
+#endif
+
   return to_do;
 }
 
@@ -361,5 +385,12 @@ void audio_tick(const uint64_t cycles) {
 }
 
 void audio_disk_seek(const uint32_t sects) {
-  // TODO: push event for stepper noise
+  struct audio_event_t event;
+  const uint64_t new_update = cpu_slice_ticks();
+  event.cycle_delta = (uint32_t)(new_update - _last_update);
+  _last_update = new_update;
+  event.type = event_floppy;
+  if (!_push_event(&event)) {
+    log_printf(LOG_CHAN_AUDIO, "dropped audio event");
+  }
 }

@@ -44,6 +44,9 @@ void font_draw_glyph_8x16(
   uint32_t *dst, const uint32_t pitch, uint16_t ch,
   const uint32_t rgb_a, const uint32_t rgb_b);
 
+void font_draw_glyph_8x16_gliss(
+  uint32_t *dst, const uint32_t pitch, uint16_t ch, uint32_t rgb);
+
 // palette.c
 extern const uint32_t palette_cga_2_rgb[];
 extern const uint32_t palette_cga_3_rgb[];

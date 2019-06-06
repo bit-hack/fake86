@@ -74,6 +74,8 @@ void win_render(void) {
   };
 
   neo_render_tick(&target);
+  osd_render(&target);
+
   SDL_Flip(_surface);
 }
 
