@@ -690,14 +690,23 @@ void disk_bootstrap(int intnum) {
     }
   }
 
+  bool load_basic = false;
+
   if (bootdrive < 255) {
-    // read first sector of boot drive into 07C0:0000 and execute it
-    log_printf(LOG_CHAN_DISK, "booting from disk %d", bootdrive);
-    cpu_regs.dl = bootdrive;
-    _disk_read(cpu_regs.dl, 0x07C0, 0x0000, 0, 1, 0, 1);
-    cpu_regs.cs = 0x0000;
-    cpu_regs.ip = 0x7C00;
-  } else {
+    if (disk_is_inserted(bootdrive)) {
+      // read first sector of boot drive into 07C0:0000 and execute it
+      log_printf(LOG_CHAN_DISK, "booting from disk %d", bootdrive);
+      cpu_regs.dl = bootdrive;
+      _disk_read(cpu_regs.dl, 0x07C0, 0x0000, 0, 1, 0, 1);
+      cpu_regs.cs = 0x0000;
+      cpu_regs.ip = 0x7C00;
+    }
+    else {
+      load_basic = true;
+    }
+  }
+
+  if (load_basic) {
     // start ROM BASIC at bootstrap if requested
     log_printf(LOG_CHAN_DISK, "booting into ROM BASIC");
     cpu_regs.cs = 0xF600;

@@ -74,4 +74,11 @@ extern bool cpu_running;
 // used to simulate disk drive latency
 void cpu_delay(uint32_t cycles);
 
-bool cpu_udis_exec(const uint8_t *stream);
+// state save/load
+void cpu_state_save(FILE *fd);
+void cpu_state_load(FILE *fd);
+
+extern bool cpu_halt;
+extern bool cpu_step;
+
+bool cpu_redux_exec(void);

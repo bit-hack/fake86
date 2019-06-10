@@ -116,3 +116,11 @@ void i8259_init() {
 void i8259_tick(uint64_t cycles) {
   // dummy
 }
+
+void i8259_state_save(FILE *fd) {
+  fwrite(&i8259, 1, sizeof(i8259), fd);
+}
+
+void i8259_state_load(FILE *fd) {
+  fread(&i8259, 1, sizeof(i8259), fd);
+}

@@ -29,6 +29,9 @@ extern uint8_t bootdrive;
 extern bool do_fullscreen;
 extern uint32_t frame_skip;
 
+extern bool cpu_halt;
+extern bool cpu_step;
+
 // TODO: push back to video.h
 struct render_target_t {
   uint32_t *dst;
@@ -66,3 +69,6 @@ void tick_events(void);
 // parsecl.c
 bool cl_parse(const int argc, const char **args);
 
+//
+void state_save(const char *path);
+void state_load(const char *path);

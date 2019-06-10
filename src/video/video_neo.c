@@ -48,14 +48,6 @@ enum mode_t {
   mode_graphics,
 };
 
-struct cursor_t {
-  uint32_t x, y;
-  uint8_t size;
-};
-
-// cursor per page
-static struct cursor_t _cursor[MAX_PAGES];
-
 // current video mode
 static uint8_t _video_mode = 0x00;
 static enum system_t _system = video_mda;
@@ -511,6 +503,7 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 // ports 03D0-03DF
 
+// XXX: should these mirror registers at 3b0?
 static uint8_t cga_control = 0;
 static uint8_t cga_palette = 0;
 
@@ -536,8 +529,6 @@ static uint8_t cga_port_read(uint16_t portnum) {
   }
   return portram[portnum];
 }
-
-
 
 static void cga_port_write(uint16_t portnum, uint8_t value) {
   if (portnum >= 0x03d0 && portnum <= 0x03d7) {
@@ -890,4 +881,94 @@ void neo_mem_write_A0000(uint32_t addr, uint8_t value) {
 
 const uint8_t *vga_ram(void) {
   return _vga_ram;
+}
+
+void neo_state_save(FILE *fd) {
+  fwrite(&_video_mode, 1, sizeof(_video_mode), fd);
+  fwrite(&_system, 1, sizeof(_system), fd);
+  fwrite(&_mode, 1, sizeof(_mode), fd);
+  fwrite(&_width, 1, sizeof(_width), fd);
+  fwrite(&_height, 1, sizeof(_height), fd);
+  fwrite(&_rows, 1, sizeof(_cols), fd);
+  fwrite(&_pages, 1, sizeof(_pages), fd);
+  fwrite(&_base, 1, sizeof(_base), fd);
+  fwrite(&_active_page, 1, sizeof(_active_page), fd);
+  fwrite(&no_blanking, 1, sizeof(no_blanking), fd);
+  fwrite(_vga_ram, 1, sizeof(_vga_ram), fd);
+
+  fwrite(&crt_reg_addr, 1, sizeof(crt_reg_addr), fd);
+  fwrite(crt_register, 1, sizeof(crt_register), fd);
+
+  fwrite(&mda_control  , 1, sizeof(mda_control), fd);
+  fwrite(&mda_status   , 1, sizeof(mda_status), fd);
+  fwrite(&_3c0_flipflop, 1, sizeof(_3c0_flipflop), fd);
+
+  fwrite(&_vga_seq_addr, 1, sizeof(_vga_seq_addr), fd);
+  fwrite(_vga_seq_data, 1, sizeof(_vga_seq_data), fd);
+
+  fwrite(&_vga_reg_addr, 1, sizeof(_vga_reg_addr), fd);
+  fwrite(_vga_reg_data, 1, sizeof(_vga_reg_data), fd);
+
+  fwrite(_dac_entry, 1, sizeof(_dac_entry), fd);
+  fwrite(&_dac_state     , 1, sizeof(_dac_state), fd);
+  fwrite(&_dac_mode_write, 1, sizeof(_dac_mode_write), fd);
+  fwrite(&_dac_mode_read , 1, sizeof(_dac_mode_read), fd);
+  fwrite(&_dac_pal_read  , 1, sizeof(_dac_pal_read), fd);
+  fwrite(&_dac_pal_write , 1, sizeof(_dac_pal_write), fd);
+  fwrite(&_dac_mask_reg  , 1, sizeof(_dac_mask_reg), fd);
+
+  fwrite(_ega_dac  , 1, sizeof(_ega_dac), fd);
+  fwrite(_ega_reg  , 1, sizeof(_ega_reg), fd);
+  fwrite(&_3c0_flipflop, 1, sizeof(_3c0_flipflop), fd);
+  fwrite(&_3c0_addr    , 1, sizeof(_3c0_addr), fd);
+
+  fwrite(&cga_control, 1, sizeof(cga_control), fd);
+  fwrite(&cga_palette, 1, sizeof(cga_palette), fd);
+
+  fwrite(&_vga_latch, 1, sizeof(_vga_latch), fd);
+}
+
+void neo_state_load(FILE *fd) {
+  fread(&_video_mode, 1, sizeof(_video_mode), fd);
+  fread(&_system, 1, sizeof(_system), fd);
+  fread(&_mode, 1, sizeof(_mode), fd);
+  fread(&_width, 1, sizeof(_width), fd);
+  fread(&_height, 1, sizeof(_height), fd);
+  fread(&_rows, 1, sizeof(_cols), fd);
+  fread(&_pages, 1, sizeof(_pages), fd);
+  fread(&_base, 1, sizeof(_base), fd);
+  fread(&_active_page, 1, sizeof(_active_page), fd);
+  fread(&no_blanking, 1, sizeof(no_blanking), fd);
+  fread(_vga_ram, 1, sizeof(_vga_ram), fd);
+
+  fread(&crt_reg_addr, 1, sizeof(crt_reg_addr), fd);
+  fread(crt_register, 1, sizeof(crt_register), fd);
+
+  fread(&mda_control  , 1, sizeof(mda_control), fd);
+  fread(&mda_status   , 1, sizeof(mda_status), fd);
+  fread(&_3c0_flipflop, 1, sizeof(_3c0_flipflop), fd);
+
+  fread(&_vga_seq_addr, 1, sizeof(_vga_seq_addr), fd);
+  fread(_vga_seq_data, 1, sizeof(_vga_seq_data), fd);
+
+  fread(&_vga_reg_addr, 1, sizeof(_vga_reg_addr), fd);
+  fread(_vga_reg_data, 1, sizeof(_vga_reg_data), fd);
+
+  fread(_dac_entry, 1, sizeof(_dac_entry), fd);
+  fread(&_dac_state     , 1, sizeof(_dac_state), fd);
+  fread(&_dac_mode_write, 1, sizeof(_dac_mode_write), fd);
+  fread(&_dac_mode_read , 1, sizeof(_dac_mode_read), fd);
+  fread(&_dac_pal_read  , 1, sizeof(_dac_pal_read), fd);
+  fread(&_dac_pal_write , 1, sizeof(_dac_pal_write), fd);
+  fread(&_dac_mask_reg  , 1, sizeof(_dac_mask_reg), fd);
+
+  fread(_ega_dac  , 1, sizeof(_ega_dac), fd);
+  fread(_ega_reg  , 1, sizeof(_ega_reg), fd);
+  fread(&_3c0_flipflop, 1, sizeof(_3c0_flipflop), fd);
+  fread(&_3c0_addr    , 1, sizeof(_3c0_addr), fd);
+
+  fread(&cga_control, 1, sizeof(cga_control), fd);
+  fread(&cga_palette, 1, sizeof(cga_palette), fd);
+
+  fread(&_vga_latch, 1, sizeof(_vga_latch), fd);
 }

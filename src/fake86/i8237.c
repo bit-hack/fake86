@@ -125,3 +125,13 @@ void i8237_tick(uint64_t cycles) {
 bool i8237_init(void) {
   return true;
 }
+
+void i8237_state_save(FILE *fd) {
+  fwrite(dmachan, 1, sizeof(dmachan), fd);
+  fwrite(&flipflop, 1, sizeof(flipflop), fd);
+}
+
+void i8237_state_load(FILE *fd) {
+  fread(dmachan, 1, sizeof(dmachan), fd);
+  fread(&flipflop, 1, sizeof(flipflop), fd);
+}

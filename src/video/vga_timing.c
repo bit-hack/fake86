@@ -99,3 +99,13 @@ bool vga_timing_should_flip(void) {
 void vga_timing_did_flip(void) {
   _should_flip = false;
 }
+
+void vga_timing_state_save(FILE *fd) {
+  fwrite(&_vga_timing, 1, sizeof(_vga_timing), fd);
+  fwrite(&_should_flip, 1, sizeof(_should_flip), fd);
+}
+
+void vga_timing_state_load(FILE *fd) {
+  fread(&_vga_timing, 1, sizeof(_vga_timing), fd);
+  fread(&_should_flip, 1, sizeof(_should_flip), fd);
+}

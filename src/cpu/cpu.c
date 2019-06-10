@@ -41,6 +41,9 @@ static uint32_t temp1, temp2, temp3, temp32, ea;
 static bool _use_udis_emu = false;
 
 bool cpu_running;
+bool cpu_halt = false;
+bool cpu_step = false;
+
 static uint64_t _cycles;
 static uint32_t _delay_cycles;
 
@@ -1174,10 +1177,29 @@ static void _on_illegal_instruction(void) {
 // return executed cycles
 int32_t cpu_exec86(int32_t target) {
 
+  if (target == 0) {
+    return 0;
+  }
+
   static uint16_t trap_toggle = 0;
   _cycles = 0;
 
+  const bool in_cpu_halt = cpu_halt;
+
   while (cpu_running && _cycles < target) {
+
+    if (in_cpu_halt != cpu_halt) {
+      break;
+    }
+
+#if 0
+    const uint32_t eip = (cpu_regs.cs << 4) + cpu_regs.ip;
+    if (false && eip == 0x96b1 && !cpu_halt) {
+      cpu_halt = true;
+      log_printf(LOG_CHAN_CPU, "cpu exec breakpoint hit");
+      break;
+    }
+#endif
 
     // if trap is asserted
     if (trap_toggle) {
@@ -1210,9 +1232,8 @@ int32_t cpu_exec86(int32_t target) {
     }
 #endif
 
-    if (_use_udis_emu) {
-      // trace testing
-      if (cpu_udis_exec(RAM + ((cpu_regs.cs << 4) + cpu_regs.ip))) {
+    if (USE_CPU_REDUX) {
+      if (cpu_redux_exec()) {
         ++_cycles;
         continue;
       }
@@ -3290,4 +3311,18 @@ void cpu_prep_interupt(uint16_t intnum) {
   // clear flags
   cpu_flags.ifl = 0;
   cpu_flags.tf = 0;
+}
+
+void cpu_state_save(FILE *fd) {
+  fwrite(&cpu_regs, 1, sizeof(cpu_regs), fd);
+  fwrite(&cpu_flags, 1, sizeof(cpu_flags), fd);
+  fwrite(&in_hlt_state, 1, sizeof(in_hlt_state), fd);
+  fwrite(&_delay_cycles, 1, sizeof(_delay_cycles), fd);
+}
+
+void cpu_state_load(FILE *fd) {
+  fread(&cpu_regs, 1, sizeof(cpu_regs), fd);
+  fread(&cpu_flags, 1, sizeof(cpu_flags), fd);
+  fread(&in_hlt_state, 1, sizeof(in_hlt_state), fd);
+  fread(&_delay_cycles, 1, sizeof(_delay_cycles), fd);
 }

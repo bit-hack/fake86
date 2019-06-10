@@ -85,17 +85,28 @@ static void emulate_loop(void) {
     // avoid fastforwaring on lag
     if (new_ms - old_ms > 1000) {
       old_ms = new_ms;
-      continue;
+      if (!cpu_halt)
+        continue;
     }
     bool video_redraw = false;
+    uint64_t executed = 0;
     // update cpu
-    while (cpu_acc <= 0) {
+    while (cpu_acc <= 0 || cpu_halt) {
+
       // set ourselves some cycle targets
-      const uint64_t target =
-        SDL_max(1, SDL_min(i8253_cycles_before_irq(), CYCLES_PER_SLICE));
+      int64_t target;
+      target = cpu_halt ? 0 : CYCLES_PER_SLICE;
+      target = cpu_step ? 1 : target;
+      target = SDL_min(target, i8253_cycles_before_irq());
+      target = SDL_max(target, cpu_halt ? 0 : 1);
+
       // run for some cycles
-      const uint64_t executed = tick_cpu(target);
+      executed = tick_cpu(target);
       cpu_acc += executed;
+
+      // disable the stepping flag
+      cpu_step = executed ? false : cpu_step;
+
       // keep track of if the video needs refreshed
       if (vga_timing_should_flip()) {
         video_redraw = true;
@@ -103,16 +114,25 @@ static void emulate_loop(void) {
       }
       // tick peripherals
       tick_hardware(executed);
+
+      if (video_redraw) {
+        break;
+      }
+
+      if (cpu_halt) {
+        SDL_Delay(2);
+        break;
+      }
     }
     // refresh the screen buffer
-    if (video_redraw) {
+    if (video_redraw || cpu_halt) {
       tick_render();
     }
     // parse events from host
     tick_events();
     // advance cpu or sleep
     if ((int64_t)new_cycles >= cpu_acc) {
-      cpu_acc -= new_cycles;
+      cpu_acc -= cpu_halt ? executed : new_cycles;
       old_ms = new_ms;
     }
     else {
@@ -254,4 +274,38 @@ int main(int argc, const char *argv[]) {
 
   SDL_Quit();
   return 0;
+}
+
+void state_save(const char *path) {
+  FILE *fd = fopen(path, "wb");
+  if (!fd) {
+    log_printf(LOG_CHAN_FRONTEND, "unable to open file '%s'", path);
+    return;
+  }
+
+  mem_state_save(fd);
+  cpu_state_save(fd);
+  neo_state_save(fd);
+  i8237_state_save(fd);
+  i8253_state_save(fd);
+  i8255_state_save(fd);
+  i8259_state_save(fd);
+  port_state_save(fd);
+}
+
+void state_load(const char *path) {
+  FILE *fd = fopen(path, "rb");
+  if (!fd) {
+    log_printf(LOG_CHAN_FRONTEND, "unable to open file '%s'", path);
+    return;
+  }
+
+  mem_state_load(fd);
+  cpu_state_load(fd);
+  neo_state_load(fd);
+  i8237_state_load(fd);
+  i8253_state_load(fd);
+  i8255_state_load(fd);
+  i8259_state_load(fd);
+  port_state_load(fd);
 }

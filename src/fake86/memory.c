@@ -19,14 +19,8 @@
 */
 
 #include "../common/common.h"
+#include "../cpu/cpu.h"
 
-
-// video.c
-void writeVGA(uint32_t addr32, uint8_t value);
-uint8_t readVGA(uint32_t addr32);
-extern uint8_t vidmode;
-extern uint8_t updatedscreen;
-extern uint16_t VGA_SC[0x100];
 
 uint8_t RAM[0x100000];
 
@@ -81,6 +75,13 @@ void writew86(uint32_t addr32, uint16_t value) {
 
 uint8_t read86(uint32_t addr) {
   addr &= 0xFFFFF;
+
+#if 1
+  if (addr == 0x29f33) {
+    log_printf(LOG_CHAN_MEM, "memory read breakpoint hit");
+    cpu_halt = true;
+  }
+#endif
 
   if (addr >= 0xA0000 && addr <= 0xC0000) {
     if (addr >= 0xB0000) {
@@ -161,4 +162,12 @@ void mem_dump(const char *path) {
   fwrite(RAM, 1, sizeof(RAM), fd);
   fclose(fd);
   log_printf(LOG_CHAN_MEM, "memory dump written to '%s'", path);
+}
+
+void mem_state_save(FILE *fd) {
+  fwrite(RAM, 1, sizeof(RAM), fd);
+}
+
+void mem_state_load(FILE *fd) {
+  fread(RAM, 1, sizeof(RAM), fd);
 }

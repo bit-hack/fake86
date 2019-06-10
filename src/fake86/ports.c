@@ -146,3 +146,11 @@ void port_init(void) {
 
   _ignore_range(0x2f0, 0x2f7); // reserved
 }
+
+void port_state_save(FILE *fd) {
+  fwrite(portram, 1, sizeof(portram), fd);
+}
+
+void port_state_load(FILE *fd) {
+  fread(portram, 1, sizeof(portram), fd);
+}

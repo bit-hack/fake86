@@ -86,6 +86,8 @@ void i8259_init();
 void i8259_doirq(uint8_t irqnum);
 uint8_t i8259_nextintr();
 void i8259_tick(uint64_t cycles);
+void i8259_state_save(FILE *fd);
+void i8259_state_load(FILE *fd);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- video.c
 bool video_int_handler(int intnum);
@@ -117,6 +119,8 @@ uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag);
 uint32_t mem_loadrom(uint32_t addr32, const char *filename, uint8_t failure_fatal);
 uint32_t mem_loadbios(const char *filename);
 void mem_dump(const char *path);
+void mem_state_save(FILE *fd);
+void mem_state_load(FILE *fd);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8237.c
 struct dmachan_s {
@@ -131,6 +135,8 @@ struct dmachan_s {
 };
 void i8237_tick(uint64_t cycles);
 bool i8237_init(void);
+void i8237_state_save(FILE *fd);
+void i8237_state_load(FILE *fd);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8253.c
 void i8253_init(void);
@@ -138,6 +144,8 @@ void i8253_tick(uint64_t cycles);
 uint32_t i8253_frequency(int channel);
 uint8_t i8253_channel2_out(void);
 int64_t i8253_cycles_before_irq(void);
+void i8253_state_save(FILE *fd);
+void i8253_state_load(FILE *fd);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- i8255.c
 struct i8255_t {
@@ -153,6 +161,8 @@ void i8255_tick(uint64_t cycles);
 bool i8255_speaker_on(void);
 void i8255_key_required(void);
 void i8255_key_push(uint8_t key);
+void i8255_state_save(FILE *fd);
+void i8255_state_load(FILE *fd);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- disk.c
 bool disk_is_inserted(int num);
@@ -198,6 +208,9 @@ void set_port_write_redirector(uint16_t startport, uint16_t endport,
 void set_port_read_redirector(uint16_t startport, uint16_t endport,
                               void *callback);
 
+void port_state_save(FILE *fd);
+void port_state_load(FILE *fd);
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- interrupt.c
 extern void intcall86(uint8_t intnum);
 
@@ -215,6 +228,9 @@ bool neo_int10_handler(void);
 void neo_tick(uint64_t cycles);
 int neo_get_video_mode(void);
 
+void neo_state_save(FILE *fd);
+void neo_state_load(FILE *fd);
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- vga_timing.c
 
 void vga_timing_init(void);
@@ -222,6 +238,9 @@ void vga_timing_advance(const uint64_t cycles);
 uint8_t vga_timing_get_3da(void);
 bool vga_timing_should_flip(void);
 void vga_timing_did_flip(void);
+
+void vga_timing_state_save(FILE *fd);
+void vga_timing_state_load(FILE *fd);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- cmos.c
 void cmos_init(void);

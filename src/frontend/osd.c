@@ -22,6 +22,8 @@
 #include "../cpu/cpu.h"
 #include "../video/video.h"
 
+#include "../external/udis86/udis86.h"
+
 
 static uint32_t _last_disk_tick;
 static bool _is_active;
@@ -30,16 +32,20 @@ static bool _is_active;
 #define HEIGHT 29
 
 // text screen buffer
-static char _buffer[WIDTH * HEIGHT];
-static uint32_t _head;
+static char _buf[WIDTH * HEIGHT];
+static uint32_t _buf_head;
+
+uint8_t _cmd_buf_last[WIDTH];
+uint8_t _cmd_buf[WIDTH];
+uint32_t _cmd_head;
 
 static char *_get_line(uint32_t index) {
-  const uint32_t y = (index + _head) % HEIGHT;
-  return _buffer + y * WIDTH;
+  const uint32_t y = (index + _buf_head) % HEIGHT;
+  return _buf + y * WIDTH;
 }
 
 static void _new_line(void) {
-  ++_head;
+  ++_buf_head;
 }
 
 void osd_disk_fdd_used(void) {
@@ -60,28 +66,35 @@ bool osd_is_active(void) {
 
 void osd_open(void) {
   _is_active = true;
-
-  char *src = _buffer;
+  memset(_cmd_buf, ' ', WIDTH);
+  memset(_cmd_buf_last, ' ', WIDTH);
+  _cmd_head = 0;
 }
 
 void osd_close(void) {
   _is_active = false;
 }
 
-uint8_t _cmd_buf[WIDTH];
-uint32_t _cmd_head;
-
-static int _parse(const char *line, const char *out[32]) {
-  int head = 0;
+static int _parse(const char *line, char out[32][32]) {
   char prev = ' ';
-  for (int i=0; i<WIDTH && head < 32; ++i) {
-    if (prev == ' ' && line[i] != ' ') {
-      out[head] = line + i;
-      ++head;
+  int item = -1;
+  int pos = 0;
+  for (int i=0; i<WIDTH && item < 32; ++i) {
+    const char ch = line[i];
+    if (prev == ' ' && ch != ' ') {
+      if (item >= 0) {
+        out[item][pos++] = '\0';
+      }
+      ++item;
+      pos = 0;
     }
-    prev = line[i];
+    if (ch != ' ') {
+      assert(item >= 0);
+      out[item][pos++] = ch;
+    }
+    prev = ch;
   }
-  return head;
+  return item + 1;
 }
 
 static bool _pstrcmp(const char *input, const char *word) {
@@ -175,19 +188,46 @@ static void _on_cmd_cpu(int num, const char **tokens) {
     }
     if (_pstrcmp(tok, "run")) {
       // start execution
+      cpu_step = false;
+      cpu_halt = false;
     }
     break;
   case 'h':
     if (_pstrcmp(tok, "halt")) {
       // stop execution
+      cpu_halt = true;
+      cpu_step = false;
     }
     break;
   case 's':
     if (_pstrcmp(tok, "state")) {
-      // display registers
+      osd_printf("cs %04x   ip %04x  (%06x)",
+                 cpu_regs.cs, cpu_regs.ip, (cpu_regs.cs << 4) + cpu_regs.ip);
+      osd_printf("ss %04x   sp %04x  (%06x)   bp %04x  (%06x)",
+                 cpu_regs.ss,
+                 cpu_regs.sp, (cpu_regs.ss << 4) + cpu_regs.sp,
+                 cpu_regs.bp, (cpu_regs.ss << 4) + cpu_regs.bp);
+
+      osd_printf("ds %04x   si %04x   di %04x",
+                 cpu_regs.ds, cpu_regs.si, cpu_regs.di);
+      osd_printf("es %04x   ax %04x   bx %04x   cx %04x   dx %04x",
+                 cpu_regs.es, cpu_regs.ax, cpu_regs.bx, cpu_regs.cx, cpu_regs.dx);
+
+      osd_printf("....%c%c%c%c%c%c.%c.%c.%c",
+                 cpu_flags.of  ? 'o' : '.',
+                 cpu_flags.df  ? 'd' : '.',
+                 cpu_flags.ifl ? 'i' : '.',
+                 cpu_flags.tf  ? 't' : '.',
+                 cpu_flags.sf  ? 's' : '.',
+                 cpu_flags.zf  ? 'z' : '.',
+                 cpu_flags.af  ? 'a' : '.',
+                 cpu_flags.pf  ? 'p' : '.',
+                 cpu_flags.cf  ? 'c' : '.');
     }
     if (_pstrcmp(tok, "step")) {
       // single step
+      cpu_step = true;
+      cpu_halt = true;
     }
     break;
   default:
@@ -196,21 +236,33 @@ static void _on_cmd_cpu(int num, const char **tokens) {
   }
 }
 
-static void _on_cmd_inst(int num, const char **tokens) {
+static void _on_cmd_memory_dis(int num, const char **tokens) {
+  const uint32_t ip = 0xFFFFF & (cpu_regs.cs << 4) + cpu_regs.ip;
+  const uint8_t *code = RAM + ip;
+
+  ud_t ud_obj;
+  ud_init(&ud_obj);
+  ud_set_input_buffer(&ud_obj, code, 16);
+  ud_set_mode(&ud_obj, 16);
+  ud_set_syntax(&ud_obj, UD_SYN_INTEL);
+
+  for (int i = 0; i < 8; ++i) {
+    if (!ud_disassemble(&ud_obj)) {
+      osd_printf("unable to disassemble");
+      break;
+    }
+    osd_printf("%06x    %s", ip, ud_insn_asm(&ud_obj));
+  }
+
+}
+
+static void _on_cmd_memory_dump(int num, const char **tokens) {
   if (num <= 0) {
+    osd_printf("usage: memory dump [path]");
     return;
   }
-  const char *tok = *tokens;
-  switch (*tok) {
-  case 'd':
-    if (_pstrcmp(tok, "dis")) {
-      // disassemble
-    }
-    break;
-  default:
-    osd_printf("unexpected input '%s'", tok);
-    break;
-  }
+  const char *path  = tokens[0];
+  mem_dump(path);
 }
 
 static void _on_cmd_memory(int num, const char **tokens) {
@@ -221,7 +273,10 @@ static void _on_cmd_memory(int num, const char **tokens) {
   switch (*tok) {
   case 'd':
     if (_pstrcmp(tok, "dump")) {
-      osd_printf("doing memory dump");
+      _on_cmd_memory_dump(num - 1, tokens + 1);
+    }
+    if (_pstrcmp(tok, "dis")) {
+      _on_cmd_memory_dis(num - 1, tokens + 1);
     }
     break;
   case 'r':
@@ -239,16 +294,21 @@ static void _on_cmd_state(int num, const char **tokens) {
   if (num <= 0) {
     return;
   }
-  const char *tok = *tokens;
+
+  const char *tok  = tokens[0];
+  const char *path = tokens[1];
+
   switch (*tok) {
   case 'l':
     if (_pstrcmp(tok, "load")) {
-      osd_printf("doing state load");
+      state_load(path);
+      osd_printf("state loaded");
     }
     break;
   case 's':
     if (_pstrcmp(tok, "save")) {
-      osd_printf("doing state save");
+      state_save(path);
+      osd_printf("state saved");
     }
     break;
   default:
@@ -278,11 +338,6 @@ static void _on_cmd(int num, const char **tokens) {
       _on_cmd_exit(num-1, tokens+1);
     }
     break;
-  case 'i':
-    if (_pstrcmp(tok, "inst")) {
-      _on_cmd_inst(num-1, tokens+1);
-    }
-    break;
   case 'm':
     if (_pstrcmp(tok, "memory")) {
       _on_cmd_memory(num-1, tokens+1);
@@ -290,7 +345,7 @@ static void _on_cmd(int num, const char **tokens) {
     break;
   case 's':
     if (_pstrcmp(tok, "state")) {
-      osd_printf("_on_cmd_state()");
+      _on_cmd_state(num - 1, tokens + 1);
     }
     break;
   default:
@@ -301,16 +356,23 @@ static void _on_cmd(int num, const char **tokens) {
 
 static void _exec(void) {
 
+  // store last command
+  memcpy(_cmd_buf_last, _cmd_buf, WIDTH);
+
   // put the executed line in the output
   memcpy(_get_line(0), _cmd_buf, WIDTH);
   _new_line();
 
   // parse executed line into tokens
-  char *tokens[32];
-  memset(tokens, 0, sizeof(char*) * 32);
+  char tokens[32][32];
+  memset(tokens, 0, sizeof(tokens));
   const int num = _parse(_cmd_buf, tokens);
 
-  _on_cmd(num, tokens);
+  char *input[32];
+  for (int i = 0; i < 32; ++i) {
+    input[i] = tokens[i];
+  }
+  _on_cmd(num, input);
 
   // last act clear the command buffer (NOT BEFORE)
   memset(_cmd_buf, 0, WIDTH);
@@ -372,6 +434,20 @@ void osd_on_event(const SDL_Event *t) {
       _buf_on_char(ch);
     }
 
+    if (t->key.keysym.sym == SDLK_UP) {
+      // restore previous command
+      memcpy(_cmd_buf, _cmd_buf_last, WIDTH);
+      for (int i = 0; i < WIDTH; ++i) {
+        _cmd_head = (_cmd_buf[i] != ' ') ? (i+1) : _cmd_head;
+      }
+    }
+
+    if (t->key.keysym.sym == SDLK_DOWN) {
+      // clear current command
+      memset(_cmd_buf, 0, WIDTH);
+      _cmd_head = 0;
+    }
+
     if (t->key.keysym.sym == SDLK_BACKSPACE) {
       _buf_on_del();
     }
@@ -416,8 +492,8 @@ void osd_render(const struct render_target_t *target) {
 void osd_vprintf(const char *fmt, va_list list) {
   char *line = _get_line(0);
   memset(line, 0, WIDTH);
-  vsnprintf(line, WIDTH, fmt, list);
-  ++_head;
+  vsnprintf(line + 2, WIDTH - 2, fmt, list);
+  ++_buf_head;
 }
 
 void osd_printf(const char *fmt, ...) {

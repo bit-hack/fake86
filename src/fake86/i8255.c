@@ -237,3 +237,19 @@ void i8255_key_required(void) {
   printf("popping key %d\n", i8255.port_in[0]);
 #endif
 }
+
+void i8255_state_save(FILE *fd) {
+  fwrite(&i8255, 1, sizeof(i8255), fd);
+  fwrite(&_SW1, 1, sizeof(_SW1), fd);
+  fwrite(&_SW2, 1, sizeof(_SW2), fd);
+  fwrite(_keys, 1, sizeof(_keys), fd);
+  fwrite(&_key_index, 1, sizeof(_key_index), fd);
+}
+
+void i8255_state_load(FILE *fd) {
+  fread(&i8255, 1, sizeof(i8255), fd);
+  fread(&_SW1, 1, sizeof(_SW1), fd);
+  fread(&_SW2, 1, sizeof(_SW2), fd);
+  fread(_keys, 1, sizeof(_keys), fd);
+  fread(&_key_index, 1, sizeof(_key_index), fd);
+}

@@ -73,7 +73,9 @@ uint8_t mouse_port_read(uint16_t portnum) {
       --sermouse.bufptr;
     }
     if (sermouse.bufptr > 0) {
+#if 1
       i8259_doirq(4);
+#endif
     }
     sermouse.reg[4] = ~sermouse.reg[4] & 1;
     return temp;

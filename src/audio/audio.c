@@ -21,6 +21,7 @@
 #include "../common/common.h"
 #include "../cpu/cpu.h"
 #include "../external/nukedopl/opl3.h"
+#include "../frontend/frontend.h"
 
 
 // audio enabled
@@ -279,10 +280,16 @@ uint32_t audio_callback(int16_t *samples, uint32_t num_samples) {
   }
 
   // todo: make this sample based
-  const uint32_t next_eval = SDL_GetTicks();
-  if ((next_eval - last_eval) > 10) {
-    adjust_rate();
-    last_eval = next_eval;
+  if (!cpu_halt) {
+    const uint32_t next_eval = SDL_GetTicks();
+    if ((next_eval - last_eval) > 10) {
+      adjust_rate();
+      last_eval = next_eval;
+    }
+  }
+  else {
+    // just keep rendering as we can
+    _pending_samples = num_samples / 2;
   }
 
   // if there are no more samples to render
@@ -344,7 +351,7 @@ static void push_event_spk(void) {
   event.spk.freq = _spk_freq;
   event.spk.enable = _spk_enable;
   if (!_push_event(&event)) {
-    log_printf(LOG_CHAN_AUDIO, "dropped audio event");
+//    log_printf(LOG_CHAN_AUDIO, "dropped audio event");
   }
 }
 
@@ -391,6 +398,6 @@ void audio_disk_seek(const uint32_t sects) {
   _last_update = new_update;
   event.type = event_floppy;
   if (!_push_event(&event)) {
-    log_printf(LOG_CHAN_AUDIO, "dropped audio event");
+//    log_printf(LOG_CHAN_AUDIO, "dropped audio event");
   }
 }

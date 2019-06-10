@@ -83,3 +83,5 @@
 
 // emulate disk delay
 #define USE_DISK_DELAY    1
+
+#define USE_CPU_REDUX     1

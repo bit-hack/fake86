@@ -74,10 +74,6 @@ struct i8253_s {
 
 struct i8253_s i8253;
 
-// 182Hz threshold (UNUSED)
-static const int64_t irq0_thresh = CYCLES_PER_SECOND / 182;
-static int64_t irq0_accum = 0;
-
 // In the IBM PC the PIT timer is fed from a 1.1931817Mhz clock
 const uint64_t pit_speed = 1193182;
 
@@ -468,4 +464,12 @@ int64_t i8253_cycles_before_irq(void) {
   const int64_t cycles =
     (((uint64_t)c0->counter * CYCLES_PER_SECOND) / pit_speed);
   return cycles - i8253.left_over;
+}
+
+void i8253_state_save(FILE *fd) {
+  fwrite(&i8253, 1, sizeof(i8253), fd);
+}
+
+void i8253_state_load(FILE *fd) {
+  fread(&i8253, 1, sizeof(i8253), fd);
 }
