@@ -76,7 +76,7 @@ void writew86(uint32_t addr32, uint16_t value) {
 uint8_t read86(uint32_t addr) {
   addr &= 0xFFFFF;
 
-#if 1
+#if 0
   if (addr == 0x29f33) {
     log_printf(LOG_CHAN_MEM, "memory read breakpoint hit");
     cpu_halt = true;

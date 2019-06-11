@@ -1,6 +1,32 @@
-#include "cpu.h"
+/*
+  Fake86: A portable, open-source 8086 PC emulator.
+  Copyright (C)2010-2013 Mike Chambers
 
-#define OPCODE(NAME) static void NAME (const uint8_t *code)
+  This program is free software; you can redistribute it and/or
+  modify it under the terms cpu_flags.of the GNU General Public License
+  as published by the Free Software Foundation; either version 2
+  cpu_flags.of the License, or (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty cpu_flags.of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy cpu_flags.of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+  USA.
+*/
+
+#include "cpu.h"
+#include "cpu_mod_rm.h"
+
+
+// shift register used to delay STI until next instruction
+static uint8_t _sti_sr = 0;
+
+#define OPCODE(NAME)                                                          \
+  static void NAME (const uint8_t *code)
 
 // effective instruction pointer
 static inline uint32_t _eip(void) {
@@ -39,8 +65,59 @@ static inline uint16_t _popw(void) {
 }
 
 // step instruction pointer
-static inline void _step_ip(int16_t rel) {
+static inline void _step_ip(const int16_t rel) {
   cpu_regs.ip += rel;
+}
+
+// TODO: move this to be lazy executed
+static const uint8_t parity[0x100] = {
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    1, 0, 0, 1, 0, 1, 1, 0,
+    0, 1, 1, 0, 1, 0, 0, 1};
+
+// set parity flag
+static inline void _set_pf(const uint16_t val) {
+  cpu_flags.pf = parity[val & 0xff];
+}
+
+// get parity flag
+static inline uint8_t _get_pf(void) {
+  return cpu_flags.pf;
+}
+
+// set zero and sign flags
+static inline void _set_zf_sf(const uint16_t val) {
+  cpu_flags.zf = (val == 0);
+  cpu_flags.sf = (val & 0x8000) ? 1 : 0;
 }
 
 // PUSH ES - push segment register ES
@@ -51,7 +128,7 @@ OPCODE(_06) {
 
 // PUSH CS - push segment register CS
 OPCODE(_0E) {
-  //XXX: suggeted this is an illegal operation?
+  //XXX: suggested this is an illegal operation?
   _pushw(cpu_regs.cs);
   _step_ip(1);
 }
@@ -67,6 +144,110 @@ OPCODE(_1E) {
   _pushw(cpu_regs.ds);
   _step_ip(1);
 }
+
+#define INC(REG)                                                              \
+{                                                                             \
+  cpu_flags.of = (REG == 0x7fff);                                             \
+  cpu_flags.af = (REG & 0x0f) == 0x0f;                                        \
+  REG += 1;                                                                   \
+  _set_zf_sf(REG);                                                            \
+  _set_pf(REG);                                                               \
+  _step_ip(1);                                                                \
+}
+
+// INC AX - increment register
+OPCODE(_40) {
+  INC(cpu_regs.ax);
+}
+
+// INC CX - increment register
+OPCODE(_41) {
+  INC(cpu_regs.cx);
+}
+
+// INC DX - increment register
+OPCODE(_42) {
+  INC(cpu_regs.dx);
+}
+
+// INC BX - increment register
+OPCODE(_43) {
+  INC(cpu_regs.bx);
+}
+
+// INC SP - increment register
+OPCODE(_44) {
+  INC(cpu_regs.sp);
+}
+
+// INC BP - increment register
+OPCODE(_45) {
+  INC(cpu_regs.bp);
+}
+
+// INC SI - increment register
+OPCODE(_46) {
+  INC(cpu_regs.si);
+}
+
+// INC DI - increment register
+OPCODE(_47) {
+  INC(cpu_regs.di);
+}
+
+#undef INC
+
+#define DEC(REG)                                                              \
+  {                                                                           \
+    cpu_flags.of = (REG == 0x8000);                                           \
+    cpu_flags.af = (REG & 0x0f) == 0x0;                                       \
+    REG -= 1;                                                                 \
+    _set_zf_sf(REG);                                                          \
+    _set_pf(REG);                                                             \
+    _step_ip(1);                                                              \
+  }
+
+// DEC AX - increment register
+OPCODE(_48) {
+  DEC(cpu_regs.ax);
+}
+
+// DEC CX - increment register
+OPCODE(_49) {
+  DEC(cpu_regs.cx);
+}
+
+// DEC DX - increment register
+OPCODE(_4A) {
+  DEC(cpu_regs.dx);
+}
+
+// DEC BX - increment register
+OPCODE(_4B) {
+  DEC(cpu_regs.bx);
+}
+
+// DEC SP - increment register
+OPCODE(_4C) {
+  DEC(cpu_regs.sp);
+}
+
+// DEC BP - increment register
+OPCODE(_4D) {
+  DEC(cpu_regs.bp);
+}
+
+// DEC SI - increment register
+OPCODE(_4E) {
+  DEC(cpu_regs.si);
+}
+
+// DEC DI - increment register
+OPCODE(_4F) {
+  DEC(cpu_regs.di);
+}
+
+#undef DEC
 
 // PUSH AX - push register
 OPCODE(_50) {
@@ -164,42 +345,17 @@ OPCODE(_5F) {
   _step_ip(1);
 }
 
-// PUSHA - push all registers (+186)
-OPCODE(_60) {
-  const uint16_t sp = cpu_regs.sp;
-  _pushw(cpu_regs.ax);
-  _pushw(cpu_regs.cx);
-  _pushw(cpu_regs.dx);
-  _pushw(cpu_regs.bx);
-  _pushw(sp);
-  _pushw(cpu_regs.bp);
-  _pushw(cpu_regs.si);
-  _pushw(cpu_regs.di);
-}
-
-// POPA - pop all registers (+186)
-OPCODE(_61) {
-  cpu_regs.di = _popw();
-  cpu_regs.si = _popw();
-  cpu_regs.bp = _popw();
-                _popw();
-  cpu_regs.bx = _popw();
-  cpu_regs.dx = _popw();
-  cpu_regs.cx = _popw();
-  cpu_regs.ax = _popw();
-}
-
 // NOP - no operation (XCHG AX AX)
 OPCODE(_90) {
   _step_ip(1);
 }
 
-#define XCHG(REG)                     \
-  {                                   \
-    const uint16_t t = REG;           \
-    REG = cpu_regs.ax;                \
-    cpu_regs.ax = t;                  \
-    _step_ip(1);                      \
+#define XCHG(REG)                                                             \
+  {                                                                           \
+    const uint16_t t = REG;                                                   \
+    REG = cpu_regs.ax;                                                        \
+    cpu_regs.ax = t;                                                          \
+    _step_ip(1);                                                              \
   }
 
 // XCHG CX - exchange AX and CX
@@ -283,7 +439,8 @@ OPCODE(_F9) {
 
 // STI - set interrupt flag
 OPCODE(_FB) {
-  cpu_flags.ifl = 1;
+  // STI is delayed one instruction
+  _sti_sr = 0x3;
   _step_ip(1);
 }
 
@@ -302,7 +459,7 @@ static const opcode_t _op_table[256] = {
   ___, ___, ___, ___, ___, ___, _16, ___, ___, ___, ___, ___, ___, ___, _1E, ___, // 10
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 20
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 30
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 40
+  _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, _4A, _4B, _4C, _4D, _4E, _4F, // 40
   _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _5A, _5B, _5C, _5D, _5E, _5F, // 50
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 60
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 70
@@ -317,7 +474,13 @@ static const opcode_t _op_table[256] = {
 };
 #undef ___
 
+
 bool cpu_redux_exec(void) {
+
+  // delay setting IFL for one instruction after STI
+  _sti_sr >>= 1;
+  cpu_flags.ifl |= _sti_sr & 1;
+
   // get effective pc
   const uint32_t eip = (cpu_regs.cs << 4) + cpu_regs.ip;
   // find the code stream
