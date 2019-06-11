@@ -25,6 +25,9 @@
 // shift register used to delay STI until next instruction
 static uint8_t _sti_sr = 0;
 
+#define GET_CODE(TYPE, OFFSET)                                                \
+  (*(const TYPE *)(code + OFFSET))
+
 #define OPCODE(NAME)                                                          \
   static void NAME (const uint8_t *code)
 
@@ -126,6 +129,12 @@ OPCODE(_06) {
   _step_ip(1);
 }
 
+// POP ES - pop segment register ES
+OPCODE(_07) {
+  cpu_regs.es = _popw();
+  _step_ip(1);
+}
+
 // PUSH CS - push segment register CS
 OPCODE(_0E) {
   //XXX: suggested this is an illegal operation?
@@ -139,9 +148,21 @@ OPCODE(_16) {
   _step_ip(1);
 }
 
+// POP SS - pop segment register SS
+OPCODE(_17) {
+  cpu_regs.ss = _popw();
+  _step_ip(1);
+}
+
 // PUSH DS - push segment register DS
 OPCODE(_1E) {
   _pushw(cpu_regs.ds);
+  _step_ip(1);
+}
+
+// POP DS - pop segment register DS
+OPCODE(_1F) {
+  cpu_regs.ds = _popw();
   _step_ip(1);
 }
 
@@ -345,6 +366,111 @@ OPCODE(_5F) {
   _step_ip(1);
 }
 
+// JO - jump on overflow
+OPCODE(_70) {
+  _step_ip(2);
+  if (cpu_flags.of) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JNO - jump not overflow
+OPCODE(_71) {
+  _step_ip(2);
+  if (!cpu_flags.of) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JB - jump if below
+OPCODE(_72) {
+  _step_ip(2);
+  if (cpu_flags.cf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JAE - jump above or equal
+OPCODE(_73) {
+  _step_ip(2);
+  if (!cpu_flags.cf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JZ - jump not zero
+OPCODE(_74) {
+  _step_ip(2);
+  if (cpu_flags.zf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JNZ - jump not zero
+OPCODE(_75) {
+  _step_ip(2);
+  if (!cpu_flags.zf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JBE - jump below or equal
+OPCODE(_76) {
+  _step_ip(2);
+  if (cpu_flags.cf || cpu_flags.zf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JS - jump if not below or equal
+OPCODE(_77) {
+  _step_ip(2);
+  if (!cpu_flags.cf && !cpu_flags.zf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JS - jump if sign
+OPCODE(_78) {
+  _step_ip(2);
+  if (cpu_flags.sf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JNS - jump not sign
+OPCODE(_79) {
+  _step_ip(2);
+  if (!cpu_flags.sf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JP - jump parity
+OPCODE(_7A) {
+  _step_ip(2);
+  if (cpu_flags.pf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+
+// JNP - jump not parity
+OPCODE(_7B) {
+  _step_ip(2);
+  if (!cpu_flags.pf) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JLE - jump if less or equal
+OPCODE(_7E) {
+  _step_ip(2);
+  if (cpu_flags.zf || (cpu_flags.sf != cpu_flags.of)) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
 // NOP - no operation (XCHG AX AX)
 OPCODE(_90) {
   _step_ip(1);
@@ -395,14 +521,26 @@ OPCODE(_97) {
 
 #undef XCHG
 
-// WAIT - wait for test pin assetion
+// CBW - convert byte to word
+OPCODE(_98) {
+  cpu_regs.ah = (cpu_regs.al & 0x80) ? 0xff : 0x00;
+  _step_ip(1);
+}
+
+// CWD - convert word to dword
+OPCODE(_99) {
+  cpu_regs.dx = (cpu_regs.ax & 0x8000) ? 0xffff : 0x0000;
+  _step_ip(1);
+}
+
+// WAIT - wait for test pin assertion
 OPCODE(_9B) {
   _step_ip(1);
 }
 
 // RET - near return and add to stack pointer
 OPCODE(_C2) {
-  const uint16_t disp16 = *(uint16_t*)(code + 1);
+  const uint16_t disp16 = GET_CODE(uint16_t, 1);
   cpu_regs.ip = _popw();
   cpu_regs.sp += disp16;
 }
@@ -412,22 +550,68 @@ OPCODE(_C3) {
   cpu_regs.ip = _popw();
 }
 
+// RETF - far return and add to stack pointer
+OPCODE(_CA) {
+  const uint16_t disp16 = GET_CODE(uint16_t, 1);
+  cpu_regs.ip = _popw();
+  cpu_regs.cs = _popw();
+  cpu_regs.sp += disp16;
+}
+
 // RETF - far return
 OPCODE(_CB) {
   cpu_regs.ip = _popw();
   cpu_regs.cs = _popw();
 }
 
-// RETF - far return and add to stack pointer
-OPCODE(_CA) {
-  const uint16_t disp16 = *(uint16_t*)(code + 1);
-  cpu_regs.ip = _popw();
-  cpu_regs.cs = _popw();
-  cpu_regs.sp += disp16;
+// JCXZ - jump if CX is zero
+OPCODE(_E3) {
+  _step_ip(2);
+  if (cpu_regs.cx == 0) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// CALL disp16
+OPCODE(_E8) {
+  // step over call
+  _step_ip(3);
+  // push return address
+  _pushw(cpu_regs.ip);
+  // set new ip
+  cpu_regs.ip += GET_CODE(uint16_t, 1);
+}
+
+// JMP disp16 - jump with signed word displacement
+OPCODE(_E9) {
+  cpu_regs.ip += 3 + GET_CODE(uint16_t, 1);
+}
+
+// JMP far - intersegment jump
+OPCODE(_EA) {
+  cpu_regs.ip = GET_CODE(uint16_t, 1);
+  cpu_regs.cs = GET_CODE(uint16_t, 3);
+}
+
+// JMP disp8 - jump with signed byte displacement
+OPCODE(_EB) {
+  cpu_regs.ip += 2 + GET_CODE(int8_t, 1);
 }
 
 // LOCK - lock prefix
 OPCODE(_F0) {
+  _step_ip(1);
+}
+
+// CMC - compliment carry flag
+OPCODE(_F5) {
+  cpu_flags.cf ^= 1;
+  _step_ip(1);
+}
+
+// CLC - clear carry flag
+OPCODE(_F8) {
+  cpu_flags.cf = 0;
   _step_ip(1);
 }
 
@@ -437,10 +621,24 @@ OPCODE(_F9) {
   _step_ip(1);
 }
 
+// CLI - clear interrupt flag
+OPCODE(_FA) {
+  cpu_flags.ifl = 0;
+  _sti_sr = 0x0;
+  _step_ip(1);
+}
+
 // STI - set interrupt flag
 OPCODE(_FB) {
   // STI is delayed one instruction
   _sti_sr = 0x3;
+  _step_ip(1);
+}
+
+// CLD - clear direction flag
+OPCODE(_FC) {
+  // STI is delayed one instruction
+  cpu_flags.df = 0;
   _step_ip(1);
 }
 
@@ -455,22 +653,22 @@ typedef void (*opcode_t)(const uint8_t *code);
 #define ___ 0
 static const opcode_t _op_table[256] = {
 // 00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
-  ___, ___, ___, ___, ___, ___, _06, ___, ___, ___, ___, ___, ___, ___, _0E, ___, // 00
-  ___, ___, ___, ___, ___, ___, _16, ___, ___, ___, ___, ___, ___, ___, _1E, ___, // 10
+  ___, ___, ___, ___, ___, ___, _06, _07, ___, ___, ___, ___, ___, ___, _0E, ___, // 00
+  ___, ___, ___, ___, ___, ___, _16, _17, ___, ___, ___, ___, ___, ___, _1E, _1F, // 10
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 20
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 30
   _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, _4A, _4B, _4C, _4D, _4E, _4F, // 40
   _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _5A, _5B, _5C, _5D, _5E, _5F, // 50
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 60
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 70
+  _70, _71, _72, _73, _74, _75, _76, _77, _78, _79, _7A, _7B, ___, ___, _7E, ___, // 70
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 80
-  _90, _91, _92, _93, _94, _95, _96, _97, ___, ___, ___, _9B, ___, ___, ___, ___, // 90
+  _90, _91, _92, _93, _94, _95, _96, _97, _98, _99, ___, _9B, ___, ___, ___, ___, // 90
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // A0
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // B0
   ___, ___, _C2, _C3, ___, ___, ___, ___, ___, ___, _CA, _CB, ___, ___, ___, ___, // C0
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // D0
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // E0
-  _F0, ___, ___, ___, ___, ___, ___, ___, ___, _F9, ___, _FB, ___, _FD, ___, ___, // F0
+  ___, ___, ___, _E3, ___, ___, ___, ___, _E8, _E9, _EA, _EB, ___, ___, ___, ___, // E0
+  _F0, ___, ___, ___, ___, _F5, ___, ___, _F8, _F9, _FA, _FB, _FC, _FD, ___, ___, // F0
 };
 #undef ___
 
