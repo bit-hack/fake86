@@ -25,9 +25,6 @@
 // shift register used to delay STI until next instruction
 static uint8_t _sti_sr = 0;
 
-#define GET_CODE(TYPE, OFFSET)                                                \
-  (*(const TYPE *)(code + OFFSET))
-
 #define OPCODE(NAME)                                                          \
   static void NAME (const uint8_t *code)
 

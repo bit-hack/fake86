@@ -245,3 +245,6 @@ void vga_timing_state_load(FILE *fd);
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- cmos.c
 void cmos_init(void);
 bool cmos_nmi_enabled(void);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- dos.c
+bool on_dos_int(void);
