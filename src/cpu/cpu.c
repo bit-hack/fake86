@@ -32,8 +32,11 @@ extern struct structpic i8259;
 
 static bool in_hlt_state;
 
-static uint8_t opcode, segoverride, reptype;
-static uint16_t savecs, saveip, useseg, oldsp;
+uint16_t useseg;
+bool segoverride;
+
+static uint8_t opcode, reptype;
+static uint16_t savecs, saveip, oldsp;
 static uint8_t mode, reg, rm;
 static uint16_t oper1, oper2, res16, disp16, temp16, stacksize, frametemp;
 static uint8_t oper1b, oper2b, res8, addrbyte;
@@ -681,12 +684,7 @@ static uint8_t readrm8(uint8_t rmval) {
 static void writerm16(uint8_t rmval, uint16_t value) {
   if (mode < 3) {
     getea(rmval);
-#if 1
     writew86(ea, value);
-#else
-    write86(ea + 0, value & 0xFF);
-    write86(ea + 1, value >> 8);
-#endif
   } else {
     cpu_setreg16(rmval, value);
   }
@@ -1241,7 +1239,7 @@ int32_t cpu_exec86(int32_t target) {
     }
 
     reptype = 0;
-    segoverride = 0;
+    segoverride = false;
     useseg = cpu_regs.ds;
     uint8_t docontinue = 0;
     const uint16_t firstip = cpu_regs.ip;
@@ -1258,22 +1256,22 @@ int32_t cpu_exec86(int32_t target) {
       /* segment prefix check */
       case 0x2E: /* segment cpu_regs.cs */
         useseg = cpu_regs.cs;
-        segoverride = 1;
+        segoverride = true;
         break;
 
       case 0x3E: /* segment cpu_regs.ds */
         useseg = cpu_regs.ds;
-        segoverride = 1;
+        segoverride = true;
         break;
 
       case 0x26: /* segment cpu_regs.es */
         useseg = cpu_regs.es;
-        segoverride = 1;
+        segoverride = true;
         break;
 
       case 0x36: /* segment cpu_regs.ss */
         useseg = cpu_regs.ss;
-        segoverride = 1;
+        segoverride = true;
         break;
 
       /* repetition prefix check */

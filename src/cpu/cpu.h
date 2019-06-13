@@ -83,3 +83,6 @@ extern bool cpu_halt;
 extern bool cpu_step;
 
 bool cpu_redux_exec(void);
+
+uint16_t useseg;
+bool segoverride;

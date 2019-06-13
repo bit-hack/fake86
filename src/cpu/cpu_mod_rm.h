@@ -27,66 +27,17 @@
 #define GET_CODE(TYPE, OFFSET)                                                \
   (*(const TYPE *)(code + OFFSET))
 
-struct ptr_type_t {
-  union {
-    void*     ptr;
-    int16_t*  reg_s16;
-    uint16_t* reg_u16;
-    int8_t*   reg_s8;
-    uint8_t*  reg_u8;
-  };
-};
-
 struct cpu_mod_rm_t {
 
   uint8_t mod;
   uint8_t reg;
   uint8_t rm;
 
-  struct ptr_type_t rm_ptr;
-  struct ptr_type_t reg_ptr;
-
-  // effective value/address
-  int32_t rm_val;
-
-  // true if rm_val is an address
-  bool is_addr;
+  uint32_t ea;
 
   // number of bytes following instruction opcode
   uint8_t num_bytes;
 };
-
-// get word register from REG field
-static inline void* _ptr_regw(const uint8_t num) {
-  switch (num) {
-  case 0: return &cpu_regs.ax;
-  case 1: return &cpu_regs.cx;
-  case 2: return &cpu_regs.dx;
-  case 3: return &cpu_regs.bx;
-  case 4: return &cpu_regs.sp;
-  case 5: return &cpu_regs.bp;
-  case 6: return &cpu_regs.si;
-  case 7: return &cpu_regs.di;
-  default:
-    UNREACHABLE();
-  }
-}
-
-// get byte register from REG field
-static inline void* _ptr_regb(const uint8_t num) {
-  switch (num) {
-  case 0: return &cpu_regs.al;
-  case 1: return &cpu_regs.cl;
-  case 2: return &cpu_regs.dl;
-  case 3: return &cpu_regs.bl;
-  case 4: return &cpu_regs.ah;
-  case 5: return &cpu_regs.ch;
-  case 6: return &cpu_regs.dh;
-  case 7: return &cpu_regs.bh;
-  default:
-    UNREACHABLE();
-  }
-}
 
 // get word register from REG field
 static inline uint16_t _get_regw(const uint8_t num) {
@@ -152,69 +103,103 @@ static inline void _set_regb(const uint8_t num, const uint8_t val) {
   }
 }
 
+static inline void _write_rm_b(struct cpu_mod_rm_t *m, const uint8_t v) {
+  if (m->mod == 3) {
+    _set_regb(m->rm, v);
+  }
+  else {
+    write86(m->ea, v);
+  }
+}
+
+static inline void _write_rm_w(struct cpu_mod_rm_t *m, const uint16_t v) {
+  if (m->mod == 3) {
+    _set_regw(m->rm, v);
+  }
+  else {
+    writew86(m->ea, v);
+  }
+}
+
+static inline uint8_t _read_rm_b(struct cpu_mod_rm_t *m) {
+  return (m->mod == 3) ? _get_regb(m->rm) : read86(m->ea);
+}
+
+static inline uint16_t _read_rm_w(struct cpu_mod_rm_t *m) {
+  return (m->mod == 3) ? _get_regw(m->rm) : readw86(m->ea);
+}
+
 static inline void _decode_mod_rm(
-  const uint8_t *code,
-  struct cpu_mod_rm_t *m,
-  const bool is_word) {
+    const uint8_t *code,
+    struct cpu_mod_rm_t *m) {
 
   // decode mod-reg-rm byte
   const uint8_t modRegRM = GET_CODE(uint8_t, 1);
-  m->mod = (modRegRM & 0xC0) >> 6;
-  m->reg = (modRegRM & 0x38) >> 3;
-  m->rm  = (modRegRM & 0x07) >> 0;
+  m->mod = (modRegRM >> 6) & 0x3;
+  m->reg = (modRegRM >> 3) & 0x7;
+  m->rm  = (modRegRM >> 0) & 0x7;
 
-  // lookup the reg field
-  m->reg_ptr.ptr = is_word ? _ptr_regw(m->reg) : _ptr_regb(m->reg);
+  int32_t addr = 0;
 
   // inital decode of the rm field
   switch (m->mod) {
   case 0:
   case 1:
   case 2:
+
     switch (m->rm) {
-    case 0: m->rm_val = cpu_regs.bx + cpu_regs.si; break; // [BX + SI]
-    case 1: m->rm_val = cpu_regs.bx + cpu_regs.di; break; // [BX + DI]
-    case 2: m->rm_val = cpu_regs.bp + cpu_regs.si; break; // [BP + SI]
-    case 3: m->rm_val = cpu_regs.bp + cpu_regs.di; break; // [BP + DI]
-    case 4: m->rm_val =               cpu_regs.si; break; // [SI]
-    case 5: m->rm_val =               cpu_regs.di; break; // [DI]
-    case 6: m->rm_val = (m->mod == 0) ?
-                          GET_CODE(uint16_t, 2) :         // Direct
-                          cpu_regs.bp;                    // [BP]
-                                                  break;
-    case 7: m->rm_val = cpu_regs.bx;                      // [BX]
+    case 0: addr = cpu_regs.bx + cpu_regs.si; break; // [BX + SI]
+    case 1: addr = cpu_regs.bx + cpu_regs.di; break; // [BX + DI]
+    case 2: addr = cpu_regs.bp + cpu_regs.si; break; // [BP + SI]
+    case 3: addr = cpu_regs.bp + cpu_regs.di; break; // [BP + DI]
+    case 4: addr =               cpu_regs.si; break; // [SI]
+    case 5: addr =               cpu_regs.di; break; // [DI]
+    case 6: addr = (m->mod == 0) ?
+                     GET_CODE(uint16_t, 2) :         // Direct
+                     cpu_regs.bp;                    // [BP]
+                                              break;
+    case 7: addr = cpu_regs.bx;               break; // [BX]
     default:
       UNREACHABLE();
     }
-    // get a pointer to ram location
-    m->rm_ptr.ptr = RAM + m->rm_val;
+
     break;
   case 3:
-    break;
+    // treat rm-field as reg-field
+    m->num_bytes = 1;
+    return;
   default:
     UNREACHABLE();
+  }
+
+  uint32_t seg;
+  if (m->rm == 2 || m->rm == 3 || (m->mod != 0 && m->rm == 6)) {
+    // if we are using cpu_regs.bp as part of the modregrm byte
+    seg = cpu_regs.ss << 4;
+  }
+  else {
+    seg = cpu_regs.ds << 4;
   }
 
   // apply displacements/reg lookup and work out byte count
   switch (m->mod) {
   case 0:
-    m->num_bytes = (m->rm == 6) ? 3 : 1;
-    m->is_addr = true;
+    if (m->rm == 6) {
+      m->num_bytes = 3;
+      m->ea = seg + GET_CODE(uint16_t, 2);
+    }
+    else {
+      m->num_bytes = 1;
+      m->ea = seg + addr;
+    }
     break;
   case 1:
     m->num_bytes = 2;
-    m->is_addr = true;
-    m->rm_val += GET_CODE(int8_t, 2);
+    m->ea = seg + addr + GET_CODE(int8_t, 2);
     break;
   case 2:
     m->num_bytes = 3;
-    m->is_addr = true;
-    m->rm_val += GET_CODE(uint16_t, 2);
-    break;
-  case 3:
-    m->num_bytes = 1;
-    m->is_addr = false;
-    m->rm_ptr.ptr = is_word ? _ptr_regw(m->rm) : _ptr_regb(m->rm);
+    m->ea = seg + addr + GET_CODE(uint16_t, 2);
     break;
   default:
     UNREACHABLE();

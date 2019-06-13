@@ -52,7 +52,9 @@ static void _on_dos_open_file(void) {
 }
 
 static void _on_dos_close_file(void) {
+#if 0
   log_printf(LOG_CHAN_DOS, "close file '%d'", cpu_regs.bx);
+#endif
 }
 
 bool on_dos_int(void) {

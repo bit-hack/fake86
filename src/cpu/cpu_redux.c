@@ -23,6 +23,15 @@
 #include "cpu_mod_rm.h"
 
 
+//
+static bool _did_run_temp = true;
+
+
+// forward declare opcode table
+typedef void (*opcode_t)(const uint8_t *code);
+static const opcode_t _op_table[];
+
+
 // shift register used to delay STI until next instruction
 static uint8_t _sti_sr = 0;
 
@@ -116,7 +125,13 @@ static inline uint8_t _get_pf(void) {
 }
 
 // set zero and sign flags
-static inline void _set_zf_sf(const uint16_t val) {
+static inline void _set_zf_sf_b(const uint16_t val) {
+  cpu_flags.zf = (val == 0);
+  cpu_flags.sf = (val & 0x80) ? 1 : 0;
+}
+
+// set zero and sign flags
+static inline void _set_zf_sf_w(const uint16_t val) {
   cpu_flags.zf = (val == 0);
   cpu_flags.sf = (val & 0x8000) ? 1 : 0;
 }
@@ -135,7 +150,6 @@ OPCODE(_07) {
 
 // PUSH CS - push segment register CS
 OPCODE(_0E) {
-  //XXX: suggested this is an illegal operation?
   _pushw(cpu_regs.cs);
   _step_ip(1);
 }
@@ -164,15 +178,89 @@ OPCODE(_1F) {
   _step_ip(1);
 }
 
-#define INC(REG)                                                              \
-{                                                                             \
-  cpu_flags.of = (REG == 0x7fff);                                             \
-  cpu_flags.af = (REG & 0x0f) == 0x0f;                                        \
-  REG += 1;                                                                   \
-  _set_zf_sf(REG);                                                            \
-  _set_pf(REG);                                                               \
-  _step_ip(1);                                                                \
+// Prefix - Segment Override ES
+OPCODE(_26) {
+  _did_run_temp = false;  // XXX: remove
+  // backup seg regs
+  const uint32_t ss = cpu_regs.ss;
+  const uint32_t ds = cpu_regs.ds;
+  // modify segment register
+  cpu_regs.ss = cpu_regs.es;
+  cpu_regs.ds = cpu_regs.es;
+  // dispatch next opcode
+  if (_op_table[code[1]]) {  // XXX: remove
+    _step_ip(1);
+    _op_table[code[1]](code + 1);
+    _did_run_temp = true;  // XXX: remove
+  }
+  // restore segment addresses
+  cpu_regs.ss = ss;
+  cpu_regs.ds = ds;
 }
+
+// Prefix - Segment Override CS
+OPCODE(_2E) {
+  _did_run_temp = false;  // XXX: remove
+  // backup seg regs
+  const uint32_t ss = cpu_regs.ss;
+  const uint32_t ds = cpu_regs.ds;
+  // modify segment register
+  cpu_regs.ss = cpu_regs.cs;
+  cpu_regs.ds = cpu_regs.cs;
+  // dispatch next opcode
+  if (_op_table[code[1]]) {  // XXX: remove
+    _step_ip(1);
+    _op_table[code[1]](code + 1);
+    _did_run_temp = true;  // XXX: remove
+  }
+  // restore segment addresses
+  cpu_regs.ss = ss;
+  cpu_regs.ds = ds;
+}
+
+// Prefix - Segment Override SS
+OPCODE(_36) {
+  _did_run_temp = false;  // XXX: remove
+  // backup seg regs
+  const uint32_t ds = cpu_regs.ds;
+  // modify segment register
+  cpu_regs.ds = cpu_regs.ss;
+  // dispatch next opcode
+  if (_op_table[code[1]]) {  // XXX: remove
+    _step_ip(1);
+    _op_table[code[1]](code + 1);
+    _did_run_temp = true;  // XXX: remove
+  }
+  // restore segment addresses
+  cpu_regs.ds = ds;
+}
+
+// Prefix - Segment Override DS
+OPCODE(_3E) {
+  _did_run_temp = false;  // XXX: remove
+  // backup seg regs
+  const uint32_t ss = cpu_regs.ss;
+  // modify segment register
+  cpu_regs.ss = cpu_regs.ds;
+  // dispatch next opcode
+  if (_op_table[code[1]]) {  // XXX: remove
+    _step_ip(1);
+    _op_table[code[1]](code + 1);
+    _did_run_temp = true;  // XXX: remove
+  }
+  // restore segment addresses
+  cpu_regs.ss = ss;
+}
+
+#define INC(REG)                                                              \
+  {                                                                           \
+    cpu_flags.of = (REG == 0x7fff);                                           \
+    cpu_flags.af = (REG & 0x0f) == 0x0f;                                      \
+    REG += 1;                                                                 \
+    _set_zf_sf_w(REG);                                                        \
+    _set_pf(REG);                                                             \
+    _step_ip(1);                                                              \
+  }
 
 // INC AX - increment register
 OPCODE(_40) {
@@ -221,7 +309,7 @@ OPCODE(_47) {
     cpu_flags.of = (REG == 0x8000);                                           \
     cpu_flags.af = (REG & 0x0f) == 0x0;                                       \
     REG -= 1;                                                                 \
-    _set_zf_sf(REG);                                                          \
+    _set_zf_sf_w(REG);                                                          \
     _set_pf(REG);                                                             \
     _step_ip(1);                                                              \
   }
@@ -452,7 +540,6 @@ OPCODE(_7A) {
   }
 }
 
-
 // JNP - jump not parity
 OPCODE(_7B) {
   _step_ip(2);
@@ -467,6 +554,66 @@ OPCODE(_7E) {
   if (cpu_flags.zf || (cpu_flags.sf != cpu_flags.of)) {
     cpu_regs.ip += GET_CODE(int8_t, 1);
   }
+}
+
+#define TEST_B(TMP)                                                           \
+  {                                                                           \
+    _set_zf_sf_b(TMP);                                                        \
+    _set_pf(TMP);                                                             \
+    cpu_flags.cf = 0;                                                         \
+    cpu_flags.of = 0;                                                         \
+  }
+
+// TEST - r/m8, r8
+OPCODE(_84) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_regb(m.reg);
+  const uint8_t res = lhs & rhs;
+  TEST_B(res);
+  // step instruction pointer
+  _step_ip(1 + m.num_bytes);
+}
+
+#define TEST_W(TMP)                                                           \
+  {                                                                           \
+    _set_zf_sf_w(TMP);                                                        \
+    _set_pf(TMP);                                                             \
+    cpu_flags.cf = 0;                                                         \
+    cpu_flags.of = 0;                                                         \
+  }
+
+// TEST - r/m16, r16
+OPCODE(_85) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_regw(m.reg);
+  const uint16_t res = lhs & rhs;
+  TEST_W(res);
+  // step instruction pointer
+  _step_ip(1 + m.num_bytes);
+}
+
+// MOV - r/m8, r8
+OPCODE(_88) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  // do the transfer
+  _write_rm_b(&m, _get_regb(m.reg));
+  // step instruction pointer
+  _step_ip(1 + m.num_bytes);
+}
+
+// MOV - r/m16, r16
+OPCODE(_89) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  // do the transfer
+  _write_rm_w(&m, _get_regw(m.reg));
+  // step instruction pointer
+  _step_ip(1 + m.num_bytes);
 }
 
 // NOP - no operation (XCHG AX AX)
@@ -534,6 +681,22 @@ OPCODE(_99) {
 // WAIT - wait for test pin assertion
 OPCODE(_9B) {
   _step_ip(1);
+}
+
+// TEST AL, imm8
+OPCODE(_A8) {
+  const uint8_t imm = GET_CODE(uint8_t, 1);
+  const uint8_t res = cpu_regs.al & imm;
+  TEST_B(res);
+  _step_ip(2);
+}
+
+// TEST AX, imm16
+OPCODE(_A9) {
+  const uint16_t imm = GET_CODE(uint16_t, 1);
+  const uint16_t res = cpu_regs.ax & imm;
+  TEST_W(res);
+  _step_ip(3);
 }
 
 // RET - near return and add to stack pointer
@@ -646,22 +809,20 @@ OPCODE(_FD) {
   _step_ip(1);
 }
 
-typedef void (*opcode_t)(const uint8_t *code);
-
 #define ___ 0
 static const opcode_t _op_table[256] = {
 // 00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
   ___, ___, ___, ___, ___, ___, _06, _07, ___, ___, ___, ___, ___, ___, _0E, ___, // 00
   ___, ___, ___, ___, ___, ___, _16, _17, ___, ___, ___, ___, ___, ___, _1E, _1F, // 10
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 20
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 30
+  ___, ___, ___, ___, ___, ___, _26, ___, ___, ___, ___, ___, ___, ___, _2E, ___, // 20
+  ___, ___, ___, ___, ___, ___, _36, ___, ___, ___, ___, ___, ___, ___, _3E, ___, // 30
   _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, _4A, _4B, _4C, _4D, _4E, _4F, // 40
   _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _5A, _5B, _5C, _5D, _5E, _5F, // 50
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 60
   _70, _71, _72, _73, _74, _75, _76, _77, _78, _79, _7A, _7B, ___, ___, _7E, ___, // 70
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 80
+  ___, ___, ___, ___, _84, _85, ___, ___, _88, _89, ___, ___, ___, ___, ___, ___, // 80
   _90, _91, _92, _93, _94, _95, _96, _97, _98, _99, ___, _9B, ___, ___, ___, ___, // 90
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // A0
+  ___, ___, ___, ___, ___, ___, ___, ___, _A8, _A9, ___, ___, ___, ___, ___, ___, // A0
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // B0
   ___, ___, _C2, _C3, ___, ___, ___, ___, ___, ___, _CA, _CB, ___, ___, ___, ___, // C0
   ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // D0
@@ -685,7 +846,15 @@ bool cpu_redux_exec(void) {
   if (op == NULL) {
     return false;
   }
+
   // execute opcode
   op(code);
+
+  // this is a little hack for the segment override prefix so we can bail out
+  // if the next opcode wasnt implemented for us yet
+  if (_did_run_temp == false) {  // XXX: remove
+    return false;
+  }
+
   return true;
 }
