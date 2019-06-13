@@ -1,6 +1,7 @@
 /*
   Fake86: A portable, open-source 8086 PC emulator.
   Copyright (C)2010-2013 Mike Chambers
+               2019      Aidan Dodds
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License

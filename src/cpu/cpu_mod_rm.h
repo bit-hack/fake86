@@ -1,18 +1,19 @@
 /*
   Fake86: A portable, open-source 8086 PC emulator.
   Copyright (C)2010-2013 Mike Chambers
+               2019      Aidan Dodds
 
   This program is free software; you can redistribute it and/or
-  modify it under the terms cpu_flags.of the GNU General Public License
+  modify it under the terms of the GNU General Public License
   as published by the Free Software Foundation; either version 2
-  cpu_flags.of the License, or (at your option) any later version.
+  of the License, or (at your option) any later version.
 
   This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty cpu_flags.of
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
 
-  You should have received a copy cpu_flags.of the GNU General Public License
+  You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
   USA.
@@ -26,28 +27,24 @@
 #define GET_CODE(TYPE, OFFSET)                                                \
   (*(const TYPE *)(code + OFFSET))
 
-struct cpu_mod_rm_t {
+struct ptr_type_t {
+  union {
+    void*     ptr;
+    int16_t*  reg_s16;
+    uint16_t* reg_u16;
+    int8_t*   reg_s8;
+    uint8_t*  reg_u8;
+  };
+};
 
-  // TODO: store pointers to dst and src?
+struct cpu_mod_rm_t {
 
   uint8_t mod;
   uint8_t reg;
   uint8_t rm;
 
-#if 0
-  union {
-    uint16_t *reg_val_w;
-    uint8_t *reg_val_b;
-  };
-
-  union {
-    uint16_t *rm_val_w;
-    uint8_t *rm_val_b;
-  };
-#endif
-
-  // get reg field value
-  int32_t reg_val;
+  struct ptr_type_t rm_ptr;
+  struct ptr_type_t reg_ptr;
 
   // effective value/address
   int32_t rm_val;
@@ -58,6 +55,38 @@ struct cpu_mod_rm_t {
   // number of bytes following instruction opcode
   uint8_t num_bytes;
 };
+
+// get word register from REG field
+static inline void* _ptr_regw(const uint8_t num) {
+  switch (num) {
+  case 0: return &cpu_regs.ax;
+  case 1: return &cpu_regs.cx;
+  case 2: return &cpu_regs.dx;
+  case 3: return &cpu_regs.bx;
+  case 4: return &cpu_regs.sp;
+  case 5: return &cpu_regs.bp;
+  case 6: return &cpu_regs.si;
+  case 7: return &cpu_regs.di;
+  default:
+    UNREACHABLE();
+  }
+}
+
+// get byte register from REG field
+static inline void* _ptr_regb(const uint8_t num) {
+  switch (num) {
+  case 0: return &cpu_regs.al;
+  case 1: return &cpu_regs.cl;
+  case 2: return &cpu_regs.dl;
+  case 3: return &cpu_regs.bl;
+  case 4: return &cpu_regs.ah;
+  case 5: return &cpu_regs.ch;
+  case 6: return &cpu_regs.dh;
+  case 7: return &cpu_regs.bh;
+  default:
+    UNREACHABLE();
+  }
+}
 
 // get word register from REG field
 static inline uint16_t _get_regw(const uint8_t num) {
@@ -135,7 +164,7 @@ static inline void _decode_mod_rm(
   m->rm  = (modRegRM & 0x07) >> 0;
 
   // lookup the reg field
-  m->reg_val = is_word ? _get_regw(m->reg) : _get_regb(m->reg);
+  m->reg_ptr.ptr = is_word ? _ptr_regw(m->reg) : _ptr_regb(m->reg);
 
   // inital decode of the rm field
   switch (m->mod) {
@@ -157,6 +186,8 @@ static inline void _decode_mod_rm(
     default:
       UNREACHABLE();
     }
+    // get a pointer to ram location
+    m->rm_ptr.ptr = RAM + m->rm_val;
     break;
   case 3:
     break;
@@ -183,10 +214,7 @@ static inline void _decode_mod_rm(
   case 3:
     m->num_bytes = 1;
     m->is_addr = false;
-#if 0
-    // TODO: if this is the dest then this doesnt quite make sense
-    m->rm_val = is_word ? _get_regw(m->rm) : _get_regb(m->rm);
-#endif
+    m->rm_ptr.ptr = is_word ? _ptr_regw(m->rm) : _ptr_regb(m->rm);
     break;
   default:
     UNREACHABLE();

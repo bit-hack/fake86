@@ -1,6 +1,7 @@
 /*
   Fake86: A portable, open-source 8086 PC emulator.
   Copyright (C)2010-2013 Mike Chambers
+               2019      Aidan Dodds
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -17,8 +18,6 @@
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
   USA.
 */
-
-/* parsecl.c: Fake86 command line parsing for runtime options. */
 
 #include "../common/common.h"
 #include "frontend.h"
