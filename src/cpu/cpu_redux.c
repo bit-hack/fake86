@@ -1,7 +1,6 @@
 /*
   Fake86: A portable, open-source 8086 PC emulator.
-  Copyright (C)2010-2013 Mike Chambers
-               2019      Aidan Dodds
+  Copyright (C)2019      Aidan Dodds
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -29,7 +28,7 @@ static bool _did_run_temp = true;
 
 // forward declare opcode table
 typedef void (*opcode_t)(const uint8_t *code);
-static const opcode_t _op_table[];
+static const opcode_t _op_table[256];
 
 
 // shift register used to delay STI until next instruction
@@ -508,7 +507,7 @@ OPCODE(_76) {
   }
 }
 
-// JS - jump if not below or equal
+// JA - jump if above
 OPCODE(_77) {
   _step_ip(2);
   if (!cpu_flags.cf && !cpu_flags.zf) {
@@ -548,10 +547,34 @@ OPCODE(_7B) {
   }
 }
 
+// JL - jump less than
+OPCODE(_7C) {
+  _step_ip(2);
+  if (cpu_flags.sf != cpu_flags.of) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JGE - jump greater than or equal
+OPCODE(_7D) {
+  _step_ip(2);
+  if (cpu_flags.sf == cpu_flags.of) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
 // JLE - jump if less or equal
 OPCODE(_7E) {
   _step_ip(2);
   if (cpu_flags.zf || (cpu_flags.sf != cpu_flags.of)) {
+    cpu_regs.ip += GET_CODE(int8_t, 1);
+  }
+}
+
+// JG - jump if greater
+OPCODE(_7F) {
+  _step_ip(2);
+  if (!((cpu_flags.sf != cpu_flags.of) || cpu_flags.zf)) {
     cpu_regs.ip += GET_CODE(int8_t, 1);
   }
 }
@@ -683,6 +706,34 @@ OPCODE(_9B) {
   _step_ip(1);
 }
 
+// MOV AL, [imm16]
+OPCODE(_A0) {
+  const uint16_t imm = GET_CODE(uint16_t, 1);
+  cpu_regs.al = read86((cpu_regs.ds << 4) + imm);
+  _step_ip(3);
+}
+
+// MOV AX, [imm16]
+OPCODE(_A1) {
+  const uint16_t imm = GET_CODE(uint16_t, 1);
+  cpu_regs.ax = readw86((cpu_regs.ds << 4) + imm);
+  _step_ip(3);
+}
+
+// MOV [imm16], AL
+OPCODE(_A2) {
+  const uint16_t imm = GET_CODE(uint16_t, 1);
+  write86((cpu_regs.ds << 4) + imm, cpu_regs.al);
+  _step_ip(3);
+}
+
+// MOV [imm16], AX
+OPCODE(_A3) {
+  const uint16_t imm = GET_CODE(uint16_t, 1);
+  writew86((cpu_regs.ds << 4) + imm, cpu_regs.ax);
+  _step_ip(3);
+}
+
 // TEST AL, imm8
 OPCODE(_A8) {
   const uint8_t imm = GET_CODE(uint8_t, 1);
@@ -711,6 +762,108 @@ OPCODE(_C3) {
   cpu_regs.ip = _popw();
 }
 
+// MOV al, imm8
+OPCODE(_B0) {
+  cpu_regs.al = GET_CODE(uint8_t, 1);
+  _step_ip(2);
+}
+
+// MOV cl, imm8
+OPCODE(_B1) {
+  cpu_regs.cl = GET_CODE(uint8_t, 1);
+  _step_ip(2);
+}
+
+// MOV dl, imm8
+OPCODE(_B2) {
+  cpu_regs.dl = GET_CODE(uint8_t, 1);
+  _step_ip(2);
+}
+
+// MOV bl, imm8
+OPCODE(_B3) {
+  cpu_regs.bl = GET_CODE(uint8_t, 1);
+  _step_ip(2);
+}
+
+// MOV ah, imm8
+OPCODE(_B4) {
+  cpu_regs.ah = GET_CODE(uint8_t, 1);
+  _step_ip(2);
+}
+
+// MOV ch, imm8
+OPCODE(_B5) {
+  cpu_regs.ch = GET_CODE(uint8_t, 1);
+  _step_ip(2);
+}
+
+// MOV dh, imm8
+OPCODE(_B6) {
+  cpu_regs.dh = GET_CODE(uint8_t, 1);
+  _step_ip(2);
+}
+
+// MOV bh, imm8
+OPCODE(_B7) {
+  cpu_regs.bh = GET_CODE(uint8_t, 1);
+  _step_ip(2);
+}
+
+// MOV ax, imm16
+OPCODE(_B8) {
+  cpu_regs.ax = GET_CODE(uint16_t, 1);
+  _step_ip(3);
+}
+
+// MOV cx, imm16
+OPCODE(_B9) {
+  cpu_regs.cx = GET_CODE(uint16_t, 1);
+  _step_ip(3);
+}
+
+// MOV dx, imm16
+OPCODE(_BA) {
+  cpu_regs.dx = GET_CODE(uint16_t, 1);
+  _step_ip(3);
+}
+
+// MOV bx, imm16
+OPCODE(_BB) {
+  cpu_regs.bx = GET_CODE(uint16_t, 1);
+  _step_ip(3);
+}
+
+// MOV sp, imm16
+OPCODE(_BC) {
+  cpu_regs.sp = GET_CODE(uint16_t, 1);
+  _step_ip(3);
+}
+
+// MOV bp, imm16
+OPCODE(_BD) {
+  cpu_regs.bp = GET_CODE(uint16_t, 1);
+  _step_ip(3);
+}
+
+// MOV si, imm16
+OPCODE(_BE) {
+  cpu_regs.si = GET_CODE(uint16_t, 1);
+  _step_ip(3);
+}
+
+// MOV di, imm16
+OPCODE(_BF) {
+  cpu_regs.di = GET_CODE(uint16_t, 1);
+  _step_ip(3);
+}
+
+// XLAT
+OPCODE(_D7) {
+  cpu_regs.al = read86((cpu_regs.ds << 4) + cpu_regs.bx + cpu_regs.al);
+  _step_ip(1);
+}
+
 // RETF - far return and add to stack pointer
 OPCODE(_CA) {
   const uint16_t disp16 = GET_CODE(uint16_t, 1);
@@ -731,6 +884,34 @@ OPCODE(_E3) {
   if (cpu_regs.cx == 0) {
     cpu_regs.ip += GET_CODE(int8_t, 1);
   }
+}
+
+// IN AL, port
+OPCODE(_E4) {
+  const uint8_t port = GET_CODE(uint8_t, 1);
+  cpu_regs.al = portin(port);
+  _step_ip(2);
+}
+
+// IN AX, port
+OPCODE(_E5) {
+  const uint8_t port = GET_CODE(uint8_t, 1);
+  cpu_regs.ax = portin16(port);
+  _step_ip(2);
+}
+
+// OUT AL, port
+OPCODE(_E6) {
+  const uint8_t port = GET_CODE(uint8_t, 1);
+  portout(port, cpu_regs.al);
+  _step_ip(2);
+}
+
+// OUT AX, port
+OPCODE(_E7) {
+  const uint8_t port = GET_CODE(uint8_t, 1);
+  portout16(port, cpu_regs.ax);
+  _step_ip(2);
 }
 
 // CALL disp16
@@ -757,6 +938,30 @@ OPCODE(_EA) {
 // JMP disp8 - jump with signed byte displacement
 OPCODE(_EB) {
   cpu_regs.ip += 2 + GET_CODE(int8_t, 1);
+}
+
+// IN AL, DX
+OPCODE(_EC) {
+  cpu_regs.al = portin(cpu_regs.dx);
+  _step_ip(1);
+}
+
+// IN AX, DX
+OPCODE(_ED) {
+  cpu_regs.ax = portin16(cpu_regs.dx);
+  _step_ip(1);
+}
+
+// OUT AL, DX
+OPCODE(_EE) {
+  portout(cpu_regs.dx, cpu_regs.al);
+  _step_ip(1);
+}
+
+// OUT AX, DX
+OPCODE(_EF) {
+  portout16(cpu_regs.dx, cpu_regs.ax);
+  _step_ip(1);
 }
 
 // LOCK - lock prefix
@@ -809,27 +1014,43 @@ OPCODE(_FD) {
   _step_ip(1);
 }
 
+// [00, 05] add   [08, 0D] or
+// [10, 15] adc   [18, 1D] sbb
+// [20, 25] and   [28, 2D] sub
+// [30, 35] xor   [38, 3D] cmp
+
+// [27] daa
+// [37] aaa
+
+// [86, 87] xchg
+// [A4, A7] movsb movw cmpsb cmpsw
+// [D4, D5] AAM AAD
+
+// [E0, E2] loopnz loopz loop
+
 #define ___ 0
+#define XXX 0
 static const opcode_t _op_table[256] = {
 // 00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
-  ___, ___, ___, ___, ___, ___, _06, _07, ___, ___, ___, ___, ___, ___, _0E, ___, // 00
+  ___, ___, ___, ___, ___, ___, _06, _07, ___, ___, ___, ___, ___, ___, _0E, XXX, // 00
   ___, ___, ___, ___, ___, ___, _16, _17, ___, ___, ___, ___, ___, ___, _1E, _1F, // 10
   ___, ___, ___, ___, ___, ___, _26, ___, ___, ___, ___, ___, ___, ___, _2E, ___, // 20
   ___, ___, ___, ___, ___, ___, _36, ___, ___, ___, ___, ___, ___, ___, _3E, ___, // 30
   _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, _4A, _4B, _4C, _4D, _4E, _4F, // 40
   _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _5A, _5B, _5C, _5D, _5E, _5F, // 50
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 60
-  _70, _71, _72, _73, _74, _75, _76, _77, _78, _79, _7A, _7B, ___, ___, _7E, ___, // 70
+  XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, // 60
+  _70, _71, _72, _73, _74, _75, _76, _77, _78, _79, _7A, _7B, _7C, _7D, _7E, _7F, // 70
   ___, ___, ___, ___, _84, _85, ___, ___, _88, _89, ___, ___, ___, ___, ___, ___, // 80
   _90, _91, _92, _93, _94, _95, _96, _97, _98, _99, ___, _9B, ___, ___, ___, ___, // 90
-  ___, ___, ___, ___, ___, ___, ___, ___, _A8, _A9, ___, ___, ___, ___, ___, ___, // A0
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // B0
-  ___, ___, _C2, _C3, ___, ___, ___, ___, ___, ___, _CA, _CB, ___, ___, ___, ___, // C0
-  ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // D0
-  ___, ___, ___, _E3, ___, ___, ___, ___, _E8, _E9, _EA, _EB, ___, ___, ___, ___, // E0
-  _F0, ___, ___, ___, ___, _F5, ___, ___, _F8, _F9, _FA, _FB, _FC, _FD, ___, ___, // F0
+  _A0, _A1, _A2, _A3, ___, ___, ___, ___, _A8, _A9, ___, ___, ___, ___, ___, ___, // A0
+  _B0, _B1, _B2, _B3, _B4, _B5, _B6, _B7, _B8, _B9, _BA, _BB, _BC, _BD, _BE, _BF, // B0
+  XXX, XXX, _C2, _C3, ___, ___, ___, ___, XXX, XXX, _CA, _CB, ___, ___, ___, ___, // C0
+  ___, ___, ___, ___, ___, ___, XXX, _D7, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, // D0
+  ___, ___, ___, _E3, _E4, _E5, _E6, _E7, _E8, _E9, _EA, _EB, _EC, _ED, _EE, _EF, // E0
+  _F0, XXX, ___, ___, ___, _F5, ___, ___, _F8, _F9, _FA, _FB, _FC, _FD, ___, ___, // F0
 };
 #undef ___
+#undef XXX
 
 bool cpu_redux_exec(void) {
 
