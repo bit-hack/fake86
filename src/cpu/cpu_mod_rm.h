@@ -40,7 +40,7 @@ struct cpu_mod_rm_t {
 };
 
 // get word register from REG field
-static inline uint16_t _get_regw(const uint8_t num) {
+static inline uint16_t _get_reg_w(const uint8_t num) {
   switch (num) {
   case 0: return cpu_regs.ax;
   case 1: return cpu_regs.cx;
@@ -56,7 +56,7 @@ static inline uint16_t _get_regw(const uint8_t num) {
 }
 
 // get byte register from REG field
-static inline uint8_t _get_regb(const uint8_t num) {
+static inline uint8_t _get_reg_b(const uint8_t num) {
   switch (num) {
   case 0: return cpu_regs.al;
   case 1: return cpu_regs.cl;
@@ -72,7 +72,7 @@ static inline uint8_t _get_regb(const uint8_t num) {
 }
 
 // set word register from REG field
-static inline void _set_regw(const uint8_t num, const uint16_t val) {
+static inline void _set_reg_w(const uint8_t num, const uint16_t val) {
   switch (num) {
   case 0: cpu_regs.ax = val; return;
   case 1: cpu_regs.cx = val; return;
@@ -88,7 +88,7 @@ static inline void _set_regw(const uint8_t num, const uint16_t val) {
 }
 
 // set byte register from REG field
-static inline void _set_regb(const uint8_t num, const uint8_t val) {
+static inline void _set_reg_b(const uint8_t num, const uint8_t val) {
   switch (num) {
   case 0: cpu_regs.al = val; return;
   case 1: cpu_regs.cl = val; return;
@@ -105,7 +105,7 @@ static inline void _set_regb(const uint8_t num, const uint8_t val) {
 
 static inline void _write_rm_b(struct cpu_mod_rm_t *m, const uint8_t v) {
   if (m->mod == 3) {
-    _set_regb(m->rm, v);
+    _set_reg_b(m->rm, v);
   }
   else {
     write86(m->ea, v);
@@ -114,7 +114,7 @@ static inline void _write_rm_b(struct cpu_mod_rm_t *m, const uint8_t v) {
 
 static inline void _write_rm_w(struct cpu_mod_rm_t *m, const uint16_t v) {
   if (m->mod == 3) {
-    _set_regw(m->rm, v);
+    _set_reg_w(m->rm, v);
   }
   else {
     writew86(m->ea, v);
@@ -122,11 +122,11 @@ static inline void _write_rm_w(struct cpu_mod_rm_t *m, const uint16_t v) {
 }
 
 static inline uint8_t _read_rm_b(struct cpu_mod_rm_t *m) {
-  return (m->mod == 3) ? _get_regb(m->rm) : read86(m->ea);
+  return (m->mod == 3) ? _get_reg_b(m->rm) : read86(m->ea);
 }
 
 static inline uint16_t _read_rm_w(struct cpu_mod_rm_t *m) {
-  return (m->mod == 3) ? _get_regw(m->rm) : readw86(m->ea);
+  return (m->mod == 3) ? _get_reg_w(m->rm) : readw86(m->ea);
 }
 
 static inline void _decode_mod_rm(

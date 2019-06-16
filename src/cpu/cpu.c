@@ -3114,7 +3114,7 @@ int32_t cpu_exec86(int32_t target) {
     case 0xE0: /* E0 LOOPNZ Jb */
       temp16 = signext(_read_code_u8());
       cpu_regs.cx = cpu_regs.cx - 1;
-      if ((cpu_regs.cx) && !cpu_flags.zf) {
+      if (cpu_regs.cx && !cpu_flags.zf) {
         cpu_regs.ip += temp16;
       }
       break;

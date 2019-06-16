@@ -37,6 +37,11 @@ static uint8_t _sti_sr = 0;
 #define OPCODE(NAME)                                                          \
   static void NAME (const uint8_t *code)
 
+// raise an interupt
+static inline void _raise_int(uint8_t num) {
+  intcall86(num);
+}
+
 // effective instruction pointer
 static inline uint32_t _eip(void) {
   return (cpu_regs.cs << 4) + cpu_regs.ip;
@@ -48,26 +53,26 @@ static inline uint32_t _esp(void) {
 }
 
 // push byte to stack
-static inline void _pushb(const uint8_t val) {
+static inline void _push_b(const uint8_t val) {
   cpu_regs.sp -= 1;
   *(uint8_t*)(RAM + _esp()) = val;
 }
 
 // push word to stack
-static inline void _pushw(const uint16_t val) {
+static inline void _push_w(const uint16_t val) {
   cpu_regs.sp -= 2;
   *(uint16_t*)(RAM + _esp()) = val;
 }
 
 // pop byte from stack
-static inline uint8_t _popb(void) {
+static inline uint8_t _pop_b(void) {
   const uint8_t out = *(const uint8_t*)(RAM + _esp());
   cpu_regs.sp += 1;
   return out;
 }
 
 // pop word from stack
-static inline uint16_t _popw(void) {
+static inline uint16_t _pop_w(void) {
   const uint16_t out = *(const uint16_t*)(RAM + _esp());
   cpu_regs.sp += 2;
   return out;
@@ -124,7 +129,7 @@ static inline uint8_t _get_pf(void) {
 }
 
 // set zero and sign flags
-static inline void _set_zf_sf_b(const uint16_t val) {
+static inline void _set_zf_sf_b(const uint8_t val) {
   cpu_flags.zf = (val == 0);
   cpu_flags.sf = (val & 0x80) ? 1 : 0;
 }
@@ -135,45 +140,113 @@ static inline void _set_zf_sf_w(const uint16_t val) {
   cpu_flags.sf = (val & 0x8000) ? 1 : 0;
 }
 
+#define ADD_FLAGS_B(lhs, rhs, res)                                            \
+  {                                                                           \
+    const uint8_t res = lhs + rhs;                                            \
+    _set_zf_sf_b(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs + rhs) > 0xff) ? 1 : 0;                              \
+    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
+    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x80) == 0x80) ? 1 : 0;      \
+  }
+
+#define ADD_FLAGS_W(lhs, rhs, res)                                            \
+  {                                                                           \
+    const uint16_t res = lhs + rhs;                                           \
+    _set_zf_sf_w(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs + rhs) > 0xffff) ? 1 : 0;                            \
+    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
+    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x8000) == 0x8000) ? 1 : 0;  \
+  }
+
+// ADD m/r, reg  (byte)
+OPCODE(_00) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs + rhs;
+  ADD_FLAGS_B(lhs, rhs, tmp);
+  _write_rm_b(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// ADD m/r, reg  (word)
+OPCODE(_01) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs + rhs;
+  ADD_FLAGS_W(lhs, rhs, tmp);
+  _write_rm_w(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// ADD reg, m/r  (byte)
+OPCODE(_02) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs + rhs;
+  ADD_FLAGS_B(lhs, rhs, tmp);
+  _set_reg_b(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// ADD reg, m/r  (word)
+OPCODE(_03) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs + rhs;
+  ADD_FLAGS_W(lhs, rhs, tmp);
+  _set_reg_w(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
 // PUSH ES - push segment register ES
 OPCODE(_06) {
-  _pushw(cpu_regs.es);
+  _push_w(cpu_regs.es);
   _step_ip(1);
 }
 
 // POP ES - pop segment register ES
 OPCODE(_07) {
-  cpu_regs.es = _popw();
+  cpu_regs.es = _pop_w();
   _step_ip(1);
 }
 
 // PUSH CS - push segment register CS
 OPCODE(_0E) {
-  _pushw(cpu_regs.cs);
+  _push_w(cpu_regs.cs);
   _step_ip(1);
 }
 
 // PUSH SS - push segment register SS
 OPCODE(_16) {
-  _pushw(cpu_regs.ss);
+  _push_w(cpu_regs.ss);
   _step_ip(1);
 }
 
 // POP SS - pop segment register SS
 OPCODE(_17) {
-  cpu_regs.ss = _popw();
+  cpu_regs.ss = _pop_w();
   _step_ip(1);
 }
 
 // PUSH DS - push segment register DS
 OPCODE(_1E) {
-  _pushw(cpu_regs.ds);
+  _push_w(cpu_regs.ds);
   _step_ip(1);
 }
 
 // POP DS - pop segment register DS
 OPCODE(_1F) {
-  cpu_regs.ds = _popw();
+  cpu_regs.ds = _pop_w();
   _step_ip(1);
 }
 
@@ -308,7 +381,7 @@ OPCODE(_47) {
     cpu_flags.of = (REG == 0x8000);                                           \
     cpu_flags.af = (REG & 0x0f) == 0x0;                                       \
     REG -= 1;                                                                 \
-    _set_zf_sf_w(REG);                                                          \
+    _set_zf_sf_w(REG);                                                        \
     _set_pf(REG);                                                             \
     _step_ip(1);                                                              \
   }
@@ -357,97 +430,97 @@ OPCODE(_4F) {
 
 // PUSH AX - push register
 OPCODE(_50) {
-  _pushw(cpu_regs.ax);
+  _push_w(cpu_regs.ax);
   _step_ip(1);
 }
 
 // PUSH CX - push register
 OPCODE(_51) {
-  _pushw(cpu_regs.cx);
+  _push_w(cpu_regs.cx);
   _step_ip(1);
 }
 
 // PUSH DX - push register
 OPCODE(_52) {
-  _pushw(cpu_regs.dx);
+  _push_w(cpu_regs.dx);
   _step_ip(1);
 }
 
 // PUSH BX - push register
 OPCODE(_53) {
-  _pushw(cpu_regs.bx);
+  _push_w(cpu_regs.bx);
   _step_ip(1);
 }
 
 // PUSH SP - push register
 OPCODE(_54) {
-  _pushw(cpu_regs.sp);
+  _push_w(cpu_regs.sp);
   _step_ip(1);
 }
 
 // PUSH BP - push register
 OPCODE(_55) {
-  _pushw(cpu_regs.bp);
+  _push_w(cpu_regs.bp);
   _step_ip(1);
 }
 
 // PUSH SI - push register
 OPCODE(_56) {
-  _pushw(cpu_regs.si);
+  _push_w(cpu_regs.si);
   _step_ip(1);
 }
 
 // PUSH DI - push register
 OPCODE(_57) {
-  _pushw(cpu_regs.di);
+  _push_w(cpu_regs.di);
   _step_ip(1);
 }
 
 // POP AX - pop register
 OPCODE(_58) {
-  cpu_regs.ax = _popw();
+  cpu_regs.ax = _pop_w();
   _step_ip(1);
 }
 
 // POP CX - pop register
 OPCODE(_59) {
-  cpu_regs.cx = _popw();
+  cpu_regs.cx = _pop_w();
   _step_ip(1);
 }
 
 // POP DX - pop register
 OPCODE(_5A) {
-  cpu_regs.dx = _popw();
+  cpu_regs.dx = _pop_w();
   _step_ip(1);
 }
 
 // POP BX - pop register
 OPCODE(_5B) {
-  cpu_regs.bx = _popw();
+  cpu_regs.bx = _pop_w();
   _step_ip(1);
 }
 
 // POP SP - pop register
 OPCODE(_5C) {
-  cpu_regs.sp = _popw();
+  cpu_regs.sp = _pop_w();
   _step_ip(1);
 }
 
 // POP BP - pop register
 OPCODE(_5D) {
-  cpu_regs.bp = _popw();
+  cpu_regs.bp = _pop_w();
   _step_ip(1);
 }
 
 // POP SI - pop register
 OPCODE(_5E) {
-  cpu_regs.si = _popw();
+  cpu_regs.si = _pop_w();
   _step_ip(1);
 }
 
 // POP DI - pop register
 OPCODE(_5F) {
-  cpu_regs.di = _popw();
+  cpu_regs.di = _pop_w();
   _step_ip(1);
 }
 
@@ -534,7 +607,7 @@ OPCODE(_79) {
 // JP - jump parity
 OPCODE(_7A) {
   _step_ip(2);
-  if (cpu_flags.pf) {
+  if (_get_pf()) {
     cpu_regs.ip += GET_CODE(int8_t, 1);
   }
 }
@@ -542,7 +615,7 @@ OPCODE(_7A) {
 // JNP - jump not parity
 OPCODE(_7B) {
   _step_ip(2);
-  if (!cpu_flags.pf) {
+  if (!_get_pf()) {
     cpu_regs.ip += GET_CODE(int8_t, 1);
   }
 }
@@ -592,7 +665,7 @@ OPCODE(_84) {
   struct cpu_mod_rm_t m;
   _decode_mod_rm(code, &m);
   const uint8_t lhs = _read_rm_b(&m);
-  const uint8_t rhs = _get_regb(m.reg);
+  const uint8_t rhs = _get_reg_b(m.reg);
   const uint8_t res = lhs & rhs;
   TEST_B(res);
   // step instruction pointer
@@ -612,7 +685,7 @@ OPCODE(_85) {
   struct cpu_mod_rm_t m;
   _decode_mod_rm(code, &m);
   const uint16_t lhs = _read_rm_w(&m);
-  const uint16_t rhs = _get_regw(m.reg);
+  const uint16_t rhs = _get_reg_w(m.reg);
   const uint16_t res = lhs & rhs;
   TEST_W(res);
   // step instruction pointer
@@ -624,7 +697,7 @@ OPCODE(_88) {
   struct cpu_mod_rm_t m;
   _decode_mod_rm(code, &m);
   // do the transfer
-  _write_rm_b(&m, _get_regb(m.reg));
+  _write_rm_b(&m, _get_reg_b(m.reg));
   // step instruction pointer
   _step_ip(1 + m.num_bytes);
 }
@@ -634,7 +707,7 @@ OPCODE(_89) {
   struct cpu_mod_rm_t m;
   _decode_mod_rm(code, &m);
   // do the transfer
-  _write_rm_w(&m, _get_regw(m.reg));
+  _write_rm_w(&m, _get_reg_w(m.reg));
   // step instruction pointer
   _step_ip(1 + m.num_bytes);
 }
@@ -753,13 +826,13 @@ OPCODE(_A9) {
 // RET - near return and add to stack pointer
 OPCODE(_C2) {
   const uint16_t disp16 = GET_CODE(uint16_t, 1);
-  cpu_regs.ip = _popw();
+  cpu_regs.ip = _pop_w();
   cpu_regs.sp += disp16;
 }
 
 // RET - near return
 OPCODE(_C3) {
-  cpu_regs.ip = _popw();
+  cpu_regs.ip = _pop_w();
 }
 
 // MOV al, imm8
@@ -858,6 +931,19 @@ OPCODE(_BF) {
   _step_ip(3);
 }
 
+// INT 3
+OPCODE(_CC) {
+  _step_ip(1);
+  _raise_int(3);
+}
+
+// INT imm8
+OPCODE(_CD) {
+  _step_ip(2);
+  const uint8_t num = GET_CODE(uint8_t, 1);
+  _raise_int(num);
+}
+
 // XLAT
 OPCODE(_D7) {
   cpu_regs.al = read86((cpu_regs.ds << 4) + cpu_regs.bx + cpu_regs.al);
@@ -867,15 +953,45 @@ OPCODE(_D7) {
 // RETF - far return and add to stack pointer
 OPCODE(_CA) {
   const uint16_t disp16 = GET_CODE(uint16_t, 1);
-  cpu_regs.ip = _popw();
-  cpu_regs.cs = _popw();
+  cpu_regs.ip = _pop_w();
+  cpu_regs.cs = _pop_w();
   cpu_regs.sp += disp16;
 }
 
 // RETF - far return
 OPCODE(_CB) {
-  cpu_regs.ip = _popw();
-  cpu_regs.cs = _popw();
+  cpu_regs.ip = _pop_w();
+  cpu_regs.cs = _pop_w();
+}
+
+// LOOPNZ
+OPCODE(_E0) {
+  _step_ip(2);
+  --cpu_regs.cx;
+  if (cpu_regs.cx && !cpu_flags.zf) {
+    const int8_t disp = GET_CODE(int8_t, 1);
+    cpu_regs.ip += disp;
+  }
+}
+
+// LOOPZ
+OPCODE(_E1) {
+  _step_ip(2);
+  --cpu_regs.cx;
+  if (cpu_regs.cx && cpu_flags.zf) {
+    const int8_t disp = GET_CODE(int8_t, 1);
+    cpu_regs.ip += disp;
+  }
+}
+
+// LOOP
+OPCODE(_E2) {
+  _step_ip(2);
+  --cpu_regs.cx;
+  if (cpu_regs.cx) {
+    const int8_t disp = GET_CODE(int8_t, 1);
+    cpu_regs.ip += disp;
+  }
 }
 
 // JCXZ - jump if CX is zero
@@ -919,7 +1035,7 @@ OPCODE(_E8) {
   // step over call
   _step_ip(3);
   // push return address
-  _pushw(cpu_regs.ip);
+  _push_w(cpu_regs.ip);
   // set new ip
   cpu_regs.ip += GET_CODE(uint16_t, 1);
 }
@@ -1032,7 +1148,7 @@ OPCODE(_FD) {
 #define XXX 0
 static const opcode_t _op_table[256] = {
 // 00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
-  ___, ___, ___, ___, ___, ___, _06, _07, ___, ___, ___, ___, ___, ___, _0E, XXX, // 00
+  _00, _01, _02, _03, ___, ___, _06, _07, ___, ___, ___, ___, ___, ___, _0E, XXX, // 00
   ___, ___, ___, ___, ___, ___, _16, _17, ___, ___, ___, ___, ___, ___, _1E, _1F, // 10
   ___, ___, ___, ___, ___, ___, _26, ___, ___, ___, ___, ___, ___, ___, _2E, ___, // 20
   ___, ___, ___, ___, ___, ___, _36, ___, ___, ___, ___, ___, ___, ___, _3E, ___, // 30
@@ -1044,9 +1160,9 @@ static const opcode_t _op_table[256] = {
   _90, _91, _92, _93, _94, _95, _96, _97, _98, _99, ___, _9B, ___, ___, ___, ___, // 90
   _A0, _A1, _A2, _A3, ___, ___, ___, ___, _A8, _A9, ___, ___, ___, ___, ___, ___, // A0
   _B0, _B1, _B2, _B3, _B4, _B5, _B6, _B7, _B8, _B9, _BA, _BB, _BC, _BD, _BE, _BF, // B0
-  XXX, XXX, _C2, _C3, ___, ___, ___, ___, XXX, XXX, _CA, _CB, ___, ___, ___, ___, // C0
+  XXX, XXX, _C2, _C3, ___, ___, ___, ___, XXX, XXX, _CA, _CB, _CC, _CD, ___, ___, // C0
   ___, ___, ___, ___, ___, ___, XXX, _D7, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, // D0
-  ___, ___, ___, _E3, _E4, _E5, _E6, _E7, _E8, _E9, _EA, _EB, _EC, _ED, _EE, _EF, // E0
+  _E0, _E1, _E2, _E3, _E4, _E5, _E6, _E7, _E8, _E9, _EA, _EB, _EC, _ED, _EE, _EF, // E0
   _F0, XXX, ___, ___, ___, _F5, ___, ___, _F8, _F9, _FA, _FB, _FC, _FD, ___, ___, // F0
 };
 #undef ___

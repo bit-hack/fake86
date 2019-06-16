@@ -22,7 +22,9 @@
 #include "../common/common.h"
 #include "../cpu/cpu.h"
 
-void intcall86(uint8_t intnum) {
+void intcall86(uint16_t intnum) {
+
+  assert(intnum <= 0xff);
 
   switch (intnum) {
   // Video services
