@@ -34,7 +34,9 @@ static bool _disk_img_eject(
   void *self) {
   assert(self);
   struct disk_img_t *img = (struct disk_img_t*)self;
-  fclose(img->fd);
+  if (img->fd) {
+    fclose(img->fd);
+  }
   free(img);
   return true;
 }
@@ -45,6 +47,7 @@ static bool _disk_img_seek(
   struct disk_img_t *img = (struct disk_img_t*)self;
   fseek(img->fd, offset, SEEK_SET);
   img->seek_pos = offset;
+  return true;
 }
 
 static bool _disk_img_read(
@@ -101,7 +104,143 @@ bool _disk_img_open(
   out->drive_num = num;
   out->size_bytes = size;
 
-  // TODO: disk geometry helper
+  if (num >= 128) {
+    return _geom_hard_disk(out);
+  }
+  else {
+    return _geom_floppy_disk(out);
+  }
+}
+
+
+struct vhd_footer_t {
+
+  // "conectix"
+  char cookie[8];
+
+  // 0  - No features enabled
+  // 1  - Temporary
+  // 2  - Reserved
+  uint32_t features;
+
+  // should be 0x00010000
+  uint32_t version;
+
+  // 0xFFFFFFFF for fixed disks
+  uint64_t offset;
+  uint32_t timestamp;
+
+  // "vs  "  - virtual server
+  // "vpc "  - virtual pc
+  uint32_t creat_app;
+  uint32_t creat_ver;
+  uint32_t creat_os;
+  uint64_t orig_size;
+
+  // size of hard drive in bytes
+  uint64_t size;
+
+  // byte 0-1  - cylinders
+  // byte 2    - heads
+  // byte 3    - sectors
+  uint8_t geometry[4];
+
+  // 2  - fixed disk
+  uint32_t type;
+
+  // inverted sum of hard disk footer bytes (without checksum)
+  uint32_t checksum;
+  uint8_t  uuid[16];
+  uint8_t  state;
+
+  // should be 427 bytes reserved after this
+};
+
+
+static void _endian(void *ptr, uint32_t size) {
+  uint8_t* x = (uint8_t*)ptr;
+  uint8_t* y = x + (size - 1);
+  for (; x < y; ++x, --y) {
+    const uint8_t t = *x;
+    *x = *y;
+    *y = t;
+  }
+}
+
+bool _disk_vhd_open(
+  const uint8_t num, const char *path, struct disk_info_t *out) {
+
+  assert(path && out);
+
+  // open disk image file
+  FILE *fd = fopen(path, "r+b");
+  if (!fd) {
+    return false;
+  }
+
+  // get drive size
+  if (fseek(fd, -512, SEEK_END) != 0) {
+    fclose(fd);
+    return false;
+  }
+
+  struct vhd_footer_t footer;
+
+  if (fread(&footer, 1, sizeof(footer), fd) != sizeof(footer)) {
+    fclose(fd);
+    return false;
+  }
+
+  if (memcmp(footer.cookie, "conectix", 8)) {
+    fclose(fd);
+    return false;
+  }
+
+  _endian(&footer.type, 4);
+  if (footer.type != 2) {
+    fclose(fd);
+    return false;
+  }
+
+  _endian(&footer.offset, 8);
+  if (footer.offset != ~0ull) {
+    fclose(fd);
+    return false;
+  }
+
+  _endian(&footer.size, 8);
+
+  const uint8_t *g = footer.geometry;
+
+  const uint16_t cyls = g[1] | (g[0] << 8);
+  const uint8_t heads = g[2];
+  const uint8_t sects = g[3];
+
+  const uint32_t size = 512 * sects * cyls * heads;
+
+  // allocate self structure
+  struct disk_img_t *img =
+    (struct disk_img_t*)malloc(sizeof(struct disk_img_t));
+  memset(img, 0, sizeof(struct disk_img_t));
+
+  img->fd = fd;
+  img->seek_pos = 0;
+  fseek(fd, 0, SEEK_SET);
+
+  // populate disk structure
+  out->self = img;
+  out->eject = _disk_img_eject;
+  out->seek  = _disk_img_seek;
+  out->read  = _disk_img_read;
+  out->write = _disk_img_write;
+
+  out->drive_num = num;
+  out->size_bytes = size;
+
+  out->sector_size = 512;
+  out->cyls = cyls;
+  out->sects = sects;
+  out->heads = heads;
 
   return true;
 }

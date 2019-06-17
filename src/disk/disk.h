@@ -60,3 +60,7 @@ bool _disk_img_open(
 
 bool _disk_vhd_open(
   const uint8_t num, const char *path, struct disk_info_t *out);
+
+
+bool _geom_hard_disk(struct disk_info_t *d);
+bool _geom_floppy_disk(struct disk_info_t *d);
