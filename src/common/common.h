@@ -213,7 +213,7 @@ void port_state_save(FILE *fd);
 void port_state_load(FILE *fd);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- interrupt.c
-extern void intcall86(uint8_t intnum);
+extern void intcall86(uint16_t intnum);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- rom.c
 bool rom_insert();

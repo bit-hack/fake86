@@ -45,6 +45,12 @@ file(GLOB SOURCE_F86
 add_library(lib_fake86 ${SOURCE_F86})
 
 
+file(GLOB SOURCE_DISK
+    src/disk/*.h
+    src/disk/*.c)
+add_library(lib_disk ${SOURCE_DISK})
+
+
 file(GLOB SOURCE_FRONTEND
     src/frontend/*.h
     src/frontend/*.c)
@@ -57,4 +63,6 @@ target_link_libraries(fake86
     lib_cpu
     lib_video
     lib_audio
+    lib_disk
     ${SDL_LIBRARY})
+

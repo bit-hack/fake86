@@ -31,6 +31,7 @@
 
 #include "../common/common.h"
 #include "../frontend/frontend.h"
+#include "disk.h"
 
 
 #if DISK_PASS_THROUGH
@@ -40,6 +41,7 @@
 #endif
 
 #include "../cpu/cpu.h"
+
 
 
 enum disk_type_t {
@@ -54,6 +56,87 @@ enum disk_type_t {
   // hard disk pass through
   disk_type_hdd_direct,
 };
+
+
+#define NUM_DISKS 16
+
+static struct disk_info_t _disk[NUM_DISKS];
+
+struct disk_info_t *_get_disk(const uint8_t num) {
+  for (int i=0; i < NUM_DISKS; ++i) {
+    struct disk_info_t *info = _disk + i;
+    if (info->drive_num == num) {
+      return info->eject ? info : NULL;
+    }
+  }
+  return NULL;
+}
+
+bool _eject(uint8_t num) {
+  struct disk_info_t *disk = _get_disk(num);
+  if (!disk) {
+    return false;
+  }
+  if (disk->eject(disk->self)) {
+    memset(disk, 0, sizeof(struct disk_info_t));
+  }
+  return true;
+}
+
+bool _seek(const uint8_t num, const uint32_t offset) {
+  struct disk_info_t *disk = _get_disk(num);
+  if (!disk) {
+    return false;
+  }
+  return disk->seek(disk->self, offset);
+}
+
+bool _read(const uint8_t num, uint8_t *dst, const uint32_t count) {
+  struct disk_info_t *disk = _get_disk(num);
+  if (!disk) {
+    return false;
+  }
+  return disk->read(disk->self, dst, count);
+}
+
+bool _write(const uint8_t num, const uint8_t *src, const uint32_t count) {
+  struct disk_info_t *disk = _get_disk(num);
+  if (!disk) {
+    return false;
+  }
+  return disk->write(disk->self, src, count);
+}
+
+bool _open(const uint8_t num, const char *path) {
+
+  _eject(num);
+
+  const char *ext = strrchr(path, '.');
+  if (ext == NULL) {
+    return false;
+  }
+
+  struct disk_info_t *disk = NULL;
+  for (int i=0; i<NUM_DISKS; ++i) {
+    if (_disk[i].eject == NULL) {
+      disk = _disk + i;
+      break;
+    }
+  }
+  if (disk == NULL) {
+    return false;
+  }
+
+  if (strcmp(ext, ".img") == 0) {
+    return _disk_img_open(num, path, disk);
+  }
+  if (strcmp(ext, ".vhd") == 0) {
+    return _disk_vhd_open(num, path, disk);
+  }
+  // TODO: raw drives
+
+  return false;
+}
 
 struct struct_drive {
   // disk drive type

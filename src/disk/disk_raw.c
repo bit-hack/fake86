@@ -19,40 +19,4 @@
   USA.
 */
 
-#include "../common/common.h"
-#include "../cpu/cpu.h"
-#include "../disk/disk.h"
-
-
-void intcall86(uint16_t intnum) {
-
-  assert(intnum <= 0xff);
-
-  switch (intnum) {
-  // Video services
-  case 0x10:
-    if (neo_int10_handler()) {
-      return;
-    }
-    break;
-  // Bootstrap loader interupt
-  case 0x19:
-    disk_bootstrap(intnum);
-    return;
-  // Disk services
-  case 0x13:
-  case 0xFD:
-    disk_int_handler(intnum);
-    return;
-  // DOS services
-  case 0x21:
-    if (on_dos_int()) {
-      return;
-    }
-    break;
-  }
-
-  // if interupt was not handled then let the CPU
-  // jump to the interupt handler 
-  cpu_prep_interupt(intnum);
-}
+#include "disk.h"

@@ -19,40 +19,29 @@
   USA.
 */
 
+#pragma once
+
+
 #include "../common/common.h"
-#include "../cpu/cpu.h"
-#include "../disk/disk.h"
 
 
-void intcall86(uint16_t intnum) {
+struct disk_info_t {
+  // delegates
+  bool (*eject)(void *self);
+  bool (*seek)(void *self, const uint32_t offset);
+  bool (*read)(void *self, uint8_t *dst, const uint32_t count);
+  bool (*write)(void *self, const uint8_t *src, const uint32_t count);
+  // drive instance
+  void *self;
+  // BIOS drive number
+  uint8_t drive_num;
+};
 
-  assert(intnum <= 0xff);
 
-  switch (intnum) {
-  // Video services
-  case 0x10:
-    if (neo_int10_handler()) {
-      return;
-    }
-    break;
-  // Bootstrap loader interupt
-  case 0x19:
-    disk_bootstrap(intnum);
-    return;
-  // Disk services
-  case 0x13:
-  case 0xFD:
-    disk_int_handler(intnum);
-    return;
-  // DOS services
-  case 0x21:
-    if (on_dos_int()) {
-      return;
-    }
-    break;
-  }
+void disk_int_handler(int intnum);
 
-  // if interupt was not handled then let the CPU
-  // jump to the interupt handler 
-  cpu_prep_interupt(intnum);
-}
+bool _disk_img_open(
+  const uint8_t num, const char *path, struct disk_info_t *out);
+
+bool _disk_vhd_open(
+  const uint8_t num, const char *path, struct disk_info_t *out);
