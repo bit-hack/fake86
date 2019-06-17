@@ -31,10 +31,25 @@ struct disk_info_t {
   bool (*seek)(void *self, const uint32_t offset);
   bool (*read)(void *self, uint8_t *dst, const uint32_t count);
   bool (*write)(void *self, const uint8_t *src, const uint32_t count);
+  bool (*tell)(void *self, uint32_t *out);
+
   // drive instance
   void *self;
+
   // BIOS drive number
   uint8_t drive_num;
+
+  // disk geometry
+  uint32_t sector_size;  // 512
+  uint32_t cyls;
+  uint32_t sects;
+  uint32_t heads;
+
+  // raw size in bytes
+  uint32_t size_bytes;
+
+  // disk status
+  uint8_t last_ah, last_cf;
 };
 
 

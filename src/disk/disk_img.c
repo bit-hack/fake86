@@ -26,7 +26,6 @@
 
 struct disk_img_t {
   FILE *fd;
-  uint32_t filesize;
   uint32_t seek_pos;
 };
 
@@ -62,6 +61,13 @@ static bool _disk_img_write(
   return fwrite(src, 1, count, img->fd) == count;
 }
 
+bool _disk_img_tell(void *self, uint32_t *out) {
+  assert(self);
+  struct disk_img_t *img = (struct disk_img_t*)self;
+  *out = img->seek_pos;
+  return true;
+}
+
 bool _disk_img_open(
   const uint8_t num, const char *path, struct disk_info_t *out) {
   assert(path && out);
@@ -83,7 +89,6 @@ bool _disk_img_open(
   memset(img, 0, sizeof(struct disk_img_t));
 
   img->fd = fd;
-  img->filesize = size;
   img->seek_pos = 0;
 
   // populate disk structure
@@ -92,7 +97,11 @@ bool _disk_img_open(
   out->seek  = _disk_img_seek;
   out->read  = _disk_img_read;
   out->write = _disk_img_write;
+
   out->drive_num = num;
+  out->size_bytes = size;
+
+  // TODO: disk geometry helper
 
   return true;
 }

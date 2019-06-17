@@ -107,6 +107,14 @@ bool _write(const uint8_t num, const uint8_t *src, const uint32_t count) {
   return disk->write(disk->self, src, count);
 }
 
+bool _tell(const uint8_t num, uint32_t *out) {
+  struct disk_info_t *disk = _get_disk(num);
+  if (!disk) {
+    return false;
+  }
+  return disk->tell(disk->self, out);
+}
+
 bool _open(const uint8_t num, const char *path) {
 
   _eject(num);
@@ -172,10 +180,14 @@ static struct struct_drive disk[256];
 
 
 bool disk_is_inserted(int num) {
+#if 1
+  return _get_disk(num) != NULL;
+#else
 #if 0
   return disk[num].inserted;
 #else
   return disk[num].type != disk_type_none;
+#endif
 #endif
 }
 
@@ -377,6 +389,9 @@ static bool disk_insert_raw(uint8_t drivenum, const char *filename) {
 }
 
 bool disk_insert(uint8_t drivenum, const char *filename) {
+#if 1
+  return _open(drivenum, filename);
+#else 
 #if DISK_PASS_THROUGH
   if (filename[0] == '\\' && filename[1] == '\\') {
     log_printf(LOG_CHAN_DISK, "mapping raw disk '%s' (%d)", filename,
@@ -393,9 +408,13 @@ bool disk_insert(uint8_t drivenum, const char *filename) {
                (int)drivenum);
     return disk_insert_file(drivenum, filename);
   }
+#endif
 }
 
 void disk_eject(uint8_t drivenum) {
+#if 1
+  _eject(drivenum);
+#else
   struct struct_drive *d = &disk[drivenum];
   if (!d->inserted) {
     return;
@@ -436,6 +455,7 @@ void disk_eject(uint8_t drivenum) {
   d->inserted = false;
   d->type = disk_type_none;
   d->filesize = 0;
+#endif
 }
 
 static bool _do_seek(struct struct_drive *d, uint32_t offset) {
@@ -587,9 +607,13 @@ static void _disk_read(uint8_t drivenum,
   if (fileoffset > d->filesize) {
     return;
   }
+#if 1
+  _seek(drivenum, fileoffset);
+#else
   if (!_do_seek(d, fileoffset)) {
     // ERROR
   }
+#endif
   uint32_t memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
   // for the readdisk function, we need to use write86 instead of directly
   // fread'ing into
@@ -598,10 +622,17 @@ static void _disk_read(uint8_t drivenum,
   // data from a disk over BIOS or other ROM code that it shouldn't be able to.
   uint32_t cursect = 0;
   for (; cursect < sectcount; cursect++) {
+#if 1
+    if (!_read(drivenum, sectorbuffer, 512)) {
+      // ERROR
+      break;
+    }
+#else
     if (!_do_read(d, sectorbuffer, 512)) {
       // ERROR
       break;
     }
+#endif
     for (uint32_t sectoffset = 0; sectoffset < 512; sectoffset++) {
       write86(memdest++, sectorbuffer[sectoffset]);
     }
@@ -633,19 +664,27 @@ static void _disk_write(uint8_t drivenum,
     // ERROR
     return;
   }
+#if 1
+  _seek(drivenum, fileoffset);
+#else
   if (!_do_seek(d, fileoffset)) {
     // ERROR
     return;
   }
+#endif
   memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
   for (cursect = 0; cursect < sectcount; cursect++) {
     for (sectoffset = 0; sectoffset < 512; sectoffset++) {
       sectorbuffer[sectoffset] = read86(memdest++);
     }
+#if 1
+    _write(drivenum, sectorbuffer, 512);
+#else
     if (!_do_write(d, sectorbuffer, 512)) {
       // ERROR
       return;
     }
+#endif
   }
   cpu_regs.al = (uint8_t)sectcount;
   cpu_flags.cf = 0;
@@ -725,6 +764,12 @@ static void _disk_get_params(void) {
 void disk_int_handler(int intnum) {
 
   const uint8_t drive_num = cpu_regs.dl;
+
+#if 1
+  if (!_get_disk(drive_num)) {
+    return;
+  }
+#endif
 
   switch (cpu_regs.ah) {
   case 0: // reset disk system
