@@ -75,6 +75,7 @@ bool _read(const uint8_t num, uint8_t *dst, const uint32_t count) {
   if (!disk) {
     return false;
   }
+  // TODO: bounds check
   return disk->read(disk->self, dst, count);
 }
 
