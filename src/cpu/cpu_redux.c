@@ -116,7 +116,8 @@ static const uint8_t parity[0x100] = {
     0, 1, 1, 0, 1, 0, 0, 1,
     1, 0, 0, 1, 0, 1, 1, 0,
     1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1};
+    0, 1, 1, 0, 1, 0, 0, 1
+};
 
 // set parity flag
 static inline void _set_pf(const uint16_t val) {
@@ -206,6 +207,26 @@ OPCODE(_03) {
   ADD_FLAGS_W(lhs, rhs, tmp);
   _set_reg_w(m.reg, tmp);
   _step_ip(1 + m.num_bytes);
+}
+
+// ADD al, imm8
+OPCODE(_04) {
+  const uint8_t lhs = cpu_regs.al;
+  const uint8_t rhs = GET_CODE(uint8_t, 1);
+  const uint8_t tmp = lhs + rhs;
+  ADD_FLAGS_B(lhs, rhs, tmp);
+  cpu_regs.al = tmp;
+  _step_ip(2);
+}
+
+// ADD ax, imm16
+OPCODE(_05) {
+  const uint16_t lhs = cpu_regs.ax;
+  const uint16_t rhs = GET_CODE(uint16_t, 1);
+  const uint16_t tmp = lhs + rhs;
+  ADD_FLAGS_W(lhs, rhs, tmp);
+  cpu_regs.ax = tmp;
+  _step_ip(3);
 }
 
 // PUSH ES - push segment register ES
@@ -1148,7 +1169,7 @@ OPCODE(_FD) {
 #define XXX 0
 static const opcode_t _op_table[256] = {
 // 00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
-  _00, _01, _02, _03, ___, ___, _06, _07, ___, ___, ___, ___, ___, ___, _0E, XXX, // 00
+  _00, _01, _02, _03, _04, _05, _06, _07, ___, ___, ___, ___, ___, ___, _0E, XXX, // 00
   ___, ___, ___, ___, ___, ___, _16, _17, ___, ___, ___, ___, ___, ___, _1E, _1F, // 10
   ___, ___, ___, ___, ___, ___, _26, ___, ___, ___, ___, ___, ___, ___, _2E, ___, // 20
   ___, ___, ___, ___, ___, ___, _36, ___, ___, ___, ___, ___, ___, ___, _3E, ___, // 30

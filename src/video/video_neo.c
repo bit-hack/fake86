@@ -431,6 +431,8 @@ static uint8_t ega_port_read(uint16_t portnum) {
   switch (portnum) {
   case 0x3c0:
     return _3c0_addr;
+  case 0x3c1:
+    return _ega_reg[_3c0_addr & 0x1f];
   case 0x3c4:
     return _vga_seq_addr;
   case 0x3c5:
@@ -444,6 +446,9 @@ static uint8_t ega_port_read(uint16_t portnum) {
     return _dac_mode_write;
   case 0x3c9:
     return _dac_data_read();
+  case 0x3cc:
+    // misc output register (read 0x3cc -> write 0x3c2)
+    return portram[0x3c2];
   case 0x3ce:
     return _vga_reg_addr;
   case 0x3cf:
@@ -488,7 +493,10 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
   case 0x3c9:
     _dac_data_write(value);
     break;
-
+  case 0x3cc:
+    // XXX: graphics 1 position register
+    portram[portnum] = value;
+    break;
   case 0x3ce:
     _vga_reg_addr = value;
     break;

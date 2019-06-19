@@ -32,14 +32,11 @@ static uint32_t makeupticks;
 static uint8_t i8259_port_read(uint16_t portnum) {
   switch (portnum & 1) {
   case 0:
-    if (i8259.readmode == 0)
-      return (i8259.irr);
-    else
-      return (i8259.isr);
+    return (i8259.readmode == 0) ? i8259.irr : i8259.isr;
   case 1: // read mask register
-    return (i8259.imr);
+    return i8259.imr;
   }
-  return (0);
+  return 0;
 }
 
 static void i8259_port_write(uint16_t portnum, uint8_t value) {

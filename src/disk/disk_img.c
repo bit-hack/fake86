@@ -175,13 +175,13 @@ bool _disk_vhd_open(
   // open disk image file
   FILE *fd = fopen(path, "r+b");
   if (!fd) {
-    log_printf("unable to open VHD file '%s'", path);
+    log_printf(LOG_CHAN_DISK, "unable to open VHD file '%s'", path);
     return false;
   }
 
   // get drive size
   if (fseek(fd, -512, SEEK_END) != 0) {
-    log_printf("unable to read VHD file footer");
+    log_printf(LOG_CHAN_DISK, "unable to read VHD file footer");
     fclose(fd);
     return false;
   }
@@ -189,7 +189,7 @@ bool _disk_vhd_open(
   struct vhd_footer_t footer;
 
   if (fread(&footer, 1, sizeof(footer), fd) != sizeof(footer)) {
-    log_printf("unable to read VHD file footer");
+    log_printf(LOG_CHAN_DISK, "unable to read VHD file footer");
     fclose(fd);
     return false;
   }

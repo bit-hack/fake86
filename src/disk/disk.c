@@ -192,10 +192,14 @@ bool disk_insert(uint8_t drivenum, const char *filename) {
 
 void disk_eject(uint8_t drivenum) {
 
-  hdcount -= (drivenum >= 128);
-  fdcount -= (drivenum <  128);
-
-  _eject(drivenum);
+  if (disk_is_inserted(drivenum)) {
+    hdcount -= (drivenum >= 128);
+    fdcount -= (drivenum < 128);
+    _eject(drivenum);
+  }
+  else {
+    RAM[0x441] |= 0x01;
+  }
 }
 
 static void _disk_read(uint8_t drivenum,
@@ -215,16 +219,16 @@ static void _disk_read(uint8_t drivenum,
   const uint32_t lba = ((uint32_t)cyl * (uint32_t)d->heads + (uint32_t)head) *
                          (uint32_t)d->sects + (uint32_t)sect - 1;
   const uint32_t fileoffset = lba * 512;
-  if (fileoffset > d->size_bytes) {
-    return;
+  uint32_t fileend = fileoffset + sectcount * 512;
+  if (fileend > d->size_bytes) {
+    goto error;
   }
   _seek(drivenum, fileoffset);
   uint32_t memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
   uint32_t cursect = 0;
   for (; cursect < sectcount; cursect++) {
     if (!_read(drivenum, sectorbuffer, 512)) {
-      // ERROR
-      break;
+      goto error;
     }
     for (uint32_t sectoffset = 0; sectoffset < 512; sectoffset++) {
       write86(memdest++, sectorbuffer[sectoffset]);
@@ -233,6 +237,12 @@ static void _disk_read(uint8_t drivenum,
   cpu_regs.al = cursect;
   cpu_flags.cf = 0;
   cpu_regs.ah = 0;
+error:
+  // error
+  cpu_regs.al = 1;  // bad command passed to driver
+  cpu_flags.cf = 1;
+  RAM[0x441] |= 0x01;
+  return;
 }
 
 static void _disk_write(uint8_t drivenum,
@@ -246,15 +256,15 @@ static void _disk_write(uint8_t drivenum,
   struct disk_info_t *d = _get_disk(drivenum);
   uint8_t sectorbuffer[512];
 
-  uint32_t memdest, lba, fileoffset, cursect, sectoffset;
+  uint32_t memdest, cursect, sectoffset;
   if (!sect || !d)
     return;
-  lba = ((uint32_t)cyl * (uint32_t)d->heads + (uint32_t)head) *
-          (uint32_t)d->sects + (uint32_t)sect - 1;
-  fileoffset = lba * 512;
-  if (fileoffset > d->size_bytes) {
-    // ERROR
-    return;
+  uint32_t lba = ((uint32_t)cyl * (uint32_t)d->heads + (uint32_t)head) *
+                  (uint32_t)d->sects + (uint32_t)sect - 1;
+  uint32_t fileoffset = lba * 512;
+  uint32_t fileend = fileoffset + sectcount * 512;
+  if (fileend > d->size_bytes) {
+    goto error;
   }
   _seek(drivenum, fileoffset);
   memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
@@ -262,11 +272,20 @@ static void _disk_write(uint8_t drivenum,
     for (sectoffset = 0; sectoffset < 512; sectoffset++) {
       sectorbuffer[sectoffset] = read86(memdest++);
     }
-    _write(drivenum, sectorbuffer, 512);
+    if (!_write(drivenum, sectorbuffer, 512)) {
+      goto error;
+    }
   }
   cpu_regs.al = (uint8_t)sectcount;
   cpu_flags.cf = 0;
   cpu_regs.ah = 0;
+  return;
+error:
+  // error
+  cpu_regs.al = 1;  // bad command passed to driver
+  cpu_flags.cf = 1;
+  RAM[0x441] |= 0x01;
+  return;
 }
 
 static void _disk_reset(void) {
@@ -276,10 +295,15 @@ static void _disk_reset(void) {
 }
 
 static void _disk_return_status(void) {
+#if 0
   const uint8_t drive_num = cpu_regs.dl;
   struct disk_info_t *disk = _get_disk(drive_num);
   cpu_regs.ah = disk->last_ah;
   cpu_flags.cf = disk->last_cf;
+#else
+  cpu_regs.al = RAM[0x441];
+  cpu_flags.cf = 0;
+#endif
 }
 
 static void _disk_read_sect(void) {
@@ -333,8 +357,6 @@ static void _disk_get_params(void) {
   struct disk_info_t *disk = _get_disk(drive_num);
 
   if (disk) {
-    cpu_flags.cf = 0;
-    cpu_regs.ah = 0;
     cpu_regs.ch = disk->cyls - 1;
     cpu_regs.cl = disk->sects & 63;
     cpu_regs.cl = cpu_regs.cl + (disk->cyls / 256) * 64;
@@ -345,14 +367,43 @@ static void _disk_get_params(void) {
     } else {
       cpu_regs.dl = hdcount;
     }
+
+    cpu_flags.cf = 0;     // success
+    cpu_regs.ah = 0;
   } else {
-    cpu_flags.cf = 1;
-    cpu_regs.ah = 0xAA;
+    cpu_flags.cf = 1;     // error
+    cpu_regs.ah = 0xAA;   // fixed disk drive not ready
+  }
+}
+
+static void _disk_dasd_type(void) {
+  const uint8_t drive_num = cpu_regs.dl;
+  struct disk_info_t *disk = _get_disk(drive_num);
+
+  cpu_flags.cf = 0;
+
+  if (!disk) {
+    // disk not present
+    cpu_regs.ah = 0;
+    return;
+  }
+
+  if (drive_num < 128) {
+    // diskette no change detection present
+    cpu_regs.ah = 1;
+  }
+  else {
+    cpu_regs.ah = 3;
+    cpu_regs.dx = disk->sects & 0xffff;
+    cpu_regs.cx = disk->sects >> 16;
   }
 }
 
 // BIOS disk services
 void disk_int_handler(int intnum) {
+
+  // reset status
+  RAM[0x441] = 0;
 
   const uint8_t drive_num = cpu_regs.dl;
   struct disk_info_t *disk = _get_disk(drive_num);
@@ -376,6 +427,9 @@ void disk_int_handler(int intnum) {
     break;
   case 8: // get drive parameters
     _disk_get_params();
+    break;
+  case 0x15: // read dasd type
+    _disk_dasd_type();
     break;
   default:
     cpu_flags.cf = 1;

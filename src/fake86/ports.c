@@ -82,6 +82,7 @@ void portout(uint16_t portnum, uint8_t value) {
 
 // 8bit port read
 uint8_t portin(uint16_t portnum) {
+
   const port_read_b_t cb = port_read_callback[portnum];
   if (cb) {
     return cb(portnum);

@@ -26,6 +26,12 @@
 
 void intcall86(uint16_t intnum) {
 
+#if 0
+  if (intnum != 0x16) {
+    log_printf(LOG_CHAN_ALL, "int %02x", (int)intnum);
+  }
+#endif
+
   assert(intnum <= 0xff);
 
   switch (intnum) {
