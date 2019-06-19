@@ -126,8 +126,12 @@ bool _open(const uint8_t num, const char *path) {
   // TODO: raw drives
 
   if (!success) {
+    log_printf(LOG_CHAN_DISK, "Failed to load '%s'", path);
     _eject(num);
     return false;
+  }
+  else {
+    log_printf(LOG_CHAN_DISK, "Loaded '%s'", path);
   }
 
   fdcount += (num < 128);
@@ -450,9 +454,6 @@ void disk_int_handler(int intnum) {
 }
 
 void disk_bootstrap(int intnum) {
-
-  const uint8_t drive_num = cpu_regs.dl;
-  struct disk_info_t *disk = _get_disk(drive_num);
 
   // auto detect boot drive
   if (disk_is_inserted(bootdrive)) {

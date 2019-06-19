@@ -29,7 +29,6 @@ struct disk_img_t {
   uint32_t seek_pos;
 };
 
-
 static bool _disk_img_eject(
   void *self) {
   assert(self);
@@ -112,7 +111,6 @@ bool _disk_img_open(
   }
 }
 
-
 struct vhd_footer_t {
 
   // "conectix"
@@ -155,7 +153,6 @@ struct vhd_footer_t {
 
   // should be 427 bytes reserved after this
 };
-
 
 static void _endian(void *ptr, uint32_t size) {
   uint8_t* x = (uint8_t*)ptr;
@@ -234,7 +231,7 @@ bool _disk_vhd_open(
   fseek(fd, 0, SEEK_SET);
 
   // populate disk structure
-  out->self = img;
+  out->self  = img;
   out->eject = _disk_img_eject;
   out->seek  = _disk_img_seek;
   out->read  = _disk_img_read;

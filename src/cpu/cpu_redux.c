@@ -241,6 +241,70 @@ OPCODE(_07) {
   _step_ip(1);
 }
 
+#define OR_FLAGS_B(LHS, RHS, TMP)     \
+  {                                   \
+    _set_zf_sf_b(TMP);                \
+    _set_pf(TMP);                     \
+    cpu_flags.of = 0;                 \
+    cpu_flags.cf = 0;                 \
+  }
+
+// OR m/r, reg  (byte)
+OPCODE(_08) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs | rhs;
+  OR_FLAGS_B(lhs, rhs, tmp);
+  _write_rm_b(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+#define OR_FLAGS_W(LHS, RHS, TMP)     \
+  {                                   \
+    _set_zf_sf_w(TMP);                \
+    _set_pf(TMP);                     \
+    cpu_flags.of = 0;                 \
+    cpu_flags.cf = 0;                 \
+  }
+
+// OR m/r, reg  (word)
+OPCODE(_09) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs | rhs;
+  OR_FLAGS_W(lhs, rhs, tmp);
+  _write_rm_w(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// OR reg, m/r  (byte)
+OPCODE(_0A) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs | rhs;
+  OR_FLAGS_B(lhs, rhs, tmp);
+  _set_reg_b(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// OR reg, m/r  (word)
+OPCODE(_0B) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs | rhs;
+  OR_FLAGS_W(lhs, rhs, tmp);
+  _set_reg_w(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
 // PUSH CS - push segment register CS
 OPCODE(_0E) {
   _push_w(cpu_regs.cs);
@@ -713,6 +777,28 @@ OPCODE(_85) {
   _step_ip(1 + m.num_bytes);
 }
 
+// XCHG - modregrm - 8bit
+OPCODE(_86) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  _write_rm_b(&m, rhs);
+  _set_reg_b(m.reg, lhs);
+  _step_ip(1 + m.num_bytes);
+}
+
+// XCHG - modregrm - 16bit
+OPCODE(_87) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  _write_rm_w(&m, rhs);
+  _set_reg_w(m.reg, lhs);
+  _step_ip(1 + m.num_bytes);
+}
+
 // MOV - r/m8, r8
 OPCODE(_88) {
   struct cpu_mod_rm_t m;
@@ -1151,19 +1237,17 @@ OPCODE(_FD) {
   _step_ip(1);
 }
 
-// [00, 05] add   [08, 0D] or
+//                [08, 0D] or
 // [10, 15] adc   [18, 1D] sbb
 // [20, 25] and   [28, 2D] sub
 // [30, 35] xor   [38, 3D] cmp
 
 // [27] daa
 // [37] aaa
-
 // [86, 87] xchg
+
 // [A4, A7] movsb movw cmpsb cmpsw
 // [D4, D5] AAM AAD
-
-// [E0, E2] loopnz loopz loop
 
 #define ___ 0
 #define XXX 0

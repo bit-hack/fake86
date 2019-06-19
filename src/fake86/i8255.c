@@ -105,6 +105,7 @@ void i8255_key_push(uint8_t key) {
 
 static void write_ctrl_word(uint8_t value) {
 
+#if 0
   const int mode_set    = 1 & (value >> 7);
   const int mode        = 3 & (value >> 5);
   const int io_porta    = 1 & (value >> 4);
@@ -112,6 +113,7 @@ static void write_ctrl_word(uint8_t value) {
   const int mode_portb  = 1 & (value >> 2);
   const int io_portb    = 1 & (value >> 1);
   const int io_portc_lo = 1 & (value >> 0);
+#endif
 
   i8255.ctrl_word = value;
 }
@@ -187,6 +189,7 @@ static uint8_t i8255_port_read(uint16_t port) {
       out |= _SW2 & 0x0f;
       // Timer2 channel out
       out |= i8253_channel2_out() << 5;
+      return out;
     } else {
       // return SW2 bit 5
 #if 1
