@@ -23,6 +23,9 @@
 #include "frontend.h"
 
 
+bool _cl_headless;
+
+
 typedef bool(*cl_callback_t)(const char *opt, const char *arg[]);
 
 struct cl_entry_t {
@@ -60,6 +63,12 @@ static bool _cl_do_boot(const char *opt, const char *arg[]) {
   return true;
 }
 
+static bool _cl_do_headless(const char *opt, const char *arg[]) {
+  _cl_headless = 0;
+  audio_enable = false;
+  return true;
+}
+
 static bool _cl_do_nosound(const char *opt, const char *arg[]) {
   log_printf(LOG_CHAN_AUDIO, "sound disabled");
   audio_enable = false;
@@ -81,6 +90,8 @@ static bool _cl_do_frameskip(const char *opt, const char *arg[]) {
   log_printf(LOG_CHAN_FRONTEND, "skipping %d frames", frame_skip);
   return true;
 }
+
+// TODO: _cl_do_com()
 
 static const struct cl_entry_t _cl_list[] = {
   {"-help", 0, _cl_do_help, "Display this help page"
@@ -114,6 +125,9 @@ static const struct cl_entry_t _cl_list[] = {
   },
   {"-frameskip", 1, _cl_do_frameskip, "Number of frames to skip",
     "   -frameskip 1\n"
+  },
+  {
+    "-headless", 0, _cl_do_headless, "Run without a window"
   },
   {NULL, 0, NULL, NULL}
 };

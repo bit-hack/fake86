@@ -278,7 +278,9 @@ OPCODE(_26) {
   const uint32_t ss = cpu_regs.ss;
   const uint32_t ds = cpu_regs.ds;
   // modify segment register
+#if 0
   cpu_regs.ss = cpu_regs.es;
+#endif
   cpu_regs.ds = cpu_regs.es;
   // dispatch next opcode
   if (_op_table[code[1]]) {  // XXX: remove
@@ -292,13 +294,16 @@ OPCODE(_26) {
 }
 
 // Prefix - Segment Override CS
+// XXX: revise these overrides, they dont work right
 OPCODE(_2E) {
   _did_run_temp = false;  // XXX: remove
   // backup seg regs
   const uint32_t ss = cpu_regs.ss;
   const uint32_t ds = cpu_regs.ds;
   // modify segment register
+#if 0
   cpu_regs.ss = cpu_regs.cs;
+#endif
   cpu_regs.ds = cpu_regs.cs;
   // dispatch next opcode
   if (_op_table[code[1]]) {  // XXX: remove
@@ -1177,7 +1182,7 @@ static const opcode_t _op_table[256] = {
   _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _5A, _5B, _5C, _5D, _5E, _5F, // 50
   XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, // 60
   _70, _71, _72, _73, _74, _75, _76, _77, _78, _79, _7A, _7B, _7C, _7D, _7E, _7F, // 70
-  ___, ___, ___, ___, _84, _85, ___, ___, _88, _89, ___, ___, ___, ___, ___, ___, // 80
+  ___, ___, ___, ___, _84, _85, ___, ___, ___, ___, ___, ___, ___, ___, ___, ___, // 80
   _90, _91, _92, _93, _94, _95, _96, _97, _98, _99, ___, _9B, ___, ___, ___, ___, // 90
   _A0, _A1, _A2, _A3, ___, ___, ___, ___, _A8, _A9, ___, ___, ___, ___, ___, ___, // A0
   _B0, _B1, _B2, _B3, _B4, _B5, _B6, _B7, _B8, _B9, _BA, _BB, _BC, _BD, _BE, _BF, // B0

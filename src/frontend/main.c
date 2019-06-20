@@ -66,6 +66,26 @@ static void tick_hardware(uint64_t cycles) {
   neo_tick(cycles);
 }
 
+static void emulate_loop_headless(void) {
+  // enter main emulation loop
+  while (cpu_running) {
+    // set ourselves some cycle targets
+    const int64_t target = SDL_min(CYCLES_PER_SLICE, i8253_cycles_before_irq());
+    // run for some cycles
+    const int64_t executed = tick_cpu(target);
+    // tick the hardware
+    tick_hardware(executed);
+
+    // exit if we are locked up
+    if (cpu_in_hlt_state()) {
+      if (cpu_flags.ifl == 0) {
+        cpu_running = false;
+      }
+    }
+
+  }
+}
+
 static void emulate_loop(void) {
 
 #define CYCLES_PER_REFRESH (CYCLES_PER_SECOND / 30)
@@ -261,9 +281,17 @@ int main(int argc, const char *argv[]) {
   }
 
   // enter the emulation loop
-  SDL_PauseAudio(0);
+  if (audio_enable) {
+    SDL_PauseAudio(0);
+  }
   cpu_running = true;
-  emulate_loop();
+
+  if (_cl_headless) {
+    emulate_loop_headless();
+  }
+  else {
+    emulate_loop();
+  }
 
   // close the audio device
   if (audio_enable) {

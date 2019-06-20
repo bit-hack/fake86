@@ -29,6 +29,7 @@ extern const char *biosfile;
 extern uint8_t bootdrive;
 extern bool do_fullscreen;
 extern uint32_t frame_skip;
+extern bool _cl_headless;
 
 extern bool cpu_halt;
 extern bool cpu_step;

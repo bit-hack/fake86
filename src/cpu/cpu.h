@@ -55,6 +55,8 @@ int32_t cpu_exec86(int32_t cycle_target);
 // get the current tick count of this slice
 uint64_t cpu_slice_ticks(void);
 
+bool cpu_in_hlt_state(void);
+
 typedef void (*cpu_intcall_t)(const uint16_t int_num);
 void cpu_set_intcall_handler(cpu_intcall_t handler);
 

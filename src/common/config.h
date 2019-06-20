@@ -87,4 +87,4 @@
 
 #define USE_CPU_REDUX     1
 
-#define VERBOSE 0
+#define VERBOSE 1
