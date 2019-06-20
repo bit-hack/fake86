@@ -61,12 +61,14 @@ void log_printf(int channel, const char *fmt, ...) {
   if (!log_fd) {
     log_init();
   }
+#if 0
   {
     va_list vargs;
     va_start(vargs, fmt);
     osd_vprintf(fmt, vargs);
     va_end(vargs);
   }
+#endif
   if (log_fd) {
     va_list vargs;
     va_start(vargs, fmt);

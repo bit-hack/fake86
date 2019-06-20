@@ -144,6 +144,10 @@ static inline void _decode_mod_rm(
   // inital decode of the rm field
   switch (m->mod) {
   case 0:
+    if (m->rm == 6) {
+      addr = GET_CODE(uint16_t, 2);
+      break;
+    }
   case 1:
   case 2:
 
@@ -154,10 +158,7 @@ static inline void _decode_mod_rm(
     case 3: addr = cpu_regs.bp + cpu_regs.di; break; // [BP + DI]
     case 4: addr =               cpu_regs.si; break; // [SI]
     case 5: addr =               cpu_regs.di; break; // [DI]
-    case 6: addr = (m->mod == 0) ?
-                     GET_CODE(uint16_t, 2) :         // Direct
-                     cpu_regs.bp;                    // [BP]
-                                              break;
+    case 6: addr = cpu_regs.bp;               break; // [BP]
     case 7: addr = cpu_regs.bx;               break; // [BX]
     default:
       UNREACHABLE();
@@ -173,7 +174,7 @@ static inline void _decode_mod_rm(
   }
 
   uint32_t seg;
-  if (m->rm == 2 || m->rm == 3 || (m->mod != 0 && m->rm == 6)) {
+  if (m->rm == 2 || m->rm == 3 || (m->rm == 6 && m->mod != 0)) {
     // if we are using cpu_regs.bp as part of the modregrm byte
     seg = cpu_regs.ss << 4;
   }
@@ -184,13 +185,12 @@ static inline void _decode_mod_rm(
   // apply displacements/reg lookup and work out byte count
   switch (m->mod) {
   case 0:
+    m->ea = seg + addr;
     if (m->rm == 6) {
       m->num_bytes = 3;
-      m->ea = seg + GET_CODE(uint16_t, 2);
     }
     else {
       m->num_bytes = 1;
-      m->ea = seg + addr;
     }
     break;
   case 1:

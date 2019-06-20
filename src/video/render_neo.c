@@ -483,6 +483,7 @@ static void blit_2x(uint32_t w, uint32_t h, const struct render_target_t *target
   }
 }
 
+#if 0
 static void _draw_disk(const struct render_target_t *target) {
   const uint8_t *src = asset_disk_pic;
   const uint32_t pitch = target->pitch;
@@ -497,6 +498,7 @@ static void _draw_disk(const struct render_target_t *target) {
     dst += pitch;
   }
 }
+#endif
 
 void neo_render_tick(const struct render_target_t *target) {
 
@@ -516,8 +518,10 @@ void neo_render_tick(const struct render_target_t *target) {
     break;
   }
 
+#if 0
   // indicate disk activity
   if (osd_should_draw_disk()) {
     _draw_disk(target);
   }
+#endif
 }

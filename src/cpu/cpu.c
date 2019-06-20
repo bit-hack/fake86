@@ -656,6 +656,10 @@ uint16_t cpu_pop() {
 }
 
 void cpu_reset() {
+
+  memset(&cpu_regs, 0, sizeof(cpu_regs));
+  memset(&cpu_flags, 0, sizeof(cpu_flags));
+
   log_printf(LOG_CHAN_CPU, "reset");
   cpu_regs.cs = 0xFFFF;
   cpu_regs.ip = 0x0000;

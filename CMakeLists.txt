@@ -66,3 +66,22 @@ target_link_libraries(fake86
     lib_disk
     ${SDL_LIBRARY})
 
+
+file(GLOB SOURCE_TESTS
+    src/tests/*.h
+    src/tests/*.c)
+
+
+add_executable(fake86_tests
+    ${SOURCE_TESTS}
+    ${SOURCE_COMMON}
+    ${SOURCE_F86}
+    ${SOURCE_CPU}
+    ${SOURCE_DISK}
+    ${SOURCE_VIDEO}
+    ${SOURCE_AUDIO}
+    )
+
+target_link_libraries(fake86_tests
+    lib_nukedopl
+    ${SDL_LIBRARY})
