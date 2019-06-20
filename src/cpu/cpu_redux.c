@@ -24,6 +24,7 @@
 
 //
 static bool _did_run_temp = true;
+static uint8_t _seg_ovr;
 
 
 // forward declare opcode table
@@ -271,83 +272,36 @@ OPCODE(_1F) {
   _step_ip(1);
 }
 
+#define SEGOVR(OP)                                                            \
+{                                                                             \
+  _seg_ovr = OP;                                                              \
+  _did_run_temp = false;                                                      \
+  if (_op_table[code[1]]) {                                                   \
+    _step_ip(1);                                                              \
+    _op_table[code[1]](code + 1);                                             \
+    _did_run_temp = true;                                                     \
+  }                                                                           \
+  _seg_ovr = 0x0;                                                             \
+}
+
 // Prefix - Segment Override ES
 OPCODE(_26) {
-  _did_run_temp = false;  // XXX: remove
-  // backup seg regs
-  const uint32_t ss = cpu_regs.ss;
-  const uint32_t ds = cpu_regs.ds;
-  // modify segment register
-#if 0
-  cpu_regs.ss = cpu_regs.es;
-#endif
-  cpu_regs.ds = cpu_regs.es;
-  // dispatch next opcode
-  if (_op_table[code[1]]) {  // XXX: remove
-    _step_ip(1);
-    _op_table[code[1]](code + 1);
-    _did_run_temp = true;  // XXX: remove
-  }
-  // restore segment addresses
-  cpu_regs.ss = ss;
-  cpu_regs.ds = ds;
+  SEGOVR(0x26);
 }
 
 // Prefix - Segment Override CS
-// XXX: revise these overrides, they dont work right
 OPCODE(_2E) {
-  _did_run_temp = false;  // XXX: remove
-  // backup seg regs
-  const uint32_t ss = cpu_regs.ss;
-  const uint32_t ds = cpu_regs.ds;
-  // modify segment register
-#if 0
-  cpu_regs.ss = cpu_regs.cs;
-#endif
-  cpu_regs.ds = cpu_regs.cs;
-  // dispatch next opcode
-  if (_op_table[code[1]]) {  // XXX: remove
-    _step_ip(1);
-    _op_table[code[1]](code + 1);
-    _did_run_temp = true;  // XXX: remove
-  }
-  // restore segment addresses
-  cpu_regs.ss = ss;
-  cpu_regs.ds = ds;
+  SEGOVR(0x2E);
 }
 
 // Prefix - Segment Override SS
 OPCODE(_36) {
-  _did_run_temp = false;  // XXX: remove
-  // backup seg regs
-  const uint32_t ds = cpu_regs.ds;
-  // modify segment register
-  cpu_regs.ds = cpu_regs.ss;
-  // dispatch next opcode
-  if (_op_table[code[1]]) {  // XXX: remove
-    _step_ip(1);
-    _op_table[code[1]](code + 1);
-    _did_run_temp = true;  // XXX: remove
-  }
-  // restore segment addresses
-  cpu_regs.ds = ds;
+  SEGOVR(0x36);
 }
 
 // Prefix - Segment Override DS
 OPCODE(_3E) {
-  _did_run_temp = false;  // XXX: remove
-  // backup seg regs
-  const uint32_t ss = cpu_regs.ss;
-  // modify segment register
-  cpu_regs.ss = cpu_regs.ds;
-  // dispatch next opcode
-  if (_op_table[code[1]]) {  // XXX: remove
-    _step_ip(1);
-    _op_table[code[1]](code + 1);
-    _did_run_temp = true;  // XXX: remove
-  }
-  // restore segment addresses
-  cpu_regs.ss = ss;
+  SEGOVR(0x3e);
 }
 
 #define INC(REG)                                                              \
@@ -805,31 +759,35 @@ OPCODE(_9B) {
   _step_ip(1);
 }
 
+static uint32_t _get_addr(const enum cpu_seg_t seg, uint16_t offs) {
+  return (_get_seg(seg) << 4) + offs;
+}
+
 // MOV AL, [imm16]
 OPCODE(_A0) {
   const uint16_t imm = GET_CODE(uint16_t, 1);
-  cpu_regs.al = read86((cpu_regs.ds << 4) + imm);
+  cpu_regs.al = read86(_get_addr(CPU_SEG_DS, imm));
   _step_ip(3);
 }
 
 // MOV AX, [imm16]
 OPCODE(_A1) {
   const uint16_t imm = GET_CODE(uint16_t, 1);
-  cpu_regs.ax = readw86((cpu_regs.ds << 4) + imm);
+  cpu_regs.ax = readw86(_get_addr(CPU_SEG_DS, imm));
   _step_ip(3);
 }
 
 // MOV [imm16], AL
 OPCODE(_A2) {
   const uint16_t imm = GET_CODE(uint16_t, 1);
-  write86((cpu_regs.ds << 4) + imm, cpu_regs.al);
+  write86(_get_addr(CPU_SEG_DS, imm), cpu_regs.al);
   _step_ip(3);
 }
 
 // MOV [imm16], AX
 OPCODE(_A3) {
   const uint16_t imm = GET_CODE(uint16_t, 1);
-  writew86((cpu_regs.ds << 4) + imm, cpu_regs.ax);
+  writew86(_get_addr(CPU_SEG_DS, imm), cpu_regs.ax);
   _step_ip(3);
 }
 
@@ -972,7 +930,7 @@ OPCODE(_CD) {
 
 // XLAT
 OPCODE(_D7) {
-  cpu_regs.al = read86((cpu_regs.ds << 4) + cpu_regs.bx + cpu_regs.al);
+  cpu_regs.al = read86(_get_addr(CPU_SEG_DS, cpu_regs.bx + cpu_regs.al));
   _step_ip(1);
 }
 

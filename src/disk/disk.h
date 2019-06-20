@@ -55,6 +55,8 @@ struct disk_info_t {
 
 void disk_int_handler(int intnum);
 
+void disk_load_com(const char *path);
+
 bool _disk_img_open(
   const uint8_t num, const char *path, struct disk_info_t *out);
 

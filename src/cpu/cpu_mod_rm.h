@@ -39,6 +39,39 @@ struct cpu_mod_rm_t {
   uint8_t num_bytes;
 };
 
+// current segment override opcode (or zero)
+static uint8_t _seg_ovr;
+
+enum cpu_seg_t {
+  CPU_SEG_ES,
+  CPU_SEG_CS,
+  CPU_SEG_SS,
+  CPU_SEG_DS,
+};
+
+uint16_t _get_seg(enum cpu_seg_t seg) {
+  if (_seg_ovr) {
+    switch (_seg_ovr) {
+    case 0x26: return cpu_regs.es;
+    case 0x2E: return cpu_regs.cs;
+    case 0x36: return cpu_regs.ss;
+    case 0x3e: return cpu_regs.ds;
+    default:
+      UNREACHABLE();
+    }
+  }
+  else {
+    switch (seg) {
+    case CPU_SEG_ES: return cpu_regs.es;
+    case CPU_SEG_CS: return cpu_regs.cs;
+    case CPU_SEG_SS: return cpu_regs.ss;
+    case CPU_SEG_DS: return cpu_regs.ds;
+    default:
+      UNREACHABLE();
+    }
+  }
+}
+
 // get word register from REG field
 static inline uint16_t _get_reg_w(const uint8_t num) {
   switch (num) {
@@ -175,10 +208,11 @@ static inline void _decode_mod_rm(
   uint32_t seg;
   if (m->rm == 2 || m->rm == 3 || (m->mod != 0 && m->rm == 6)) {
     // if we are using cpu_regs.bp as part of the modregrm byte
+//  seg = _get_seg(CPU_SEG_SS) << 4;
     seg = cpu_regs.ss << 4;
   }
   else {
-    seg = cpu_regs.ds << 4;
+    seg = _get_seg(CPU_SEG_DS) << 4;
   }
 
   // apply displacements/reg lookup and work out byte count

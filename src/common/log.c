@@ -40,7 +40,13 @@ static const char *channel_name[] = {
   "[DOS  ]  "
 };
 
-void log_init() {
+static bool _quiet;
+
+void log_mute(bool enable) {
+  _quiet = enable;
+}
+
+void log_init(void) {
   log_fd = fopen(LOG_FNAME, "w");
   if (log_fd) {
     fprintf(log_fd, "(c)2019      Aidan Dodds\n");
@@ -50,7 +56,7 @@ void log_init() {
   }
 }
 
-void log_close() {
+void log_close(void) {
   if (log_fd) {
     fclose(log_fd);
     log_fd = NULL;
@@ -75,9 +81,8 @@ void log_printf(int channel, const char *fmt, ...) {
     fputc('\n', log_fd);
     va_end(vargs);
   }
-#if 1
   // mirror to stdout
-  {
+  if (!_quiet) {
     va_list vargs;
     va_start(vargs, fmt);
     fprintf(stdout, "%s", channel_name[channel]);
@@ -85,5 +90,4 @@ void log_printf(int channel, const char *fmt, ...) {
     fputc('\n', stdout);
     va_end(vargs);
   }
-#endif
 }

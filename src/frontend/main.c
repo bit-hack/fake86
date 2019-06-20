@@ -84,6 +84,8 @@ static void emulate_loop_headless(void) {
     }
 
   }
+  log_printf(LOG_CHAN_CPU, "cpu reached halt state");
+  cpu_dump_state(stdout);
 }
 
 static void emulate_loop(void) {
@@ -213,12 +215,14 @@ static bool emulate_init() {
   mouse_init(0x3F8, 4);
   // initalize vga refresh timing
   vga_timing_init();
-  // initalize new video renderer
-  if (!win_init()) {
-    return false;
-  }
-  if (!neo_init()) {
-    return false;
+  if (!_cl_headless) {
+    // initalize new video renderer
+    if (!win_init()) {
+      return false;
+    }
+    if (!neo_init()) {
+      return false;
+    }
   }
   return true;
 }
@@ -253,18 +257,20 @@ int main(int argc, const char *argv[]) {
   if (!cl_parse(argc, argv)) {
     return 1;
   }
-  // initalize SDL
-  const int flags = SDL_INIT_VIDEO | (audio_enable ? SDL_INIT_AUDIO : 0);
-  if (SDL_Init(flags)) {
-    log_printf(LOG_CHAN_SDL, "unable to init sdl");
-    return 1;
+  if (!_cl_headless) {
+    // initalize SDL
+    const int flags = SDL_INIT_VIDEO | (audio_enable ? SDL_INIT_AUDIO : 0);
+    if (SDL_Init(flags)) {
+      log_printf(LOG_CHAN_SDL, "unable to init sdl");
+      return 1;
+    }
+    else {
+      log_printf(LOG_CHAN_SDL, "initalized sdl");
+    }
+    // enable key repeat
+    SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY,
+                        SDL_DEFAULT_REPEAT_INTERVAL);
   }
-  else {
-    log_printf(LOG_CHAN_SDL, "initalized sdl");
-  }
-  // enable key repeat
-  SDL_EnableKeyRepeat(SDL_DEFAULT_REPEAT_DELAY,
-                      SDL_DEFAULT_REPEAT_INTERVAL);
   // initalize the audio stream
   if (audio_enable) {
     if (!sdl_audio_init()) {

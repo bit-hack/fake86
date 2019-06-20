@@ -20,6 +20,7 @@
 */
 
 #include "../common/common.h"
+#include "../disk/disk.h"
 #include "frontend.h"
 
 
@@ -64,7 +65,7 @@ static bool _cl_do_boot(const char *opt, const char *arg[]) {
 }
 
 static bool _cl_do_headless(const char *opt, const char *arg[]) {
-  _cl_headless = 0;
+  _cl_headless = true;
   audio_enable = false;
   return true;
 }
@@ -91,7 +92,15 @@ static bool _cl_do_frameskip(const char *opt, const char *arg[]) {
   return true;
 }
 
-// TODO: _cl_do_com()
+static bool _cl_do_com(const char *opt, const char *arg[]) {
+  disk_load_com(*arg);
+  return true;
+}
+
+static bool _cl_do_quiet(const char *opt, const char *arg[]) {
+  log_mute(true);
+  return true;
+}
 
 static const struct cl_entry_t _cl_list[] = {
   {"-help", 0, _cl_do_help, "Display this help page"
@@ -128,6 +137,13 @@ static const struct cl_entry_t _cl_list[] = {
   },
   {
     "-headless", 0, _cl_do_headless, "Run without a window"
+  },
+  {
+    "-com", 1, _cl_do_com, "Boot into a COM file",
+    "   -com myprog.com"
+  },
+  {
+    "-quiet", 0, _cl_do_quiet, "Dont output on console"
   },
   {NULL, 0, NULL, NULL}
 };

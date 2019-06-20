@@ -88,3 +88,5 @@ bool cpu_redux_exec(void);
 
 uint16_t useseg;
 bool segoverride;
+
+void cpu_dump_state(FILE *fd);

@@ -72,11 +72,13 @@ void portout(uint16_t portnum, uint8_t value) {
   if (cb) {
     cb(portnum, value);
   } else {
+#if 0
     // notify of unhandled port access
     if (_notify_unknown_ports && !_port_ignore[portnum]) {
       log_printf(LOG_CHAN_PORT, "byte write to unknown port %03xh", portnum);
       _port_ignore[portnum] = true;
     }
+#endif
   }
 }
 
@@ -94,11 +96,13 @@ uint8_t portin(uint16_t portnum) {
     return 0xff;  // msdos wants there to be a keyboard controller
 
   default:
+#if 0
     // notify of unhandled port access
     if (_notify_unknown_ports && !_port_ignore[portnum]) {
       log_printf(LOG_CHAN_PORT, "byte read from unknown port %03xh", portnum);
       _port_ignore[portnum] = true;
     }
+#endif
     return 0x0;
   }
 }

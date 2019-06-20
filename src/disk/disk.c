@@ -449,10 +449,44 @@ void disk_int_handler(int intnum) {
   }
 }
 
+static const char *_com_path;
+
+void disk_load_com(const char *path) {
+  _com_path = path;
+}
+
+bool _do_load_com(void) {
+  assert(_com_path);
+  FILE *fd = fopen(_com_path, "rb");
+  if (!fd) {
+    return false;
+  }
+
+  int read = fread(RAM + 0x7C00, 1, 0xffff, fd);
+  fclose(fd);
+
+  log_printf(
+    LOG_CHAN_DISK, "booting %d byte COM file '%s' at 0x7C00", read, _com_path);
+
+  if (read > 0) {
+    cpu_regs.cs = 0x0000;
+    cpu_regs.ip = 0x7C00;
+    return true;
+  }
+  else {
+    return false;
+  }
+}
+
 void disk_bootstrap(int intnum) {
 
-  const uint8_t drive_num = cpu_regs.dl;
-  struct disk_info_t *disk = _get_disk(drive_num);
+  // boot a COM file if we should
+  if (_com_path) {
+    if (_do_load_com()) {
+      return;
+    }
+    log_printf(LOG_CHAN_DISK, "unable to boot COM file '%s'", _com_path);
+  }
 
   // auto detect boot drive
   if (disk_is_inserted(bootdrive)) {

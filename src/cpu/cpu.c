@@ -3325,3 +3325,21 @@ void cpu_state_load(FILE *fd) {
   fread(&in_hlt_state, 1, sizeof(in_hlt_state), fd);
   fread(&_delay_cycles, 1, sizeof(_delay_cycles), fd);
 }
+
+void cpu_dump_state(FILE *fd) {
+  fprintf(fd, "CPU state:\n");
+  fprintf(fd, "  AX %04x\n", (int)cpu_regs.ax);
+  fprintf(fd, "  CX %04x\n", (int)cpu_regs.cx);
+  fprintf(fd, "  DX %04x\n", (int)cpu_regs.dx);
+  fprintf(fd, "  BX %04x\n", (int)cpu_regs.bx);
+  fprintf(fd, "  SP %04x\n", (int)cpu_regs.sp);
+  fprintf(fd, "  BP %04x\n", (int)cpu_regs.bp);
+  fprintf(fd, "  SI %04x\n", (int)cpu_regs.si);
+  fprintf(fd, "  DI %04x\n", (int)cpu_regs.di);
+  fprintf(fd, "  CS %04x\n", (int)cpu_regs.cs);
+  fprintf(fd, "  SS %04x\n", (int)cpu_regs.ss);
+  fprintf(fd, "  ES %04x\n", (int)cpu_regs.es);
+  fprintf(fd, "  DS %04x\n", (int)cpu_regs.ds);
+  fprintf(fd, "  IP %04x\n", (int)cpu_regs.ip);
+  fflush(fd);
+}

@@ -189,8 +189,9 @@ enum {
   LOG_CHAN_DOS,
 };
 
-void log_init();
-void log_close();
+void log_init(void);
+void log_close(void);
+void log_mute(bool enable);
 void log_printf(int channel, const char *fmt, ...);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ports.c
