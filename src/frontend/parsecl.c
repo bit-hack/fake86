@@ -139,7 +139,7 @@ static const struct cl_entry_t _cl_list[] = {
     "-headless", 0, _cl_do_headless, "Run without a window"
   },
   {
-    "-com", 1, _cl_do_com, "Boot into a COM file",
+    "-com", 1, _cl_do_com, "Boot into a COM file at address 0x01100",
     "   -com myprog.com"
   },
   {

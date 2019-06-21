@@ -455,22 +455,36 @@ void disk_load_com(const char *path) {
   _com_path = path;
 }
 
-bool _do_load_com(void) {
+static bool _do_load_com(void) {
   assert(_com_path);
   FILE *fd = fopen(_com_path, "rb");
   if (!fd) {
     return false;
   }
 
-  int read = fread(RAM + 0x7C00, 1, 0xffff, fd);
+  //  data start : 0x01000
+  //  code start : 0x01100
+  // stack start : 0x10fff
+  const uint32_t seg = 0x100;
+  const uint32_t ip  = 0x100;
+
+  const uint32_t addr = (seg << 4) + ip;
+
+  int read = fread(RAM + addr, 1, 0xffff, fd);
   fclose(fd);
 
-  log_printf(
-    LOG_CHAN_DISK, "booting %d byte COM file '%s' at 0x7C00", read, _com_path);
-
   if (read > 0) {
-    cpu_regs.cs = 0x0000;
-    cpu_regs.ip = 0x7C00;
+    cpu_regs.cs = seg;
+    cpu_regs.ds = seg;
+    cpu_regs.es = seg;
+    cpu_regs.ss = seg;
+    cpu_regs.sp = 0xffff;
+    cpu_regs.ip = ip;
+
+    log_printf(
+      LOG_CHAN_DISK,
+      "booting %d byte COM file '%s' at 0x%08x", read, _com_path, addr);
+
     return true;
   }
   else {

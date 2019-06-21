@@ -38,7 +38,7 @@ extern uint8_t hdcount;
 static int rom_addr = 0xD8000;
 static int rom_size = 0x02000;
 
-bool rom_insert() {
+bool rom_insert(void) {
   // fill with int3
   memset(RAM + rom_addr, 0xCC, rom_size);
 

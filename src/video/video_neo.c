@@ -670,6 +670,10 @@ bool neo_init(void) {
   // cga
   set_port_read_redirector(0x3D0, 0x3DF, cga_port_read);
   set_port_write_redirector(0x3D0, 0x3DF, cga_port_write);
+
+  // it seems we should boot into video mode 3 by default
+  // Landmark Diagnostic ROM expects it
+  _video_mode = 3;
   return true;
 }
 

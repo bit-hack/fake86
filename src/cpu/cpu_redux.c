@@ -18,6 +18,12 @@
   USA.
 */
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
+
 #include "cpu.h"
 #include "cpu_mod_rm.h"
 
@@ -84,7 +90,8 @@ static inline void _step_ip(const int16_t rel) {
   cpu_regs.ip += rel;
 }
 
-// TODO: move this to be lazy executed
+#define USE_POPCNT
+#if !defined(USE_POPCNT) && !defined(USE_KERNIGHAN)
 static const uint8_t parity[0x100] = {
     1, 0, 0, 1, 0, 1, 1, 0,
     0, 1, 1, 0, 1, 0, 0, 1,
@@ -119,10 +126,27 @@ static const uint8_t parity[0x100] = {
     1, 0, 0, 1, 0, 1, 1, 0,
     0, 1, 1, 0, 1, 0, 0, 1
 };
+#endif // use USE_POPCNT
 
 // set parity flag
-static inline void _set_pf(const uint16_t val) {
-  cpu_flags.pf = parity[val & 0xff];
+static inline void _set_pf(uint16_t val) {
+  val &= 0xff;
+#if defined(USE_POPCNT)
+#ifdef _MSC_VER
+  cpu_flags.pf = (__popcnt16(val) & 1);
+#else
+  cpu_flags.pf = __builtin_parity(val);
+#endif
+#elif defined(USE_KERNIGHAN))
+	unsigned int ret;
+  unsigned int x = val;
+	for(ret = 0; x; x &= (x - 1)) {
+		ret++;
+  }
+	return ret & 1;
+#else
+  cpu_flags.pf = parity[val];
+#endif
 }
 
 // get parity flag
