@@ -120,6 +120,7 @@ uint32_t mem_loadbinary(uint32_t addr32, const char *filename, uint8_t roflag);
 uint32_t mem_loadrom(uint32_t addr32, const char *filename, uint8_t failure_fatal);
 uint32_t mem_loadbios(const char *filename);
 void mem_dump(const char *path);
+void mem_write(uint32_t addr, const uint8_t *src, size_t size);
 void mem_state_save(FILE *fd);
 void mem_state_load(FILE *fd);
 

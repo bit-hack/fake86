@@ -238,7 +238,7 @@ static void _on_cmd_cpu(int num, const char **tokens) {
 }
 
 static void _on_cmd_memory_dis(int num, const char **tokens) {
-  const uint32_t ip = 0xFFFFF & (cpu_regs.cs << 4) + cpu_regs.ip;
+  uint32_t ip = 0xFFFFF & (cpu_regs.cs << 4) + cpu_regs.ip;
   const uint8_t *code = RAM + ip;
 
   ud_t ud_obj;
@@ -253,6 +253,7 @@ static void _on_cmd_memory_dis(int num, const char **tokens) {
       break;
     }
     osd_printf("%06x    %s", ip, ud_insn_asm(&ud_obj));
+    ip += ud_obj.pc;
   }
 
 }

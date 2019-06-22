@@ -21,13 +21,6 @@
 
 // disk emulation routines, working at the BIOS interrupt 13h level
 
-// Use hard disk pass through as follows:
-//   -fd0 dos-boot.img -hd0 \\.\PhysicalDrive2 -boot 0
-//   -fd0 dos-boot.img -hd0 \\.\X: -boot 0
-
-// Use memory backed floppy disk as follows:
-//   -fd0 *disk.img
-//   -fd0 *
 
 #include "../common/common.h"
 #include "../frontend/frontend.h"
@@ -37,7 +30,7 @@
 
 uint8_t bootdrive, hdcount, fdcount;
 
-#define NUM_DISKS 16
+#define NUM_DISKS 8
 
 static struct disk_info_t _disk[NUM_DISKS];
 
@@ -202,46 +195,56 @@ void disk_eject(uint8_t drivenum) {
   }
 }
 
+static uint32_t _lba(const struct disk_info_t *d,
+                     uint32_t c,
+                     uint32_t s,
+                     uint32_t h) {
+  // LBA = (C * HPC + H) * SPT + (S - 1)
+  const uint32_t hpc = d->heads;
+  const uint32_t spt = d->sects;
+  const uint32_t offs = (c * hpc + h) * spt + (s - 1);
+  // LBA to linear address
+  return offs * d->sector_size;
+}
+
 static void _disk_read(uint8_t drivenum,
-                       uint16_t dstseg,
-                       uint16_t dstoff,
+                       uint32_t memdest,
                        uint16_t cyl,
                        uint16_t sect,
                        uint16_t head,
                        uint16_t sectcount) {
 
   struct disk_info_t *d = _get_disk(drivenum);
+  assert(d);
   uint8_t sectorbuffer[512];
 
-  if (!sect || !d) {
-    return;
-  }
-  const uint32_t lba = ((uint32_t)cyl * (uint32_t)d->heads + (uint32_t)head) *
-                         (uint32_t)d->sects + (uint32_t)sect - 1;
-  const uint32_t fileoffset = lba * 512;
-  uint32_t fileend = fileoffset + sectcount * 512;
-  if (fileend > d->size_bytes) {
+  cpu_regs.al = 0;
+
+  if (!sect) {
     goto error;
   }
-  _seek(drivenum, fileoffset);
-  uint32_t memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
-  uint32_t cursect = 0;
-  for (; cursect < sectcount; cursect++) {
+  const uint32_t fileoffset = _lba(d, cyl, sect, head);
+  if (!_seek(drivenum, fileoffset)) {
+    goto error;
+  }
+  // read sectors one by one
+  for (uint32_t j = 0; j < sectcount; ++j) {
+    // read sector to temp buffer
     if (!_read(drivenum, sectorbuffer, 512)) {
+      cpu_regs.al = j;
       goto error;
     }
-    for (uint32_t sectoffset = 0; sectoffset < 512; sectoffset++) {
-      write86(memdest++, sectorbuffer[sectoffset]);
-    }
+    // copy sect to memory
+    mem_write(memdest + j * 512, sectorbuffer, 512);
   }
-  cpu_regs.al = cursect;
   cpu_flags.cf = 0;
-  cpu_regs.ah = 0;
+  cpu_regs.ah = 0;  // success
+  cpu_regs.al = sectcount & 0xff;
+  return;
 error:
   // error
-  cpu_regs.al = 1;  // bad command passed to driver
   cpu_flags.cf = 1;
-  RAM[0x441] |= 0x01;
+  cpu_regs.ah = 1;  // bad command passed to driver
   return;
 }
 
@@ -252,20 +255,28 @@ static void _disk_write(uint8_t drivenum,
                         uint16_t sect,
                         uint16_t head,
                         uint16_t sectcount) {
-  
+
   struct disk_info_t *d = _get_disk(drivenum);
+  assert(d);
   uint8_t sectorbuffer[512];
 
   uint32_t memdest, cursect, sectoffset;
-  if (!sect || !d)
-    return;
+  if (!sect) {
+    goto error;
+  }
+#if 0
   uint32_t lba = ((uint32_t)cyl * (uint32_t)d->heads + (uint32_t)head) *
                   (uint32_t)d->sects + (uint32_t)sect - 1;
   uint32_t fileoffset = lba * 512;
+#else
+  uint32_t fileoffset = _lba(d, cyl, sect, head);
+#endif
+#if 0
   uint32_t fileend = fileoffset + sectcount * 512;
   if (fileend > d->size_bytes) {
     goto error;
   }
+#endif
   _seek(drivenum, fileoffset);
   memdest = ((uint32_t)dstseg << 4) + (uint32_t)dstoff;
   for (cursect = 0; cursect < sectcount; cursect++) {
@@ -311,19 +322,24 @@ static void _disk_read_sect(void) {
   const uint8_t drive_num = cpu_regs.dl;
 
   if (disk_is_inserted(drive_num)) {
-    _disk_read(cpu_regs.dl,
-                cpu_regs.es,
-                cpu_regs.bx,
-                cpu_regs.ch + (cpu_regs.cl / 64) * 256,
-                cpu_regs.cl & 63,
-                cpu_regs.dh,
-                cpu_regs.al);
-    cpu_flags.cf = 0;
-    cpu_regs.ah = 0;
+
+    const uint32_t dst = CPU_ADDR(cpu_regs.es, cpu_regs.bx);
+
+    const uint32_t cyln = cpu_regs.ch | ((cpu_regs.cl << 2) & 0xff00);
+    const uint32_t sect = cpu_regs.cx & 0x3f;
+    const uint32_t head = cpu_regs.dh;
+
+    const uint32_t count = cpu_regs.al;
+
+    _disk_read(cpu_regs.dl, dst, cyln, sect, head, count);
+
   } else {
     cpu_flags.cf = 1;
     cpu_regs.ah = 1;
   }
+
+  RAM[0x441] &= ~0x01;
+  RAM[0x441] |= cpu_flags.cf;
 }
 
 static void _disk_write_sect(void) {
@@ -519,7 +535,7 @@ void disk_bootstrap(int intnum) {
       // read first sector of boot drive into 07C0:0000 and execute it
       log_printf(LOG_CHAN_DISK, "booting from disk %d", bootdrive);
       cpu_regs.dl = bootdrive;
-      _disk_read(cpu_regs.dl, 0x07C0, 0x0000, 0, 1, 0, 1);
+      _disk_read(cpu_regs.dl, 0x07C00, 0, 1, 0, 1);
       cpu_regs.cs = 0x0000;
       cpu_regs.ip = 0x7C00;
     }

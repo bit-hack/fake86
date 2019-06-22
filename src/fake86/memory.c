@@ -31,15 +31,6 @@ void mem_init(void) {
   memset(RAM, 0, sizeof(RAM));
 }
 
-static void mem_write_8(uint32_t addr, uint8_t data) {
-  RAM[addr] = data;
-}
-
-static void mem_write_16(uint32_t addr, uint16_t data) {
-  RAM[addr + 0] = (0x00ff & data) >> 0;
-  RAM[addr + 1] = (0xff00 & data) >> 8;
-}
-
 void write86(uint32_t addr, uint8_t value) {
   addr &= 0xFFFFF;
 
@@ -74,6 +65,30 @@ void writew86(uint32_t addr32, uint16_t value) {
   }
 }
 
+void mem_write(uint32_t addr, const uint8_t *src, size_t size) {
+  const uint32_t end = addr + size;
+  if (end <= 0xA0000) {
+    memcpy(RAM + addr, src, size);
+  }
+  else {
+    for (uint32_t i = 0; i < size; i++) {
+      write86(addr + i, src[i]);
+    }
+  }
+}
+
+void mem_read(uint8_t *dst, uint32_t addr, size_t size) {
+  const uint32_t end = addr + size;
+  if (end <= 0xA0000) {
+    memcpy(dst, RAM + addr, size);
+  }
+  else {
+    for (uint32_t i = 0; i < size; i++) {
+      dst[i] = read86(addr + i);
+    }
+  }
+}
+
 uint8_t read86(uint32_t addr) {
   addr &= 0xFFFFF;
 
@@ -95,14 +110,17 @@ uint8_t read86(uint32_t addr) {
   }
 }
 
-uint16_t readw86(uint32_t addr32) {
-  addr32 &= 0xFFFFF;
-  if (addr32 < 0xA0000 || addr32 >= 0xC0000) {
-    return *(const uint16_t*)(RAM + addr32);
+uint16_t readw86(uint32_t addr) {
+  addr &= 0xFFFFF;
+  if (addr >= 0xA0000 && addr <= 0xC0000) {
+    if (addr >= 0xB0000) {
+      return *(const uint16_t*)(RAM + addr);
+    }
+    return (uint16_t)(read86(addr + 0) << 0) |
+           (uint16_t)(read86(addr + 1) << 8);
   }
   else {
-    return (uint16_t)(read86(addr32 + 0) << 0) |
-           (uint16_t)(read86(addr32 + 1) << 8);
+    return *(const uint16_t*)(RAM + addr);
   }
 }
 

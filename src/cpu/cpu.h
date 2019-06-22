@@ -90,3 +90,6 @@ uint16_t useseg;
 bool segoverride;
 
 void cpu_dump_state(FILE *fd);
+
+#define CPU_ADDR(SEG, OFF) \
+  (((SEG) << 4) + (OFF))

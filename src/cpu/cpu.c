@@ -2094,10 +2094,10 @@ int32_t cpu_exec86(int32_t target) {
       putmem8(useseg, cpu_regs.si, portin(cpu_regs.dx));
       if (cpu_flags.df) {
         cpu_regs.si = cpu_regs.si - 1;
-        cpu_regs.di = cpu_regs.di - 1;
+//        cpu_regs.di = cpu_regs.di - 1;
       } else {
         cpu_regs.si = cpu_regs.si + 1;
-        cpu_regs.di = cpu_regs.di + 1;
+//        cpu_regs.di = cpu_regs.di + 1;
       }
 
       if (reptype) {
@@ -2120,10 +2120,10 @@ int32_t cpu_exec86(int32_t target) {
       putmem16(useseg, cpu_regs.si, portin16(cpu_regs.dx));
       if (cpu_flags.df) {
         cpu_regs.si = cpu_regs.si - 2;
-        cpu_regs.di = cpu_regs.di - 2;
+//        cpu_regs.di = cpu_regs.di - 2;
       } else {
         cpu_regs.si = cpu_regs.si + 2;
-        cpu_regs.di = cpu_regs.di + 2;
+//        cpu_regs.di = cpu_regs.di + 2;
       }
 
       if (reptype) {
@@ -2146,10 +2146,10 @@ int32_t cpu_exec86(int32_t target) {
       portout(cpu_regs.dx, getmem8(useseg, cpu_regs.si));
       if (cpu_flags.df) {
         cpu_regs.si = cpu_regs.si - 1;
-        cpu_regs.di = cpu_regs.di - 1;
+//        cpu_regs.di = cpu_regs.di - 1;
       } else {
         cpu_regs.si = cpu_regs.si + 1;
-        cpu_regs.di = cpu_regs.di + 1;
+//        cpu_regs.di = cpu_regs.di + 1;
       }
 
       if (reptype) {
@@ -2171,11 +2171,11 @@ int32_t cpu_exec86(int32_t target) {
 
       portout16(cpu_regs.dx, getmem16(useseg, cpu_regs.si));
       if (cpu_flags.df) {
-        cpu_regs.si = cpu_regs.si - 2;
-        cpu_regs.di = cpu_regs.di - 2;
+        cpu_regs.si -= 2;
+//        cpu_regs.di -= 2;
       } else {
-        cpu_regs.si = cpu_regs.si + 2;
-        cpu_regs.di = cpu_regs.di + 2;
+        cpu_regs.si += 2;
+//        cpu_regs.di += 2;
       }
 
       if (reptype) {
