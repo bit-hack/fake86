@@ -198,14 +198,29 @@ static bool sdl_audio_init(void) {
   return true;
 }
 
-static bool emulate_init() {
+static void cpu_setup(void) {
+  struct cpu_io_t io;
+  io.ram = RAM;
+  io.mem_read_8    = read86;
+  io.mem_read_16   = readw86;
+  io.mem_write_8   = write86;
+  io.mem_write_16  = writew86;
+  io.port_read_8   = portin;
+  io.port_read_16  = portin16;
+  io.port_write_8  = portout;
+  io.port_write_16 = portout16;
+  io.int_call      = intcall86;
+  cpu_set_io(&io);
+}
+
+static bool emulate_init(void) {
   // initialize memory
   mem_init();
   // insert our option rom
   rom_insert();
   // initalize the cpu
+  cpu_setup();
   cpu_reset();
-  cpu_set_intcall_handler(intcall86);
   // initalize hardware
   i8253_init();
   i8259_init();

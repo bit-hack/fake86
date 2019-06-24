@@ -60,9 +60,6 @@ bool cpu_in_hlt_state(void);
 typedef void (*cpu_intcall_t)(const uint16_t int_num);
 void cpu_set_intcall_handler(cpu_intcall_t handler);
 
-// cpu instruction pointer
-extern uint16_t ip;
-
 union cpu_flags_t {
   struct {
     uint32_t cf:1, pf:1, af:1, zf:1, sf:1, tf:1, ifl:1, df:1, of:1;
@@ -84,12 +81,20 @@ void cpu_state_load(FILE *fd);
 extern bool cpu_halt;
 extern bool cpu_step;
 
-bool cpu_redux_exec(void);
-
-uint16_t useseg;
-bool segoverride;
-
-void cpu_dump_state(FILE *fd);
-
 #define CPU_ADDR(SEG, OFF) \
   (((SEG) << 4) + (OFF))
+
+struct cpu_io_t {
+  uint8_t *ram;
+  uint8_t  (*mem_read_8   )(uint32_t addr);
+  uint16_t (*mem_read_16  )(uint32_t addr);
+  void     (*mem_write_8  )(uint32_t addr,   uint8_t  value);
+  void     (*mem_write_16 )(uint32_t addr,   uint16_t value);
+  uint8_t  (*port_read_8  )(uint16_t port);
+  uint16_t (*port_read_16 )(uint16_t port);
+  void     (*port_write_8 )(uint16_t port, uint8_t  value);
+  void     (*port_write_16)(uint16_t port, uint16_t value);
+  void     (*int_call     )(uint16_t num);
+};
+
+void cpu_set_io(const struct cpu_io_t *io);

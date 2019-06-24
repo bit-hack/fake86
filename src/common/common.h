@@ -85,7 +85,8 @@ struct structpic {
 };
 void i8259_init();
 void i8259_doirq(uint8_t irqnum);
-uint8_t i8259_nextintr();
+uint8_t i8259_nextintr(void);
+bool i8259_irq_pending(void);
 void i8259_tick(uint64_t cycles);
 void i8259_state_save(FILE *fd);
 void i8259_state_load(FILE *fd);

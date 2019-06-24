@@ -104,6 +104,10 @@ void i8259_doirq(uint8_t irqnum) {
   i8259.irr |= (1 << irqnum);
 }
 
+bool i8259_irq_pending(void) {
+  return (i8259.irr & (~i8259.imr)) != 0;
+}
+
 void i8259_init() {
   memset((void *)&i8259, 0, sizeof(i8259));
 

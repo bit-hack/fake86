@@ -24,7 +24,7 @@
 #include <x86intrin.h>
 #endif
 
-#include "cpu.h"
+#include "cpu_priv.h"
 #include "cpu_mod_rm.h"
 
 
@@ -44,9 +44,17 @@ static uint8_t _sti_sr = 0;
 #define OPCODE(NAME)                                                          \
   static void NAME (const uint8_t *code)
 
+
+struct cpu_io_t _cpu_io;
+
+void cpu_set_io(const struct cpu_io_t *io) {
+  memcpy(&_cpu_io, io, sizeof(struct cpu_io_t));
+}
+
+
 // raise an interupt
 static inline void _raise_int(uint8_t num) {
-  intcall86(num);
+  _cpu_io.int_call(num);
 }
 
 // effective instruction pointer
@@ -62,25 +70,25 @@ static inline uint32_t _esp(void) {
 // push byte to stack
 static inline void _push_b(const uint8_t val) {
   cpu_regs.sp -= 1;
-  *(uint8_t*)(RAM + _esp()) = val;
+  _cpu_io.mem_write_8(_esp(), val);
 }
 
 // push word to stack
 static inline void _push_w(const uint16_t val) {
   cpu_regs.sp -= 2;
-  *(uint16_t*)(RAM + _esp()) = val;
+  _cpu_io.mem_write_16(_esp(), val);
 }
 
 // pop byte from stack
 static inline uint8_t _pop_b(void) {
-  const uint8_t out = *(const uint8_t*)(RAM + _esp());
+  const uint8_t out = _cpu_io.mem_read_8(_esp());
   cpu_regs.sp += 1;
   return out;
 }
 
 // pop word from stack
 static inline uint16_t _pop_w(void) {
-  const uint16_t out = *(const uint16_t*)(RAM + _esp());
+  const uint16_t out = _cpu_io.mem_read_16(_esp());
   cpu_regs.sp += 2;
   return out;
 }
@@ -1109,28 +1117,28 @@ static uint32_t _get_addr(const enum cpu_seg_t seg, uint16_t offs) {
 // MOV AL, [imm16]
 OPCODE(_A0) {
   const uint16_t imm = GET_CODE(uint16_t, 1);
-  cpu_regs.al = read86(_get_addr(CPU_SEG_DS, imm));
+  cpu_regs.al = _cpu_io.mem_read_8(_get_addr(CPU_SEG_DS, imm));
   _step_ip(3);
 }
 
 // MOV AX, [imm16]
 OPCODE(_A1) {
   const uint16_t imm = GET_CODE(uint16_t, 1);
-  cpu_regs.ax = readw86(_get_addr(CPU_SEG_DS, imm));
+  cpu_regs.ax = _cpu_io.mem_read_16(_get_addr(CPU_SEG_DS, imm));
   _step_ip(3);
 }
 
 // MOV [imm16], AL
 OPCODE(_A2) {
   const uint16_t imm = GET_CODE(uint16_t, 1);
-  write86(_get_addr(CPU_SEG_DS, imm), cpu_regs.al);
+  _cpu_io.mem_write_8(_get_addr(CPU_SEG_DS, imm), cpu_regs.al);
   _step_ip(3);
 }
 
 // MOV [imm16], AX
 OPCODE(_A3) {
   const uint16_t imm = GET_CODE(uint16_t, 1);
-  writew86(_get_addr(CPU_SEG_DS, imm), cpu_regs.ax);
+  _cpu_io.mem_write_16(_get_addr(CPU_SEG_DS, imm), cpu_regs.ax);
   _step_ip(3);
 }
 
@@ -1273,7 +1281,8 @@ OPCODE(_CD) {
 
 // XLAT
 OPCODE(_D7) {
-  cpu_regs.al = read86(_get_addr(CPU_SEG_DS, cpu_regs.bx + cpu_regs.al));
+  cpu_regs.al = _cpu_io.mem_read_8(
+    _get_addr(CPU_SEG_DS, cpu_regs.bx + cpu_regs.al));
   _step_ip(1);
 }
 
@@ -1332,28 +1341,28 @@ OPCODE(_E3) {
 // IN AL, port
 OPCODE(_E4) {
   const uint8_t port = GET_CODE(uint8_t, 1);
-  cpu_regs.al = portin(port);
+  cpu_regs.al = _cpu_io.port_read_8(port);
   _step_ip(2);
 }
 
 // IN AX, port
 OPCODE(_E5) {
   const uint8_t port = GET_CODE(uint8_t, 1);
-  cpu_regs.ax = portin16(port);
+  cpu_regs.ax = _cpu_io.port_read_16(port);
   _step_ip(2);
 }
 
 // OUT AL, port
 OPCODE(_E6) {
   const uint8_t port = GET_CODE(uint8_t, 1);
-  portout(port, cpu_regs.al);
+  _cpu_io.port_write_8(port, cpu_regs.al);
   _step_ip(2);
 }
 
 // OUT AX, port
 OPCODE(_E7) {
   const uint8_t port = GET_CODE(uint8_t, 1);
-  portout16(port, cpu_regs.ax);
+  _cpu_io.port_write_16(port, cpu_regs.ax);
   _step_ip(2);
 }
 
@@ -1385,25 +1394,25 @@ OPCODE(_EB) {
 
 // IN AL, DX
 OPCODE(_EC) {
-  cpu_regs.al = portin(cpu_regs.dx);
+  cpu_regs.al = _cpu_io.port_read_8(cpu_regs.dx);
   _step_ip(1);
 }
 
 // IN AX, DX
 OPCODE(_ED) {
-  cpu_regs.ax = portin16(cpu_regs.dx);
+  cpu_regs.ax = _cpu_io.port_read_16(cpu_regs.dx);
   _step_ip(1);
 }
 
 // OUT AL, DX
 OPCODE(_EE) {
-  portout(cpu_regs.dx, cpu_regs.al);
+  _cpu_io.port_write_8(cpu_regs.dx, cpu_regs.al);
   _step_ip(1);
 }
 
 // OUT AX, DX
 OPCODE(_EF) {
-  portout16(cpu_regs.dx, cpu_regs.ax);
+  _cpu_io.port_write_16(cpu_regs.dx, cpu_regs.ax);
   _step_ip(1);
 }
 
@@ -1504,7 +1513,7 @@ bool cpu_redux_exec(void) {
   // get effective pc
   const uint32_t eip = (cpu_regs.cs << 4) + cpu_regs.ip;
   // find the code stream
-  const uint8_t *code = RAM + eip;
+  const uint8_t *code = _cpu_io.ram + eip;
   // lookup opcode handler
   const opcode_t op = _op_table[*code];
   if (op == NULL) {

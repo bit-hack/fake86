@@ -22,6 +22,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "cpu_priv.h"
 
 
 #define GET_CODE(TYPE, OFFSET)                                                \
@@ -141,7 +142,7 @@ static inline void _write_rm_b(struct cpu_mod_rm_t *m, const uint8_t v) {
     _set_reg_b(m->rm, v);
   }
   else {
-    write86(m->ea, v);
+    _cpu_io.mem_write_8(m->ea, v);
   }
 }
 
@@ -150,16 +151,16 @@ static inline void _write_rm_w(struct cpu_mod_rm_t *m, const uint16_t v) {
     _set_reg_w(m->rm, v);
   }
   else {
-    writew86(m->ea, v);
+    _cpu_io.mem_write_16(m->ea, v);
   }
 }
 
 static inline uint8_t _read_rm_b(struct cpu_mod_rm_t *m) {
-  return (m->mod == 3) ? _get_reg_b(m->rm) : read86(m->ea);
+  return (m->mod == 3) ? _get_reg_b(m->rm) : _cpu_io.mem_read_8(m->ea);
 }
 
 static inline uint16_t _read_rm_w(struct cpu_mod_rm_t *m) {
-  return (m->mod == 3) ? _get_reg_w(m->rm) : readw86(m->ea);
+  return (m->mod == 3) ? _get_reg_w(m->rm) : _cpu_io.mem_read_16(m->ea);
 }
 
 static inline void _decode_mod_rm(

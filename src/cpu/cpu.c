@@ -23,7 +23,7 @@
  * Fake86. */
 
 #include "../common/common.h"
-#include "cpu.h"
+#include "cpu_priv.h"
 
 struct cpu_regs_t cpu_regs;
 union cpu_flags_t cpu_flags;
@@ -90,24 +90,13 @@ uint64_t cpu_slice_ticks(void) {
     }                                                                          \
   }
 
-static void _default_intcall_handler(const int16_t intnum) {
-  assert(!"Error");
-}
-
-static cpu_intcall_t _intcall_handler =
-  (cpu_intcall_t)_default_intcall_handler;
-
-void cpu_set_intcall_handler(cpu_intcall_t handler) {
-  _intcall_handler = handler;
-}
-
 #define segbase(x) ((uint32_t)x << 4)
 
-#define getmem8(x, y) read86(segbase(x) + y)
-#define getmem16(x, y) readw86(segbase(x) + y)
+#define getmem8(x, y) _cpu_io.mem_read_8(segbase(x) + y)
+#define getmem16(x, y) _cpu_io.mem_read_16(segbase(x) + y)
 
-#define putmem8(x, y, z) write86(segbase(x) + y, z)
-#define putmem16(x, y, z) writew86(segbase(x) + y, z)
+#define putmem8(x, y, z) _cpu_io.mem_write_8(segbase(x) + y, z)
+#define putmem16(x, y, z) _cpu_io.mem_write_16(segbase(x) + y, z)
 
 #define signext(value) ((int16_t)(int8_t)(value))
 #define signext32(value) ((int32_t)(int16_t)(value))
@@ -666,7 +655,7 @@ void cpu_reset() {
 static uint16_t readrm16(uint8_t rmval) {
   if (mode < 3) {
     getea(rmval);
-    return readw86(ea);
+    return _cpu_io.mem_read_16(ea);
   } else {
     return cpu_getreg16(rmval);
   }
@@ -675,7 +664,7 @@ static uint16_t readrm16(uint8_t rmval) {
 static uint8_t readrm8(uint8_t rmval) {
   if (mode < 3) {
     getea(rmval);
-    return read86(ea);
+    return _cpu_io.mem_read_8(ea);
   } else {
     return cpu_getreg8(rmval);
   }
@@ -684,7 +673,7 @@ static uint8_t readrm8(uint8_t rmval) {
 static void writerm16(uint8_t rmval, uint16_t value) {
   if (mode < 3) {
     getea(rmval);
-    writew86(ea, value);
+    _cpu_io.mem_write_16(ea, value);
   } else {
     cpu_setreg16(rmval, value);
   }
@@ -694,7 +683,7 @@ static void writerm16(uint8_t rmval, uint16_t value) {
 static void writerm8(uint8_t rmval, uint8_t value) {
   if (mode < 3) {
     getea(rmval);
-    write86(ea, value);
+    _cpu_io.mem_write_8(ea, value);
   } else {
     cpu_setreg8(rmval, value);
   }
@@ -884,12 +873,12 @@ static uint16_t op_grp2_16(uint8_t cnt) {
 
 static void op_div8(uint16_t valdiv, uint8_t divisor) {
   if (divisor == 0) {
-    _intcall_handler(0);
+    _cpu_io.int_call(0);
     return;
   }
 
   if ((valdiv / (uint16_t)divisor) > 0xFF) {
-    _intcall_handler(0);
+    _cpu_io.int_call(0);
     return;
   }
 
@@ -900,7 +889,7 @@ static void op_div8(uint16_t valdiv, uint8_t divisor) {
 static void op_idiv8(uint16_t valdiv, uint8_t divisor) {
 
   if (divisor == 0) {
-    _intcall_handler(0);
+    _cpu_io.int_call(0);
     return;
   }
 
@@ -912,7 +901,7 @@ static void op_idiv8(uint16_t valdiv, uint8_t divisor) {
   uint16_t d1 = s1 / s2;
   uint16_t d2 = s1 % s2;
   if (d1 & 0xFF00) {
-    _intcall_handler(0);
+    _cpu_io.int_call(0);
     return;
   }
 
@@ -995,12 +984,12 @@ static void op_grp3_8() {
 
 static void op_div16(uint32_t valdiv, uint16_t divisor) {
   if (divisor == 0) {
-    _intcall_handler(0);
+    _cpu_io.int_call(0);
     return;
   }
 
   if ((valdiv / (uint32_t)divisor) > 0xFFFF) {
-    _intcall_handler(0);
+    _cpu_io.int_call(0);
     return;
   }
 
@@ -1017,7 +1006,7 @@ static void op_idiv16(uint32_t valdiv, uint16_t divisor) {
   int sign;
 
   if (divisor == 0) {
-    _intcall_handler(0);
+    _cpu_io.int_call(0);
     return;
   }
 
@@ -1030,7 +1019,7 @@ static void op_idiv16(uint32_t valdiv, uint16_t divisor) {
   d1 = s1 / s2;
   d2 = s1 % s2;
   if (d1 & 0xFFFF0000) {
-    _intcall_handler(0);
+    _cpu_io.int_call(0);
     return;
   }
 
@@ -1128,8 +1117,8 @@ static void op_grp5() {
     cpu_push(cpu_regs.cs);
     cpu_push(cpu_regs.ip);
     getea(rm);
-    cpu_regs.ip = readw86(ea + 0);
-    cpu_regs.cs = readw86(ea + 2);
+    cpu_regs.ip = _cpu_io.mem_read_16(ea + 0);
+    cpu_regs.cs = _cpu_io.mem_read_16(ea + 2);
     break;
 
   case 4: /* JMP Ev */
@@ -1138,8 +1127,8 @@ static void op_grp5() {
 
   case 5: /* JMP Mp */
     getea(rm);
-    cpu_regs.ip = readw86(ea + 0);
-    cpu_regs.cs = readw86(ea + 2);
+    cpu_regs.ip = _cpu_io.mem_read_16(ea + 0);
+    cpu_regs.cs = _cpu_io.mem_read_16(ea + 2);
     break;
 
   case 6: /* PUSH Ev */
@@ -1156,7 +1145,7 @@ static void _on_illegal_instruction(void) {
 #ifdef CPU_ALLOW_ILLEGAL_OP_EXCEPTION
   // trip invalid opcode exception (this occurs on the 80186+,
   // 8086/8088 CPUs treat them as NOPs.
-  _intcall_handler(6);
+  _cpu_io.int_call(6);
   // technically they aren't exactly like NOPs in most cases,
   // but for our pursoses, that's accurate enough.
 #endif
@@ -1202,17 +1191,17 @@ int32_t cpu_exec86(int32_t target) {
 
     // if trap is asserted
     if (trap_toggle) {
-      _intcall_handler(1);
+      _cpu_io.int_call(1);
     }
 
     trap_toggle = cpu_flags.tf;
 
-    const bool pending_irq = cpu_flags.ifl && (i8259.irr & (~i8259.imr));
+    const bool pending_irq = cpu_flags.ifl && i8259_irq_pending();
     if (!trap_toggle && pending_irq) {
       in_hlt_state = false;
       const int next_int = i8259_nextintr();
       // get next interrupt from the i8259, if any
-      _intcall_handler(next_int);
+      _cpu_io.int_call(next_int);
     }
 
     if (in_hlt_state) {
@@ -2031,11 +2020,11 @@ int32_t cpu_exec86(int32_t target) {
       modregrm();
       getea(rm);
       if (signext32(cpu_getreg16(reg)) < signext32(getmem16(ea >> 4, ea & 15))) {
-        _intcall_handler(5); // bounds check exception
+        _cpu_io.int_call(5); // bounds check exception
       } else {
         ea += 2;
         if (signext32(cpu_getreg16(reg)) > signext32(getmem16(ea >> 4, ea & 15))) {
-          _intcall_handler(5); // bounds check exception
+          _cpu_io.int_call(5); // bounds check exception
         }
       }
       break;
@@ -2091,7 +2080,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      putmem8(useseg, cpu_regs.si, portin(cpu_regs.dx));
+      putmem8(useseg, cpu_regs.si, _cpu_io.port_read_8(cpu_regs.dx));
       if (cpu_flags.df) {
         cpu_regs.si = cpu_regs.si - 1;
 //        cpu_regs.di = cpu_regs.di - 1;
@@ -2117,7 +2106,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      putmem16(useseg, cpu_regs.si, portin16(cpu_regs.dx));
+      putmem16(useseg, cpu_regs.si, _cpu_io.port_read_16(cpu_regs.dx));
       if (cpu_flags.df) {
         cpu_regs.si = cpu_regs.si - 2;
 //        cpu_regs.di = cpu_regs.di - 2;
@@ -2143,7 +2132,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      portout(cpu_regs.dx, getmem8(useseg, cpu_regs.si));
+      _cpu_io.port_write_8(cpu_regs.dx, getmem8(useseg, cpu_regs.si));
       if (cpu_flags.df) {
         cpu_regs.si = cpu_regs.si - 1;
 //        cpu_regs.di = cpu_regs.di - 1;
@@ -2169,7 +2158,7 @@ int32_t cpu_exec86(int32_t target) {
         break;
       }
 
-      portout16(cpu_regs.dx, getmem16(useseg, cpu_regs.si));
+      _cpu_io.port_write_16(cpu_regs.dx, getmem16(useseg, cpu_regs.si));
       if (cpu_flags.df) {
         cpu_regs.si -= 2;
 //        cpu_regs.di -= 2;
@@ -2962,15 +2951,15 @@ int32_t cpu_exec86(int32_t target) {
     case 0xC4: /* C4 LES Gv Mp */
       modregrm();
       getea(rm);
-      cpu_setreg16(reg, readw86(ea));
-      cpu_regs.es = readw86(ea + 2);
+      cpu_setreg16(reg, _cpu_io.mem_read_16(ea));
+      cpu_regs.es = _cpu_io.mem_read_16(ea + 2);
       break;
 
     case 0xC5: /* C5 LDS Gv Mp */
       modregrm();
       getea(rm);
-      cpu_setreg16(reg, readw86(ea));
-      cpu_regs.ds = readw86(ea + 2);
+      cpu_setreg16(reg, _cpu_io.mem_read_16(ea));
+      cpu_regs.ds = _cpu_io.mem_read_16(ea + 2);
       break;
 
     case 0xC6: /* C6 MOV Eb Ib */
@@ -3022,17 +3011,17 @@ int32_t cpu_exec86(int32_t target) {
       break;
 
     case 0xCC: /* CC INT 3 */
-      _intcall_handler(3);
+      _cpu_io.int_call(3);
       break;
 
     case 0xCD: /* CD INT Ib */
       oper1b = _read_code_u8();
-      _intcall_handler(oper1b);
+      _cpu_io.int_call(oper1b);
       break;
 
     case 0xCE: /* CE INTO */
       if (cpu_flags.of) {
-        _intcall_handler(4);
+        _cpu_io.int_call(4);
       }
       break;
 
@@ -3070,7 +3059,7 @@ int32_t cpu_exec86(int32_t target) {
       oper1 = _read_code_u8();
       // division by zero!
       if (!oper1) {
-        _intcall_handler(0);
+        _cpu_io.int_call(0);
         break;
       }
 
@@ -3095,7 +3084,7 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0xD7: /* D7 XLAT */
       cpu_regs.al = 
-          read86(segbase(useseg) + (cpu_regs.bx) + cpu_regs.al);
+          _cpu_io.mem_read_8(segbase(useseg) + (cpu_regs.bx) + cpu_regs.al);
       break;
 
 #if 1
@@ -3144,22 +3133,22 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0xE4: /* E4 IN cpu_regs.al Ib */
       oper1b = _read_code_u8();
-      cpu_regs.al = (uint8_t)portin(oper1b);
+      cpu_regs.al = (uint8_t)_cpu_io.port_read_8(oper1b);
       break;
 
     case 0xE5: /* E5 IN AX Ib */
       oper1b = _read_code_u8();
-      cpu_regs.ax = portin16(oper1b);
+      cpu_regs.ax = _cpu_io.port_read_16(oper1b);
       break;
 
     case 0xE6: /* E6 OUT Ib cpu_regs.al */
       oper1b = _read_code_u8();
-      portout(oper1b, cpu_regs.al);
+      _cpu_io.port_write_8(oper1b, cpu_regs.al);
       break;
 
     case 0xE7: /* E7 OUT Ib eAX */
       oper1b = _read_code_u8();
-      portout16(oper1b, cpu_regs.ax);
+      _cpu_io.port_write_16(oper1b, cpu_regs.ax);
       break;
 
     case 0xE8: /* E8 CALL Jv */
@@ -3188,22 +3177,22 @@ int32_t cpu_exec86(int32_t target) {
 
     case 0xEC: /* EC IN cpu_regs.al regdx */
       oper1 = cpu_regs.dx;
-      cpu_regs.al = (uint8_t)portin(oper1);
+      cpu_regs.al = (uint8_t)_cpu_io.port_read_8(oper1);
       break;
 
     case 0xED: /* ED IN eAX regdx */
       oper1 = cpu_regs.dx;
-      cpu_regs.ax = portin16(oper1);
+      cpu_regs.ax = _cpu_io.port_read_16(oper1);
       break;
 
     case 0xEE: /* EE OUT regdx cpu_regs.al */
       oper1 = cpu_regs.dx;
-      portout(oper1, cpu_regs.al);
+      _cpu_io.port_write_8(oper1, cpu_regs.al);
       break;
 
     case 0xEF: /* EF OUT regdx eAX */
       oper1 = cpu_regs.dx;
-      portout16(oper1, cpu_regs.ax);
+      _cpu_io.port_write_16(oper1, cpu_regs.ax);
       break;
 
     case 0xF0: /* F0 LOCK */
