@@ -66,3 +66,13 @@ target_link_libraries(fake86
     lib_disk
     ${SDL_LIBRARY})
 
+
+file(GLOB SOURCE_TESTS_OPCODES
+    src/tests/opcodes/*.h
+    src/tests/opcodes/*.c)
+add_executable(tests_opcodes ${SOURCE_TESTS_OPCODES})
+
+target_link_libraries(tests_opcodes
+    lib_common
+    lib_cpu
+    ${SDL_LIBRARY})
