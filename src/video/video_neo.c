@@ -37,6 +37,8 @@
 //  text mode page is either 2k bytes (40x25x2) or 4k bytes (80x25x2)
 #define MAX_PAGES 16
 
+static const bool NEO_VERBOSE = true;
+
 enum system_t {
   video_mda,
   video_cga,
@@ -64,7 +66,7 @@ static uint32_t _base = 0xB8000;
 //
 static uint8_t _active_page = 0;
 
-static bool no_blanking = false;
+static bool _no_blanking = false;
 
 // 4x 64k memory planes
 static uint8_t _vga_ram[0x40000];
@@ -72,7 +74,7 @@ static uint8_t _vga_ram[0x40000];
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 bool is_non_blanking(void) {
-  return no_blanking;
+  return _no_blanking;
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -169,6 +171,11 @@ static uint8_t _read_3d4_3d5(uint16_t portnum) {
 
 static void _write_3d4_3d5(uint16_t portnum, uint8_t value) {
   if (portnum & 1) {
+
+    if (NEO_VERBOSE) {
+      log_printf(LOG_CHAN_VIDEO, "CRT_REG[%02x] = %02x", (int)crt_reg_addr, (int)value);
+    }
+
     crt_register[crt_reg_addr] = value;
   } else {
     crt_reg_addr = value & 0x1f;
@@ -513,8 +520,8 @@ static void ega_port_write(uint16_t portnum, uint8_t value) {
 // ports 03D0-03DF
 
 // XXX: should these mirror registers at 3b0?
-static uint8_t cga_control = 0;
-static uint8_t cga_palette = 0;
+static uint8_t _cga_control = 0;
+static uint8_t _cga_palette = 0;
 
 static uint8_t cga_port_read(uint16_t portnum) {
 
@@ -524,9 +531,9 @@ static uint8_t cga_port_read(uint16_t portnum) {
 
   switch (portnum) {
   case 0x3d8: // mode control register
-    return cga_control;
+    return _cga_control;
   case 0x3d9: // colour control register
-    return cga_palette;
+    return _cga_palette;
   case 0x3da:
     // reading from port 3ba/3da will reset the 3c0 address/data flip flop
     _3c0_flipflop = 0;
@@ -546,29 +553,47 @@ static void cga_port_write(uint16_t portnum, uint8_t value) {
   else {
     switch (portnum) {
     case 0x3d8:
-      cga_control = value;
+
+      // bit    1              0
+      //  0     80x25          40x25
+      //  1     320x240        text
+      //  2     b&w            colour
+      //  3     enable video
+      //  4     640x200 b&w
+      //  5     blink/intense
+
+      _cga_control = value;
+
+      switch (value) {
+      case 0x2c:  // 40x25 text b&w
+        break;
+      case 0x28:  // 40x25 text colour
+        break;
+      case 0x2d:  // 80x25 text b&w
+        break;
+      case 0x29:  // 80x25 text colour
+        break;
+      case 0x2e:
+      case 0x0e:  // 320x200 b&w
+        break;
+      case 0x2a:
+      case 0x0a:  // 320x200 colour
+        break;
+      case 0x3e:
+      case 0x1e:  // 640x200 b&W
+        break;
+      }
 
       // https://www.seasip.info/VintagePC/cga.html
 
-      if (value & 0x01) {
-        // high res mode
-      }
-
-      if (value & 0x02) {
-        // setting graphics mode
-      }
-
-      if (value & 0x10) {
-        // high res mode
-        // selects 2-colour graphics (640 pixels wide) rather than 4-colour (320 pixel wide)
-      }
-
       break;
     case 0x3d9:
-      cga_palette = value;
+      _cga_palette = value;
       break;
     default:
-//      printf("%04x w %02x\n", (int)portnum, (int)value);
+      if (NEO_VERBOSE) {
+        log_printf(LOG_CHAN_VIDEO, "cga port[%04x] = %02x\n", (int)portnum, (int)value);
+      }
       portram[portnum] = value;
     }
   }
@@ -599,7 +624,7 @@ static void neo_set_video_mode(uint8_t al) {
   log_printf(LOG_CHAN_VIDEO, "set video mode to %02Xh", (int)al);
 
   // check for no blanking
-  no_blanking = ((cpu_regs.al & 0x80) != 0);
+  _no_blanking = ((cpu_regs.al & 0x80) != 0);
   al &= 0x7f;
 
   // text mode columns and rows
@@ -651,7 +676,7 @@ bool neo_int10_handler(void) {
   switch (cpu_regs.ah) {
   case 0x00:
     neo_set_video_mode(cpu_regs.al);
-    // must return false
+    // must return false to let the CPU handle the interupt too
     return false;
   }
   return false;
@@ -688,7 +713,7 @@ static uint32_t _vga_latch;
 
 // Read Mode 0
 static uint8_t _neo_vga_read_0(uint32_t addr) {
-  // since the latch has just been updates these are fresh read values
+  // since the latch has just been updated these are fresh read values
   switch (_vga_read_map_select()) {
   case 0: return (_vga_latch >>  0) & 0xff;
   case 1: return (_vga_latch >>  8) & 0xff;
@@ -758,12 +783,13 @@ static void _neo_vga_write_planes(uint32_t addr, const uint32_t lanes) {
   }
 }
 
-static uint32_t _broadcast(const uint8_t val) {
+static inline uint32_t _broadcast(const uint8_t val) {
   return (val << 24) | (val << 16) | (val << 8) | val;
 }
 
 static void _neo_vga_write_alu(uint32_t addr, uint32_t input) {
-    // alu operations
+
+  // alu operations
   uint32_t tmp1;
   switch (_vga_logic_op()) {
   case 0: tmp1 = input;              break;
@@ -784,14 +810,6 @@ static void _neo_vga_write_alu(uint32_t addr, uint32_t input) {
 }
 
 // 00 = Write Mode 0
-//
-// During a CPU write to the frame buffer, the addressed byte in each of the 4
-// memory planes is written with the CPU write data after it has been rotated
-// by the number of counts specified in the Data Rotate Register (GR03). If,
-// however, the bit(s) in the Enable Set/Reset Register (GR01) corresponding to
-// one or more of the memory planes is set to 1, then those memory planes will
-// be written to with the data stored in the corresponding bits in the Set/Reset
-// Register (GR00).
 static void _neo_vga_write_0(uint32_t addr, uint8_t value) {
 
   value = _ror8(value, _vga_rot_count());
@@ -818,20 +836,6 @@ static void _neo_vga_write_1(uint32_t addr, uint8_t value) {
 }
 
 // 10 = Write Mode 2
-//
-// During a CPU write to the frame buffer, the least significant 4 data bits of
-// the CPU write data is treated as the color value for the pixels in the
-// addressed byte in all 4 memory planes. The 8 bits of the Bit Mask Register
-// (GR08) are used to selectively enable or disable the ability to write to the
-// corresponding bit in each of the 4 memory planes that correspond to a given
-// pixel. A setting of 0 in a bit in the Bit Mask Register at a given bit
-// position causes the bits in the corresponding bit positions in the addressed
-// byte in all 4 memory planes to be written with value of their counterparts in
-// the memory read latches. A setting of 1 in a Bit Mask Register at a given bit
-// position causes the bits in the corresponding bit positions in the addressed
-// byte in all 4 memory planes to be written with the 4 bits taken from the CPU
-// write data to thereby cause the pixel corresponding to these bits to be set
-// to the color value.
 static void _neo_vga_write_2(uint32_t addr, uint8_t value) {
   //see: https://www.phatcode.net/res/224/files/html/ch27/27-01.html
 
@@ -842,12 +846,6 @@ static void _neo_vga_write_2(uint32_t addr, uint8_t value) {
 }
 
 // 11 = Write Mode 3
-//
-// During a CPU write to the frame buffer, the CPU write data is logically
-// ANDed with the contents of the Bit Mask Register (GR08). The result of this
-// ANDing is treated as the bit mask used in writing the contents of the
-// Set/Reset Register (GR00) are written to addressed byte in all 4 memory
-// planes.
 static void _neo_vga_write_3(uint32_t addr, uint8_t value) {
 
   // https://wiki.osdev.org/VGA_Hardware - write mode 3
@@ -906,7 +904,7 @@ void neo_state_save(FILE *fd) {
   fwrite(&_pages, 1, sizeof(_pages), fd);
   fwrite(&_base, 1, sizeof(_base), fd);
   fwrite(&_active_page, 1, sizeof(_active_page), fd);
-  fwrite(&no_blanking, 1, sizeof(no_blanking), fd);
+  fwrite(&_no_blanking, 1, sizeof(_no_blanking), fd);
   fwrite(_vga_ram, 1, sizeof(_vga_ram), fd);
 
   fwrite(&crt_reg_addr, 1, sizeof(crt_reg_addr), fd);
@@ -935,8 +933,8 @@ void neo_state_save(FILE *fd) {
   fwrite(&_3c0_flipflop, 1, sizeof(_3c0_flipflop), fd);
   fwrite(&_3c0_addr    , 1, sizeof(_3c0_addr), fd);
 
-  fwrite(&cga_control, 1, sizeof(cga_control), fd);
-  fwrite(&cga_palette, 1, sizeof(cga_palette), fd);
+  fwrite(&_cga_control, 1, sizeof(_cga_control), fd);
+  fwrite(&_cga_palette, 1, sizeof(_cga_palette), fd);
 
   fwrite(&_vga_latch, 1, sizeof(_vga_latch), fd);
 }
@@ -951,7 +949,7 @@ void neo_state_load(FILE *fd) {
   fread(&_pages, 1, sizeof(_pages), fd);
   fread(&_base, 1, sizeof(_base), fd);
   fread(&_active_page, 1, sizeof(_active_page), fd);
-  fread(&no_blanking, 1, sizeof(no_blanking), fd);
+  fread(&_no_blanking, 1, sizeof(_no_blanking), fd);
   fread(_vga_ram, 1, sizeof(_vga_ram), fd);
 
   fread(&crt_reg_addr, 1, sizeof(crt_reg_addr), fd);
@@ -980,8 +978,8 @@ void neo_state_load(FILE *fd) {
   fread(&_3c0_flipflop, 1, sizeof(_3c0_flipflop), fd);
   fread(&_3c0_addr    , 1, sizeof(_3c0_addr), fd);
 
-  fread(&cga_control, 1, sizeof(cga_control), fd);
-  fread(&cga_palette, 1, sizeof(cga_palette), fd);
+  fread(&_cga_control, 1, sizeof(_cga_control), fd);
+  fread(&_cga_palette, 1, sizeof(_cga_palette), fd);
 
   fread(&_vga_latch, 1, sizeof(_vga_latch), fd);
 }

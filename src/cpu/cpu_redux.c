@@ -138,12 +138,12 @@ static inline void _set_pf(uint16_t val) {
   cpu_flags.pf = __builtin_parity(val);
 #endif
 #elif defined(USE_KERNIGHAN))
-	unsigned int ret;
+  unsigned int ret;
   unsigned int x = val;
-	for(ret = 0; x; x &= (x - 1)) {
-		ret++;
+  for(ret = 0; x; x &= (x - 1)) {
+    ++ret;
   }
-	return ret & 1;
+  return ret & 1;
 #else
   cpu_flags.pf = parity[val];
 #endif
@@ -166,9 +166,10 @@ static inline void _set_zf_sf_w(const uint16_t val) {
   cpu_flags.sf = (val & 0x8000) ? 1 : 0;
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 #define ADD_FLAGS_B(lhs, rhs, res)                                            \
   {                                                                           \
-    const uint8_t res = lhs + rhs;                                            \
     _set_zf_sf_b(res);                                                        \
     _set_pf(res);                                                             \
     cpu_flags.cf = ((lhs + rhs) > 0xff) ? 1 : 0;                              \
@@ -178,7 +179,6 @@ static inline void _set_zf_sf_w(const uint16_t val) {
 
 #define ADD_FLAGS_W(lhs, rhs, res)                                            \
   {                                                                           \
-    const uint16_t res = lhs + rhs;                                           \
     _set_zf_sf_w(res);                                                        \
     _set_pf(res);                                                             \
     cpu_flags.cf = ((lhs + rhs) > 0xffff) ? 1 : 0;                            \
@@ -254,6 +254,8 @@ OPCODE(_05) {
   _step_ip(3);
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 // PUSH ES - push segment register ES
 OPCODE(_06) {
   _push_w(cpu_regs.es);
@@ -266,11 +268,195 @@ OPCODE(_07) {
   _step_ip(1);
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+#define OR_FLAGS_B(lhs, rhs, res)                                             \
+  {                                                                           \
+    _set_zf_sf_b(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = 0;                                                         \
+    cpu_flags.of = 0;                                                         \
+  }
+
+#define OR_FLAGS_W(lhs, rhs, res)                                             \
+  {                                                                           \
+    _set_zf_sf_w(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = 0;                                                         \
+    cpu_flags.of = 0;                                                         \
+  }
+
+// OR m/r, reg  (byte)
+OPCODE(_08) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs | rhs;
+  OR_FLAGS_B(lhs, rhs, tmp);
+  _write_rm_b(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// OR m/r, reg  (word)
+OPCODE(_09) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs | rhs;
+  OR_FLAGS_W(lhs, rhs, tmp);
+  _write_rm_w(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// OR reg, m/r  (byte)
+OPCODE(_0A) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs | rhs;
+  OR_FLAGS_B(lhs, rhs, tmp);
+  _set_reg_b(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// OR reg, m/r  (word)
+OPCODE(_0B) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs | rhs;
+  OR_FLAGS_W(lhs, rhs, tmp);
+  _set_reg_w(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// OR al, imm8
+OPCODE(_0C) {
+  const uint8_t lhs = cpu_regs.al;
+  const uint8_t rhs = GET_CODE(uint8_t, 1);
+  const uint8_t tmp = lhs | rhs;
+  OR_FLAGS_B(lhs, rhs, tmp);
+  cpu_regs.al = tmp;
+  _step_ip(2);
+}
+
+// OR ax, imm16
+OPCODE(_0D) {
+  const uint16_t lhs = cpu_regs.ax;
+  const uint16_t rhs = GET_CODE(uint16_t, 1);
+  const uint16_t tmp = lhs | rhs;
+  OR_FLAGS_W(lhs, rhs, tmp);
+  cpu_regs.ax = tmp;
+  _step_ip(3);
+}
+
+#undef OR_FLAGS_B
+#undef OR_FLAGS_W
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 // PUSH CS - push segment register CS
 OPCODE(_0E) {
   _push_w(cpu_regs.cs);
   _step_ip(1);
 }
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+#define ADC_FLAGS_B(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_b(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs + rhs) > 0xff) ? 1 : 0;                              \
+    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
+    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x80) == 0x80) ? 1 : 0;      \
+  }
+
+#define ADC_FLAGS_W(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_w(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs + rhs) > 0xffff) ? 1 : 0;                            \
+    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
+    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x8000) == 0x8000) ? 1 : 0;  \
+  }
+
+// ADC m/r, reg  (byte)
+OPCODE(_10) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs + rhs + cpu_flags.cf;
+  ADC_FLAGS_B(lhs, rhs, tmp);
+  _write_rm_b(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// ADC m/r, reg  (word)
+OPCODE(_11) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
+  ADC_FLAGS_W(lhs, rhs, tmp);
+  _write_rm_w(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// ADC reg, m/r  (byte)
+OPCODE(_12) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs + rhs + cpu_flags.cf;
+  ADC_FLAGS_B(lhs, rhs, tmp);
+  _set_reg_b(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// ADC reg, m/r  (word)
+OPCODE(_13) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
+  ADC_FLAGS_W(lhs, rhs, tmp);
+  _set_reg_w(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// ADC al, imm8
+OPCODE(_14) {
+  const uint8_t lhs = cpu_regs.al;
+  const uint8_t rhs = GET_CODE(uint8_t, 1);
+  const uint8_t tmp = lhs + rhs + cpu_flags.cf;
+  ADC_FLAGS_B(lhs, rhs, tmp);
+  cpu_regs.al = tmp;
+  _step_ip(2);
+}
+
+// ADC ax, imm16
+OPCODE(_15) {
+  const uint16_t lhs = cpu_regs.ax;
+  const uint16_t rhs = GET_CODE(uint16_t, 1);
+  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
+  ADC_FLAGS_W(lhs, rhs, tmp);
+  cpu_regs.ax = tmp;
+  _step_ip(3);
+}
+
+#undef ADC_FLAGS_B
+#undef ADC_FLAGS_W
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- 
 
 // PUSH SS - push segment register SS
 OPCODE(_16) {
@@ -284,6 +470,99 @@ OPCODE(_17) {
   _step_ip(1);
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+#define SBB_FLAGS_B(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_b(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs + rhs) > 0xff) ? 1 : 0;                              \
+    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
+    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x80) == 0x80) ? 1 : 0;      \
+  }
+
+#define SBB_FLAGS_W(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_w(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs + rhs) > 0xffff) ? 1 : 0;                            \
+    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
+    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x8000) == 0x8000) ? 1 : 0;  \
+  }
+
+// SBB m/r, reg  (byte)
+OPCODE(_18) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs - (rhs + cpu_flags.cf);
+  SBB_FLAGS_B(lhs, rhs, tmp);
+  _write_rm_b(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// SBB m/r, reg  (word)
+OPCODE(_19) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs - (rhs + cpu_flags.cf);
+  SBB_FLAGS_W(lhs, rhs, tmp);
+  _write_rm_w(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// SBB reg, m/r  (byte)
+OPCODE(_1A) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs - (rhs + cpu_flags.cf);
+  SBB_FLAGS_B(lhs, rhs, tmp);
+  _set_reg_b(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// SBB reg, m/r  (word)
+OPCODE(_1B) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs - (rhs + cpu_flags.cf);
+  SBB_FLAGS_W(lhs, rhs, tmp);
+  _set_reg_w(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// SBB al, imm8
+OPCODE(_1C) {
+  const uint8_t lhs = cpu_regs.al;
+  const uint8_t rhs = GET_CODE(uint8_t, 1);
+  const uint8_t tmp = lhs - (rhs + cpu_flags.cf);
+  SBB_FLAGS_B(lhs, rhs, tmp);
+  cpu_regs.al = tmp;
+  _step_ip(2);
+}
+
+// SBB ax, imm16
+OPCODE(_1D) {
+  const uint16_t lhs = cpu_regs.ax;
+  const uint16_t rhs = GET_CODE(uint16_t, 1);
+  const uint16_t tmp = lhs - (rhs + cpu_flags.cf);
+  SBB_FLAGS_W(lhs, rhs, tmp);
+  cpu_regs.ax = tmp;
+  _step_ip(3);
+}
+
+#undef SBB_FLAGS_B
+#undef SBB_FLAGS_W
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 // PUSH DS - push segment register DS
 OPCODE(_1E) {
   _push_w(cpu_regs.ds);
@@ -295,6 +574,12 @@ OPCODE(_1F) {
   cpu_regs.ds = _pop_w();
   _step_ip(1);
 }
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// AND 0x20 -> 0x25
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 #define SEGOVR(OP)                                                            \
 {                                                                             \
@@ -313,10 +598,26 @@ OPCODE(_26) {
   SEGOVR(0x26);
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// DAA 0x27
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// SUB 0x28 -> 0x2D
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 // Prefix - Segment Override CS
 OPCODE(_2E) {
   SEGOVR(0x2E);
 }
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+// XOR 0x30 -> 0x35
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 // Prefix - Segment Override SS
 OPCODE(_36) {
@@ -327,6 +628,8 @@ OPCODE(_36) {
 OPCODE(_3E) {
   SEGOVR(0x3e);
 }
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 #define INC(REG)                                                              \
   {                                                                           \
@@ -380,6 +683,8 @@ OPCODE(_47) {
 
 #undef INC
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 #define DEC(REG)                                                              \
   {                                                                           \
     cpu_flags.of = (REG == 0x8000);                                           \
@@ -432,6 +737,8 @@ OPCODE(_4F) {
 
 #undef DEC
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 // PUSH AX - push register
 OPCODE(_50) {
   _push_w(cpu_regs.ax);
@@ -480,6 +787,8 @@ OPCODE(_57) {
   _step_ip(1);
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 // POP AX - pop register
 OPCODE(_58) {
   cpu_regs.ax = _pop_w();
@@ -527,6 +836,8 @@ OPCODE(_5F) {
   cpu_regs.di = _pop_w();
   _step_ip(1);
 }
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 // JO - jump on overflow
 OPCODE(_70) {
@@ -656,6 +967,8 @@ OPCODE(_7F) {
   }
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 #define TEST_B(TMP)                                                           \
   {                                                                           \
     _set_zf_sf_b(TMP);                                                        \
@@ -696,6 +1009,8 @@ OPCODE(_85) {
   _step_ip(1 + m.num_bytes);
 }
 
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 // MOV - r/m8, r8
 OPCODE(_88) {
   struct cpu_mod_rm_t m;
@@ -715,6 +1030,8 @@ OPCODE(_89) {
   // step instruction pointer
   _step_ip(1 + m.num_bytes);
 }
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 // NOP - no operation (XCHG AX AX)
 OPCODE(_90) {
@@ -765,6 +1082,8 @@ OPCODE(_97) {
 }
 
 #undef XCHG
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 // CBW - convert byte to word
 OPCODE(_98) {

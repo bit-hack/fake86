@@ -174,11 +174,6 @@ static const char *_get_int_desc(int num) {
 
 bool on_dos_int(void) {
 
-  if (!VERBOSE) {
-    // interupt not handled
-    return false;
-  }
-
   switch (cpu_regs.ah) {
   case 0x09:  // Write stdout
     _on_dos_write_stdout();
@@ -190,7 +185,9 @@ bool on_dos_int(void) {
     _on_dos_open_file();
     break;
   case 0x3E:  // Close File
-    _on_dos_close_file();
+    if (!VERBOSE) {
+      _on_dos_close_file();
+    }
     break;
   case 0x4B:  // EXEC
     if (cpu_regs.al == 0) {
@@ -198,7 +195,9 @@ bool on_dos_int(void) {
     }
     break;
   default:
-    log_printf(LOG_CHAN_DOS, "%s", _get_int_desc(cpu_regs.ah));
+    if (!VERBOSE) {
+      log_printf(LOG_CHAN_DOS, "%s", _get_int_desc(cpu_regs.ah));
+    }
   }
   // interupt not handled
   return false;
