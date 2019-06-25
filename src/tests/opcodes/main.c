@@ -99,6 +99,36 @@ bool _compare_flags(uint16_t emu, uint16_t ref, uint16_t mask) {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
+#define ref_op_b(NAME, OP)                            \
+static uint16_t NAME(uint8_t a, uint8_t b) {          \
+  uint16_t res = 0;                                   \
+  __asm {                                             \
+  __asm mov al, a                                     \
+  __asm mov bl, b                                     \
+  __asm OP al, bl                                     \
+  __asm pushf                                         \
+  __asm pop ax                                        \
+  __asm mov res, ax                                   \
+  }                                                   \
+  return res;                                         \
+}
+
+#define ref_op_w(NAME, OP)                            \
+static uint16_t NAME(uint16_t a, uint16_t b) {        \
+  uint16_t res = 0;                                   \
+  __asm {                                             \
+  __asm mov ax, a                                     \
+  __asm mov bx, b                                     \
+  __asm OP ax, bx                                     \
+  __asm pushf                                         \
+  __asm pop ax                                        \
+  __asm mov res, ax                                   \
+  }                                                   \
+  return res;                                         \
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 static const uint32_t TEST_MASK = CF | OF | SF | ZF | PF;
 
 static uint16_t ref_test_b(uint8_t a, uint8_t b) {
@@ -221,31 +251,8 @@ static bool _check_cmp_w(void) {
 
 static const uint32_t ADD_MASK = CF | OF | SF | ZF | AF | PF;
 
-static uint16_t ref_add_b(uint8_t a, uint8_t b) {
-  uint16_t res = 0;
-  __asm {
-    mov al, a;
-    mov bl, b;
-    add al, bl;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
-
-static uint16_t ref_add_w(uint16_t a, uint16_t b) {
-  uint16_t res = 0;
-  __asm {
-    mov ax, a;
-    mov bx, b;
-    add ax, bx;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
+ref_op_b(ref_add_b, add);
+ref_op_w(ref_add_w, add);
 
 static bool _check_add_b(void) {
   cpu_reset();
@@ -359,31 +366,8 @@ static bool _check_adc_w(void) {
 
 static const uint32_t SUB_MASK = CF | OF | SF | ZF | AF | PF;
 
-static uint16_t ref_sub_b(uint8_t a, uint8_t b) {
-  uint16_t res = 0;
-  __asm {
-    mov al, a;
-    mov bl, b;
-    sub al, bl;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
-
-static uint16_t ref_sub_w(uint16_t a, uint16_t b) {
-  uint16_t res = 0;
-  __asm {
-    mov ax, a;
-    mov bx, b;
-    sub ax, bx;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
+ref_op_b(ref_sub_b, sub)
+ref_op_w(ref_sub_w, sub)
 
 static bool _check_sub_b(void) {
   cpu_reset();
@@ -493,6 +477,138 @@ static bool _check_sbb_w(void) {
   const uint16_t ref_flags = ref_sbb_w(o1, o2, c);
 
   return _compare_flags(emu_flags, ref_flags, SBB_MASK);
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+static const uint32_t AND_MASK = CF | OF | SF | ZF | PF;
+
+static uint16_t ref_and_b(uint8_t a, uint8_t b) {
+  uint16_t res = 0;
+  __asm {
+    xor ax, ax
+    push ax
+    popf
+    mov al, a;
+    mov bl, b;
+    and al, bl;
+    pushf;
+    pop ax;
+    mov res, ax;
+  };
+  return res;
+}
+
+static uint16_t ref_and_w(uint16_t a, uint16_t b) {
+  uint16_t res = 0;
+  __asm {
+    xor ax, ax
+    push ax
+    popf
+    mov ax, a;
+    mov bx, b;
+    and ax, bx;
+    pushf;
+    pop ax;
+    mov res, ax;
+  };
+  return res;
+}
+
+static bool _check_and_b(void) {
+  cpu_reset();
+  const uint8_t o1 = _rand8();
+  const uint8_t o2 = _rand8();
+  cpu_regs.al = o1;
+  cpu_regs.bl = o2;
+  const uint8_t prog[] = {0x20, 0xD8}; // AND AL, BL
+  _cpu_exec(prog, sizeof(prog));
+
+  const uint16_t emu_flags = cpu_get_flags();
+  const uint16_t ref_flags = ref_and_b(o1, o2);
+
+  return _compare_flags(emu_flags, ref_flags, AND_MASK);
+}
+
+static bool _check_and_w(void) {
+  cpu_reset();
+  const uint16_t o1 = _rand16();
+  const uint16_t o2 = _rand16();
+  cpu_regs.ax = o1;
+  cpu_regs.bx = o2;
+  const uint8_t prog[] = {0x21, 0xD8}; // AND AX, BX
+  _cpu_exec(prog, sizeof(prog));
+
+  const uint16_t emu_flags = cpu_get_flags();
+  const uint16_t ref_flags = ref_and_w(o1, o2);
+
+  return _compare_flags(emu_flags, ref_flags, AND_MASK);
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+static const uint32_t OR_MASK = CF | OF | SF | ZF | PF;
+
+static uint16_t ref_or_b(uint8_t a, uint8_t b) {
+  uint16_t res = 0;
+  __asm {
+    xor ax, ax
+    push ax
+    popf
+    mov al, a;
+    mov bl, b;
+    or al, bl;
+    pushf;
+    pop ax;
+    mov res, ax;
+  };
+  return res;
+}
+
+static uint16_t ref_or_w(uint16_t a, uint16_t b) {
+  uint16_t res = 0;
+  __asm {
+    xor ax, ax
+    push ax
+    popf
+    mov ax, a;
+    mov bx, b;
+    or ax, bx;
+    pushf;
+    pop ax;
+    mov res, ax;
+  };
+  return res;
+}
+
+static bool _check_or_b(void) {
+  cpu_reset();
+  const uint8_t o1 = _rand8();
+  const uint8_t o2 = _rand8();
+  cpu_regs.al = o1;
+  cpu_regs.bl = o2;
+  const uint8_t prog[] = {0x08, 0xD8}; // OR AL, BL
+  _cpu_exec(prog, sizeof(prog));
+
+  const uint16_t emu_flags = cpu_get_flags();
+  const uint16_t ref_flags = ref_or_b(o1, o2);
+
+  return _compare_flags(emu_flags, ref_flags, OR_MASK);
+}
+
+static bool _check_or_w(void) {
+  cpu_reset();
+  const uint16_t o1 = _rand16();
+  const uint16_t o2 = _rand16();
+  cpu_regs.ax = o1;
+  cpu_regs.bx = o2;
+  const uint8_t prog[] = {0x09, 0xD8}; // OR AX, BX
+  _cpu_exec(prog, sizeof(prog));
+
+  const uint16_t emu_flags = cpu_get_flags();
+  const uint16_t ref_flags = ref_or_w(o1, o2);
+
+  return _compare_flags(emu_flags, ref_flags, OR_MASK);
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -948,6 +1064,10 @@ static struct test_info_t test[] = {
   {_check_sub_w,  "SUB word"},
   {_check_sbb_b,  "SBB byte"},
   {_check_sbb_w,  "SBB word"},
+  {_check_and_b,  "AND byte"},
+  {_check_and_w,  "AND word"},
+  {_check_or_b,   "OR byte"},
+  {_check_or_w,   "OR word"},
 
   {_check_jo,     "JO"},
   {_check_jno,    "JNO"},
