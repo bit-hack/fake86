@@ -141,7 +141,7 @@ static inline void _set_pf(uint16_t val) {
   val &= 0xff;
 #if defined(USE_POPCNT)
 #ifdef _MSC_VER
-  cpu_flags.pf = (__popcnt16(val) & 1);
+  cpu_flags.pf = ((~__popcnt16(val)) & 1);
 #else
   cpu_flags.pf = __builtin_parity(val);
 #endif
@@ -172,6 +172,31 @@ static inline void _set_zf_sf_b(const uint8_t val) {
 static inline void _set_zf_sf_w(const uint16_t val) {
   cpu_flags.zf = (val == 0);
   cpu_flags.sf = (val & 0x8000) ? 1 : 0;
+}
+
+uint16_t cpu_get_flags(void) {
+  return
+    (cpu_flags.cf  ? 0x0001 : 0) |
+    (cpu_flags.pf  ? 0x0004 : 0) |
+    (cpu_flags.af  ? 0x0010 : 0) |
+    (cpu_flags.zf  ? 0x0040 : 0) |
+    (cpu_flags.sf  ? 0x0080 : 0) |
+    (cpu_flags.tf  ? 0x0100 : 0) |
+    (cpu_flags.ifl ? 0x0200 : 0) |
+    (cpu_flags.df  ? 0x0400 : 0) |
+    (cpu_flags.of  ? 0x0800 : 0);
+}
+
+void cpu_set_flags(const uint16_t f) {
+  cpu_flags.cf  = (f & 0x0001) ? 1 : 0;
+  cpu_flags.pf  = (f & 0x0004) ? 1 : 0;
+  cpu_flags.af  = (f & 0x0010) ? 1 : 0;
+  cpu_flags.zf  = (f & 0x0040) ? 1 : 0;
+  cpu_flags.sf  = (f & 0x0080) ? 1 : 0;
+  cpu_flags.tf  = (f & 0x0100) ? 1 : 0;
+  cpu_flags.ifl = (f & 0x0200) ? 1 : 0;
+  cpu_flags.df  = (f & 0x0400) ? 1 : 0;
+  cpu_flags.of  = (f & 0x0800) ? 1 : 0;
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----

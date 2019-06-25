@@ -98,3 +98,5 @@ struct cpu_io_t {
 };
 
 void cpu_set_io(const struct cpu_io_t *io);
+uint16_t cpu_get_flags(void);
+void cpu_set_flags(const uint16_t flags);
