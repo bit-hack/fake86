@@ -131,31 +131,8 @@ static uint16_t NAME(uint16_t a, uint16_t b) {        \
 
 static const uint32_t TEST_MASK = CF | OF | SF | ZF | PF;
 
-static uint16_t ref_test_b(uint8_t a, uint8_t b) {
-  uint16_t res = 0;
-  __asm {
-    mov al, a;
-    mov bl, b;
-    test al, bl;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
-
-static uint16_t ref_test_w(uint16_t a, uint16_t b) {
-  uint16_t res = 0;
-  __asm {
-    mov ax, a;
-    mov bx, b;
-    test ax, bx;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
+ref_op_b(ref_test_b, test)
+ref_op_w(ref_test_w, test)
 
 static bool _check_test_b(void) {
   cpu_reset();
@@ -191,31 +168,8 @@ static bool _check_test_w(void) {
 
 static const uint32_t CMP_MASK = CF | OF | SF | ZF | AF | PF;
 
-static uint16_t ref_cmp_b(uint8_t a, uint8_t b) {
-  uint16_t res = 0;
-  __asm {
-    mov al, a;
-    mov bl, b;
-    cmp al, bl;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
-
-static uint16_t ref_cmp_w(uint16_t a, uint16_t b) {
-  uint16_t res = 0;
-  __asm {
-    mov ax, a;
-    mov bx, b;
-    cmp ax, bx;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
+ref_op_b(ref_cmp_b, cmp)
+ref_op_w(ref_cmp_w, cmp)
 
 static bool _check_cmp_b(void) {
   cpu_reset();
@@ -483,37 +437,8 @@ static bool _check_sbb_w(void) {
 
 static const uint32_t AND_MASK = CF | OF | SF | ZF | PF;
 
-static uint16_t ref_and_b(uint8_t a, uint8_t b) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push ax
-    popf
-    mov al, a;
-    mov bl, b;
-    and al, bl;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
-
-static uint16_t ref_and_w(uint16_t a, uint16_t b) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push ax
-    popf
-    mov ax, a;
-    mov bx, b;
-    and ax, bx;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
+ref_op_b(ref_and_b, and);
+ref_op_w(ref_and_w, and);
 
 static bool _check_and_b(void) {
   cpu_reset();
@@ -549,37 +474,8 @@ static bool _check_and_w(void) {
 
 static const uint32_t OR_MASK = CF | OF | SF | ZF | PF;
 
-static uint16_t ref_or_b(uint8_t a, uint8_t b) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push ax
-    popf
-    mov al, a;
-    mov bl, b;
-    or al, bl;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
-
-static uint16_t ref_or_w(uint16_t a, uint16_t b) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push ax
-    popf
-    mov ax, a;
-    mov bx, b;
-    or ax, bx;
-    pushf;
-    pop ax;
-    mov res, ax;
-  };
-  return res;
-}
+ref_op_b(ref_or_b, or);
+ref_op_w(ref_or_w, or);
 
 static bool _check_or_b(void) {
   cpu_reset();
@@ -615,19 +511,22 @@ static bool _check_or_w(void) {
 
 static const uint32_t JMP_MASK = CF | OF | SF | ZF | AF | PF;
 
-static uint16_t ref_jo(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jo target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
+#define ref_jump(NAME, OP)                  \
+static uint16_t NAME(uint16_t flags) {      \
+  uint16_t res = 0;                         \
+  __asm {                                   \
+  __asm xor ax, ax                          \
+  __asm push flags                          \
+  __asm popf                                \
+  __asm OP target                           \
+  __asm inc ax                              \
+  __asm target:                             \
+  __asm mov res, ax                         \
+  };                                        \
+  return res ^ 1;                           \
 }
+
+ref_jump(ref_jo, jo);
 
 static bool _check_jo(void) {
   cpu_reset();
@@ -640,19 +539,7 @@ static bool _check_jo(void) {
   return res == tak;
 }
 
-static uint16_t ref_jno(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jno target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jno, jno);
 
 static bool _check_jno(void) {
   cpu_reset();
@@ -665,19 +552,7 @@ static bool _check_jno(void) {
   return res == tak;
 }
 
-static uint16_t ref_js(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    js target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_js, js);
 
 static bool _check_js(void) {
   cpu_reset();
@@ -690,19 +565,7 @@ static bool _check_js(void) {
   return res == tak;
 }
 
-static uint16_t ref_jns(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jns target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jns, jns);
 
 static bool _check_jns(void) {
   cpu_reset();
@@ -715,19 +578,7 @@ static bool _check_jns(void) {
   return res == tak;
 }
 
-static uint16_t ref_jz(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jz target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jz, jz);
 
 static bool _check_jz(void) {
   cpu_reset();
@@ -740,19 +591,7 @@ static bool _check_jz(void) {
   return res == tak;
 }
 
-static uint16_t ref_jnz(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jnz target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jnz, jnz);
 
 static bool _check_jnz(void) {
   cpu_reset();
@@ -765,19 +604,7 @@ static bool _check_jnz(void) {
   return res == tak;
 }
 
-static uint16_t ref_jb(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jb target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jb, jb);
 
 static bool _check_jb(void) {
   cpu_reset();
@@ -790,19 +617,7 @@ static bool _check_jb(void) {
   return res == tak;
 }
 
-static uint16_t ref_jnb(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jnb target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jnb, jnb);
 
 static bool _check_jnb(void) {
   cpu_reset();
@@ -815,19 +630,7 @@ static bool _check_jnb(void) {
   return res == tak;
 }
 
-static uint16_t ref_jbe(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jbe target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jbe, jbe);
 
 static bool _check_jbe(void) {
   cpu_reset();
@@ -840,19 +643,7 @@ static bool _check_jbe(void) {
   return res == tak;
 }
 
-static uint16_t ref_ja(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    ja target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_ja, ja);
 
 static bool _check_ja(void) {
   cpu_reset();
@@ -865,19 +656,7 @@ static bool _check_ja(void) {
   return res == tak;
 }
 
-static uint16_t ref_jl(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jl target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jl, jl);
 
 static bool _check_jl(void) {
   cpu_reset();
@@ -890,19 +669,7 @@ static bool _check_jl(void) {
   return res == tak;
 }
 
-static uint16_t ref_jge(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jge target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jge, jge);
 
 static bool _check_jge(void) {
   cpu_reset();
@@ -915,19 +682,7 @@ static bool _check_jge(void) {
   return res == tak;
 }
 
-static uint16_t ref_jle(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jle target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jle, jle);
 
 static bool _check_jle(void) {
   cpu_reset();
@@ -940,20 +695,7 @@ static bool _check_jle(void) {
   return res == tak;
 }
 
-
-static uint16_t ref_jg(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jg target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jg, jg);
 
 static bool _check_jg(void) {
   cpu_reset();
@@ -966,19 +708,7 @@ static bool _check_jg(void) {
   return res == tak;
 }
 
-static uint16_t ref_jp(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jp target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jp, jp);
 
 static bool _check_jp(void) {
   cpu_reset();
@@ -991,19 +721,7 @@ static bool _check_jp(void) {
   return res == tak;
 }
 
-static uint16_t ref_jnp(uint16_t flags) {
-  uint16_t res = 0;
-  __asm {
-    xor ax, ax
-    push flags
-    popf
-    jnp target
-    inc ax
-target:
-    mov res, ax;
-  };
-  return res ^ 1;
-}
+ref_jump(ref_jnp, jnp);
 
 static bool _check_jnp(void) {
   cpu_reset();
