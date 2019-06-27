@@ -33,6 +33,18 @@ bool i8259_irq_pending(void) {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
+struct res_b_t {
+  uint16_t flags;
+  uint8_t val;
+};
+
+struct res_w_t {
+  uint16_t flags;
+  uint16_t val;
+};
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
 static _rng_seed = _root_seed;
 
 static _rand16(void) {
@@ -82,7 +94,7 @@ bool _compare_flags(uint16_t emu, uint16_t ref, uint16_t mask) {
     return true;
   }
 
-  printf("%c%c%c%c %c%c%c. .%c.%c\n",
+  printf("%c%c%c%c %c%c%c. .%c.%c",
     ((diff & OF) ? 'O' : '.'),
     ((diff & DF) ? 'D' : '.'),
     ((diff & IF) ? 'I' : '.'),
@@ -97,35 +109,99 @@ bool _compare_flags(uint16_t emu, uint16_t ref, uint16_t mask) {
   return false;
 }
 
+bool _compare_val(const uint16_t lhs,
+                  const uint16_t rhs,
+                  const uint16_t emu,
+                  const uint16_t ref) {
+
+  if (emu == ref) {
+    return true;
+  }
+
+  printf("lhs:%04x rhs:%04x got:%04x exp:%04x", lhs, rhs, emu, ref);
+
+  return false;
+}
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-#define ref_op_b(NAME, OP)                            \
-static uint16_t NAME(uint8_t a, uint8_t b) {          \
-  uint16_t res = 0;                                   \
-  __asm {                                             \
-  __asm mov al, a                                     \
-  __asm mov bl, b                                     \
-  __asm OP al, bl                                     \
-  __asm pushf                                         \
-  __asm pop ax                                        \
-  __asm mov res, ax                                   \
-  }                                                   \
-  return res;                                         \
-}
+#define ref_op_b(NAME, OP)                                                    \
+  static void NAME(uint8_t a, uint8_t b, struct res_b_t *out) {               \
+    uint16_t fl = 0;                                                          \
+    uint8_t  v  = 0;                                                          \
+    __asm {                                                                   \
+    __asm mov al, a                                                           \
+    __asm mov bl, b                                                           \
+    __asm OP al, bl                                                           \
+    __asm pushf                                                               \
+    __asm mov v, al                                                           \
+    __asm pop ax                                                              \
+    __asm mov fl, ax                                                          \
+    }                                                                         \
+    out->flags = fl;                                                          \
+    out->val = v;                                                             \
+  }
 
-#define ref_op_w(NAME, OP)                            \
-static uint16_t NAME(uint16_t a, uint16_t b) {        \
-  uint16_t res = 0;                                   \
-  __asm {                                             \
-  __asm mov ax, a                                     \
-  __asm mov bx, b                                     \
-  __asm OP ax, bx                                     \
-  __asm pushf                                         \
-  __asm pop ax                                        \
-  __asm mov res, ax                                   \
-  }                                                   \
-  return res;                                         \
-}
+#define ref_op_w(NAME, OP)                                                    \
+  static void NAME(uint16_t a, uint16_t b, struct res_w_t *out) {             \
+    uint16_t fl = 0;                                                          \
+    uint16_t v  = 0;                                                          \
+    __asm {                                                                   \
+    __asm mov ax, a                                                           \
+    __asm mov bx, b                                                           \
+    __asm OP ax, bx                                                           \
+    __asm pushf                                                               \
+    __asm mov v, ax                                                           \
+    __asm pop ax                                                              \
+    __asm mov fl, ax                                                          \
+    }                                                                         \
+    out->flags = fl;                                                          \
+    out->val = v;                                                             \
+  }
+
+#define check_op_b(NAME, REF, MASK, ...)                                      \
+  static bool NAME(void) {                                                    \
+    cpu_reset();                                                              \
+    const uint8_t o1 = _rand8();                                              \
+    const uint8_t o2 = _rand8();                                              \
+    cpu_regs.al = o1;                                                         \
+    cpu_regs.bl = o2;                                                         \
+                                                                              \
+    const uint8_t prog[] = {__VA_ARGS__};                                     \
+    _cpu_exec(prog, sizeof(prog));                                            \
+                                                                              \
+    const uint16_t emu_flags = cpu_get_flags();                               \
+    struct res_b_t res;                                                       \
+    REF(o1, o2, &res);                                                        \
+                                                                              \
+    if (!_compare_val(o1, o2, cpu_regs.al, res.val)) {                        \
+      return false;                                                           \
+    }                                                                         \
+                                                                              \
+    return _compare_flags(emu_flags, res.flags, MASK);                        \
+  }
+
+#define check_op_w(NAME, REF, MASK, ...)                                      \
+  static bool NAME(void) {                                                    \
+    cpu_reset();                                                              \
+    const uint16_t o1 = _rand16();                                            \
+    const uint16_t o2 = _rand16();                                            \
+    cpu_regs.ax = o1;                                                         \
+    cpu_regs.bx = o2;                                                         \
+                                                                              \
+    const uint8_t prog[] = {__VA_ARGS__};                                     \
+    _cpu_exec(prog, sizeof(prog));                                            \
+                                                                              \
+    const uint16_t emu_flags = cpu_get_flags();                               \
+    struct res_w_t res;                                                       \
+    REF(o1, o2, &res);                                                        \
+                                                                              \
+    if (!_compare_val(o1, o2, cpu_regs.ax, res.val)) {                        \
+      return false;                                                           \
+    }                                                                         \
+                                                                              \
+    return _compare_flags(emu_flags, res.flags, MASK);                        \
+  }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -134,35 +210,8 @@ static const uint32_t TEST_MASK = CF | OF | SF | ZF | PF;
 ref_op_b(ref_test_b, test)
 ref_op_w(ref_test_w, test)
 
-static bool _check_test_b(void) {
-  cpu_reset();
-  const uint8_t o1 = _rand8();
-  const uint8_t o2 = _rand8();
-  cpu_regs.al = o1;
-  cpu_regs.bl = o2;
-  const uint8_t prog[] = {0x84, 0xD8}; // TEST AL, BL
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_test_b(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, TEST_MASK);
-}
-
-static bool _check_test_w(void) {
-  cpu_reset();
-  const uint16_t o1 = _rand16();
-  const uint16_t o2 = _rand16();
-  cpu_regs.ax = o1;
-  cpu_regs.bx = o2;
-  const uint8_t prog[] = {0x85, 0xD8}; // TEST AX, BX
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_test_w(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, TEST_MASK);
-}
+check_op_b(_check_test_b, ref_test_b, TEST_MASK, 0x84, 0xd8);
+check_op_w(_check_test_w, ref_test_w, TEST_MASK, 0x85, 0xd8);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -171,35 +220,8 @@ static const uint32_t CMP_MASK = CF | OF | SF | ZF | AF | PF;
 ref_op_b(ref_cmp_b, cmp)
 ref_op_w(ref_cmp_w, cmp)
 
-static bool _check_cmp_b(void) {
-  cpu_reset();
-  const uint8_t o1 = _rand8();
-  const uint8_t o2 = _rand8();
-  cpu_regs.al = o1;
-  cpu_regs.bl = o2;
-  const uint8_t prog[] = {0x38, 0xD8}; // CMP AL, BL
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_cmp_b(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, CMP_MASK);
-}
-
-static bool _check_cmp_w(void) {
-  cpu_reset();
-  const uint16_t o1 = _rand16();
-  const uint16_t o2 = _rand16();
-  cpu_regs.ax = o1;
-  cpu_regs.bx = o2;
-  const uint8_t prog[] = {0x39, 0xD8}; // CMP AX, BX
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_cmp_w(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, CMP_MASK);
-}
+check_op_b(_check_cmp_b, ref_cmp_b, CMP_MASK, 0x38, 0xd8);
+check_op_w(_check_cmp_w, ref_cmp_w, CMP_MASK, 0x39, 0xd8);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -208,35 +230,8 @@ static const uint32_t ADD_MASK = CF | OF | SF | ZF | AF | PF;
 ref_op_b(ref_add_b, add);
 ref_op_w(ref_add_w, add);
 
-static bool _check_add_b(void) {
-  cpu_reset();
-  const uint8_t o1 = _rand8();
-  const uint8_t o2 = _rand8();
-  cpu_regs.al = o1;
-  cpu_regs.bl = o2;
-  const uint8_t prog[] = {0x00, 0xD8}; // ADD AL, BL
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_add_b(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, ADD_MASK);
-}
-
-static bool _check_add_w(void) {
-  cpu_reset();
-  const uint16_t o1 = _rand16();
-  const uint16_t o2 = _rand16();
-  cpu_regs.ax = o1;
-  cpu_regs.bx = o2;
-  const uint8_t prog[] = {0x01, 0xD8}; // ADD AX, BX
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_add_w(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, ADD_MASK);
-}
+check_op_b(_check_add_b, ref_add_b, ADD_MASK, 0x00, 0xd8);
+check_op_w(_check_add_w, ref_add_w, ADD_MASK, 0x01, 0xd8);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -323,37 +318,8 @@ static const uint32_t SUB_MASK = CF | OF | SF | ZF | AF | PF;
 ref_op_b(ref_sub_b, sub)
 ref_op_w(ref_sub_w, sub)
 
-static bool _check_sub_b(void) {
-  cpu_reset();
-  const uint8_t o1 = _rand8();
-  const uint8_t o2 = _rand8();
-  cpu_regs.al = o1;
-  cpu_regs.bl = o2;
-
-  const uint8_t prog[] = {0x28, 0xD8}; // SUB AL, BL
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_sub_b(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, SUB_MASK);
-}
-
-static bool _check_sub_w(void) {
-  cpu_reset();
-  const uint16_t o1 = _rand16();
-  const uint16_t o2 = _rand16();
-  cpu_regs.ax = o1;
-  cpu_regs.bx = o2;
-
-  const uint8_t prog[] = {0x29, 0xD8}; // SUB AX, BX
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_sub_w(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, ADC_MASK);
-}
+check_op_b(_check_sub_b, ref_sub_b, SUB_MASK, 0x28, 0xD8);
+check_op_w(_check_sub_w, ref_sub_w, SUB_MASK, 0x29, 0xD8);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -440,35 +406,8 @@ static const uint32_t AND_MASK = CF | OF | SF | ZF | PF;
 ref_op_b(ref_and_b, and);
 ref_op_w(ref_and_w, and);
 
-static bool _check_and_b(void) {
-  cpu_reset();
-  const uint8_t o1 = _rand8();
-  const uint8_t o2 = _rand8();
-  cpu_regs.al = o1;
-  cpu_regs.bl = o2;
-  const uint8_t prog[] = {0x20, 0xD8}; // AND AL, BL
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_and_b(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, AND_MASK);
-}
-
-static bool _check_and_w(void) {
-  cpu_reset();
-  const uint16_t o1 = _rand16();
-  const uint16_t o2 = _rand16();
-  cpu_regs.ax = o1;
-  cpu_regs.bx = o2;
-  const uint8_t prog[] = {0x21, 0xD8}; // AND AX, BX
-  _cpu_exec(prog, sizeof(prog));
-
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_and_w(o1, o2);
-
-  return _compare_flags(emu_flags, ref_flags, AND_MASK);
-}
+check_op_b(_check_and_b, ref_and_b, AND_MASK, 0x20, 0xD8);
+check_op_w(_check_and_w, ref_and_w, AND_MASK, 0x21, 0xD8);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -477,262 +416,351 @@ static const uint32_t OR_MASK = CF | OF | SF | ZF | PF;
 ref_op_b(ref_or_b, or);
 ref_op_w(ref_or_w, or);
 
-static bool _check_or_b(void) {
-  cpu_reset();
-  const uint8_t o1 = _rand8();
-  const uint8_t o2 = _rand8();
-  cpu_regs.al = o1;
-  cpu_regs.bl = o2;
-  const uint8_t prog[] = {0x08, 0xD8}; // OR AL, BL
-  _cpu_exec(prog, sizeof(prog));
+check_op_b(_check_or_b, ref_or_b, OR_MASK, 0x08, 0xD8);
+check_op_w(_check_or_w, ref_or_w, OR_MASK, 0x09, 0xD8);
 
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_or_b(o1, o2);
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-  return _compare_flags(emu_flags, ref_flags, OR_MASK);
+static const uint32_t XOR_MASK = CF | OF | SF | ZF | PF;
+
+ref_op_b(ref_xor_b, xor);
+ref_op_w(ref_xor_w, xor);
+
+check_op_b(_check_xor_b, ref_xor_b, XOR_MASK, 0x30, 0xD8);
+check_op_w(_check_xor_w, ref_xor_w, XOR_MASK, 0x31, 0xD8);
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+void ref_shl_b(uint8_t val, uint8_t s, struct res_b_t *res) {
+  uint16_t fl = 0;
+  uint8_t  v  = 0;
+  __asm {
+  __asm mov al, val
+  __asm mov cl, s
+  __asm shl al, cl
+  __asm pushf
+  __asm mov v, al
+  __asm pop ax
+  __asm mov fl, ax
+  }
+  res->flags = fl;
+  res->val = v;
 }
 
-static bool _check_or_w(void) {
+void ref_shl_w(uint16_t val, uint8_t s, struct res_w_t *res) {
+  uint16_t fl = 0;
+  uint16_t  v  = 0;
+  __asm {
+  __asm mov ax, val
+  __asm mov cl, s
+  __asm shl ax, cl
+  __asm pushf
+  __asm mov v, ax
+  __asm pop ax
+  __asm mov fl, ax
+  }
+  res->flags = fl;
+  res->val = v;
+}
+
+bool _check_shl_b(void) {
   cpu_reset();
-  const uint16_t o1 = _rand16();
-  const uint16_t o2 = _rand16();
-  cpu_regs.ax = o1;
-  cpu_regs.bx = o2;
-  const uint8_t prog[] = {0x09, 0xD8}; // OR AX, BX
-  _cpu_exec(prog, sizeof(prog));
 
-  const uint16_t emu_flags = cpu_get_flags();
-  const uint16_t ref_flags = ref_or_w(o1, o2);
+  const uint8_t al = _rand8();
+  const uint8_t cl = _rand8() & 0x1f;
+  cpu_regs.al = al;
+  cpu_regs.cl = cl;
 
-  return _compare_flags(emu_flags, ref_flags, OR_MASK);
+  const uint8_t code[] = { 0xD2, 0xE0 }; // shl al, cl
+  _cpu_exec(code, sizeof(code));
+
+  struct res_b_t res;
+  ref_shl_b(al, cl, &res);
+  const uint16_t emu = cpu_get_flags();
+
+  if (!_compare_val(al, cl, cpu_regs.al, res.val)) {
+    return false;
+  }
+
+  uint16_t mask =  SF | ZF | PF;
+  if (cl == 0) { mask |= AF; }
+  if (cl == 1) { mask |= OF; }
+  if (cl < 8)  { mask |= CF; }
+  return _compare_flags(emu, res.flags, mask);
+}
+
+#if 1
+bool _check_shl_w(void) {
+  cpu_reset();
+
+  const uint8_t ax = _rand8();
+  const uint8_t cl = _rand8() & 0x1f;
+  cpu_regs.ax = ax;
+  cpu_regs.cl = cl;
+
+  const uint8_t code[] = { 0xD3, 0xE0 }; // shl al, cl
+  _cpu_exec(code, sizeof(code));
+
+  struct res_w_t res;
+  ref_shl_w(ax, cl, &res);
+  const uint16_t emu = cpu_get_flags();
+
+  if (!_compare_val(ax, cl, cpu_regs.ax, res.val)) {
+    return false;
+  }
+
+  uint16_t mask =  SF | ZF | PF;
+  if (cl == 0) { mask |= AF; }
+  if (cl == 1) { mask |= OF; }
+  if (cl < 8)  { mask |= CF; }
+  return _compare_flags(emu, res.flags, mask);
+}
+#endif
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+static const uint32_t MUL_MASK = CF | OF;
+
+uint16_t ref_mul_b(const uint8_t lhs, const uint8_t rhs) {
+  uint16_t flags = 0;
+  __asm {
+  __asm xor eax, eax
+  __asm xor ebx, ebx
+  __asm mov al, lhs
+  __asm mov bl, rhs
+  __asm mul bl
+  __asm pushf
+  __asm pop flags
+  }
+  return flags;
+}
+
+uint16_t ref_mul_w(const uint16_t lhs, const uint16_t rhs) {
+  uint16_t flags = 0;
+  __asm {
+  __asm xor eax, eax
+  __asm xor ebx, ebx
+  __asm mov ax, lhs
+  __asm mov bx, rhs
+  __asm mul bx
+  __asm pushf
+  __asm pop flags
+  }
+  return flags;
+}
+
+static bool _check_mul_b(void) {
+  cpu_reset();
+  const uint8_t al = _rand8();
+  const uint8_t bl = _rand8();
+  cpu_regs.al = al;
+  cpu_regs.bl = bl;
+  const uint8_t code[] = {0xF6, 0xE3}; // mul bl
+  _cpu_exec(code, sizeof(code));
+  const uint16_t emu = cpu_get_flags();
+  const uint16_t ref = ref_mul_b(al, bl);
+  return _compare_flags(emu, ref, MUL_MASK);
+}
+
+static bool _check_mul_w(void) {
+  cpu_reset();
+  const uint8_t ax = _rand8();
+  const uint8_t bx = _rand8();
+  cpu_regs.ax = ax;
+  cpu_regs.bx = bx;
+  const uint8_t code[] = {0xF7, 0xE3}; // mul bx
+  _cpu_exec(code, sizeof(code));
+  const uint16_t emu = cpu_get_flags();
+  const uint16_t ref = ref_mul_w(ax, bx);
+  return _compare_flags(emu, ref, MUL_MASK);
+}
+
+static const uint32_t IMUL_MASK = CF | OF;
+
+static uint16_t ref_imul_b(const uint8_t lhs, const uint8_t rhs) {
+  uint16_t flags = 0;
+  __asm {
+  __asm mov al, lhs
+  __asm mov bl, rhs
+  __asm imul bl
+  __asm pushf
+  __asm pop flags
+  }
+  return flags;
+}
+
+static uint16_t ref_imul_w(const uint16_t lhs, const uint16_t rhs) {
+  uint16_t flags = 0;
+  __asm {
+  __asm mov ax, lhs
+  __asm mov bx, rhs
+  __asm imul bx
+  __asm pushf
+  __asm pop flags
+  }
+  return flags;
+}
+
+static bool _check_imul_b(void) {
+  cpu_reset();
+  const uint8_t al = _rand8();
+  const uint8_t bl = _rand8();
+  cpu_regs.al = al;
+  cpu_regs.bl = bl;
+  const uint8_t code[] = {0xF6, 0xEB}; // imul bl
+  _cpu_exec(code, sizeof(code));
+  const uint16_t emu = cpu_get_flags();
+  const uint16_t ref = ref_imul_b(al, bl);
+  return _compare_flags(emu, ref, IMUL_MASK);
+}
+
+static bool _check_imul_w(void) {
+  cpu_reset();
+  const uint8_t ax = _rand8();
+  const uint8_t bx = _rand8();
+  cpu_regs.ax = ax;
+  cpu_regs.bx = bx;
+  const uint8_t code[] = {0xF7, 0xEB}; // imul bx
+  _cpu_exec(code, sizeof(code));
+  const uint16_t emu = cpu_get_flags();
+  const uint16_t ref = ref_imul_w(ax, bx);
+  return _compare_flags(emu, ref, IMUL_MASK);
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+static const uint32_t DIV_MASK = CF | OF | SF | ZF | PF;
+
+static uint16_t ref_div_b(const uint8_t lhs, const uint8_t rhs) {
+  uint16_t flags = 0;
+  __asm {
+  __asm mov al, lhs
+  __asm mov bl, rhs
+  __asm div bl
+  __asm pushf
+  __asm pop flags
+  }
+  return flags;
+}
+
+static bool _check_div_b(void) {
+  cpu_reset();
+  const uint8_t al = _rand8();
+  const uint8_t bl = _rand8();
+  if (bl == 0) return true;
+  cpu_regs.al = al;
+  cpu_regs.bl = bl;
+  const uint8_t code[] = {0xF6, 0xF3}; // div bl
+  _cpu_exec(code, sizeof(code));
+  const uint16_t emu = cpu_get_flags();
+  const uint16_t ref = ref_div_b(al, bl);
+  return _compare_flags(emu, ref, DIV_MASK);
+}
+
+static uint16_t ref_div_w(const uint16_t lhs, const uint16_t rhs) {
+  uint16_t flags = 0;
+  __asm {
+  __asm mov ax, lhs
+  __asm mov bx, rhs
+  __asm div bx
+  __asm pushf
+  __asm pop flags
+  }
+  return flags;
+}
+
+static bool _check_div_w(void) {
+  cpu_reset();
+  const uint8_t ax = _rand8();
+  const uint8_t bx = _rand8();
+  if (bx == 0) return true;
+  cpu_regs.ax = ax;
+  cpu_regs.bx = bx;
+  const uint8_t code[] = {0xF7, 0xF3}; // div bx
+  _cpu_exec(code, sizeof(code));
+  const uint16_t emu = cpu_get_flags();
+  const uint16_t ref = ref_div_w(ax, bx);
+  return _compare_flags(emu, ref, DIV_MASK);
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 static const uint32_t JMP_MASK = CF | OF | SF | ZF | AF | PF;
 
-#define ref_jump(NAME, OP)                  \
-static uint16_t NAME(uint16_t flags) {      \
-  uint16_t res = 0;                         \
-  __asm {                                   \
-  __asm xor ax, ax                          \
-  __asm push flags                          \
-  __asm popf                                \
-  __asm OP target                           \
-  __asm inc ax                              \
-  __asm target:                             \
-  __asm mov res, ax                         \
-  };                                        \
-  return res ^ 1;                           \
-}
+#define ref_jump(NAME, OP)                            \
+  static uint16_t NAME(uint16_t flags) {              \
+    uint16_t res = 0;                                 \
+    __asm {                                           \
+    __asm xor ax, ax                                  \
+    __asm push flags                                  \
+    __asm popf                                        \
+    __asm OP target                                   \
+    __asm inc ax                                      \
+    __asm target:                                     \
+    __asm mov res, ax                                 \
+    };                                                \
+    return res ^ 1;                                   \
+  }
+
+#define _check_jmp(NAME, REF, ...)                    \
+  static bool NAME(void) {                            \
+    cpu_reset();                                      \
+    const uint16_t flags = _rand16() & JMP_MASK;      \
+    cpu_set_flags(flags);                             \
+    const uint8_t prog[] = {__VA_ARGS__};             \
+    _cpu_exec(prog, sizeof(prog));                    \
+    const uint16_t res = REF(flags);                  \
+    const uint16_t tak = (cpu_regs.ip == 3);          \
+    return res == tak;                                \
+  }
 
 ref_jump(ref_jo, jo);
-
-static bool _check_jo(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x70, 0x01}; // JO 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jo(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jo, ref_jo, 0x70, 0x01);
 
 ref_jump(ref_jno, jno);
-
-static bool _check_jno(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x71, 0x01}; // JNO 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jno(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jno, ref_jno, 0x71, 0x01);
 
 ref_jump(ref_js, js);
-
-static bool _check_js(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x78, 0x01}; // JS 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_js(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_js, ref_js, 0x78, 0x01);
 
 ref_jump(ref_jns, jns);
-
-static bool _check_jns(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x79, 0x01}; // JNS 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jns(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jns, ref_jns, 0x79, 0x01);
 
 ref_jump(ref_jz, jz);
-
-static bool _check_jz(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x74, 0x01}; // JZ 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jz(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jz, ref_jz, 0x74, 0x01);
 
 ref_jump(ref_jnz, jnz);
-
-static bool _check_jnz(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x75, 0x01}; // JNZ 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jnz(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jnz, ref_jnz, 0x75, 0x01);
 
 ref_jump(ref_jb, jb);
-
-static bool _check_jb(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x72, 0x01}; // JB 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jb(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jb, ref_jb, 0x72, 0x01);
 
 ref_jump(ref_jnb, jnb);
-
-static bool _check_jnb(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x73, 0x01}; // JNB 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jnb(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jnb, ref_jnb, 0x73, 0x01);
 
 ref_jump(ref_jbe, jbe);
-
-static bool _check_jbe(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x76, 0x01}; // JBE 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jbe(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jbe, ref_jbe, 0x76, 0x01);
 
 ref_jump(ref_ja, ja);
-
-static bool _check_ja(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x77, 0x01}; // JA 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_ja(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_ja, ref_ja, 0x77, 0x01);
 
 ref_jump(ref_jl, jl);
-
-static bool _check_jl(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x7C, 0x01}; // JL 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jl(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jl, ref_jl, 0x7c, 0x01);
 
 ref_jump(ref_jge, jge);
-
-static bool _check_jge(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x7D, 0x01}; // JGE 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jge(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jge, ref_jge, 0x7d, 0x01);
 
 ref_jump(ref_jle, jle);
-
-static bool _check_jle(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x7E, 0x01}; // JLE 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jle(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jle, ref_jle, 0x7e, 0x01);
 
 ref_jump(ref_jg, jg);
-
-static bool _check_jg(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x7F, 0x01}; // JG 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jg(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jg, ref_jg, 0x7f, 0x01);
 
 ref_jump(ref_jp, jp);
-
-static bool _check_jp(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x7A, 0x01}; // JP 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jp(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jp, ref_jp, 0x7a, 0x01);
 
 ref_jump(ref_jnp, jnp);
-
-static bool _check_jnp(void) {
-  cpu_reset();
-  const uint16_t flags = _rand16() & JMP_MASK;
-  cpu_set_flags(flags);
-  const uint8_t prog[] = {0x7B, 0x01}; // JNP 1
-  _cpu_exec(prog, sizeof(prog));
-  const uint16_t res = ref_jnp(flags);
-  const uint16_t tak = (cpu_regs.ip == 3);
-  return res == tak;
-}
+_check_jmp(_check_jnp, ref_jnp, 0x7b, 0x01);
 
 static uint16_t ref_jcxz(uint16_t val) {
   uint16_t res = 0;
@@ -786,6 +814,17 @@ static struct test_info_t test[] = {
   {_check_and_w,  "AND word"},
   {_check_or_b,   "OR byte"},
   {_check_or_w,   "OR word"},
+  {_check_or_b,   "XOR byte"},
+  {_check_or_w,   "XOR word"},
+  {_check_shl_b,  "SHL byte"},
+  {_check_shl_w,  "SHL word"},
+
+  {_check_mul_b,  "MUL byte"},
+  {_check_mul_w,  "MUL word"},
+  {_check_imul_b, "IMUL byte"},
+  {_check_imul_w, "IMUL word"},
+//  {_check_div_b,  "DIV byte"},
+//  {_check_div_w,  "DIV word"},
 
   {_check_jo,     "JO"},
   {_check_jno,    "JNO"},
@@ -843,7 +882,7 @@ int main(int argc, char **args) {
     for (int i=0; i<_test_runs; ++i) {
       const uint32_t seed = _rng_seed;
       if (!info->func()) {
-        printf("fail (%08u)", seed);
+        printf("  fail (%08u)", seed);
         ok = false;
         break;
       }
