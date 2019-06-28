@@ -431,91 +431,123 @@ check_op_w(_check_xor_w, ref_xor_w, XOR_MASK, 0x31, 0xD8);
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-void ref_shl_b(uint8_t val, uint8_t s, struct res_b_t *res) {
-  uint16_t fl = 0;
-  uint8_t  v  = 0;
-  __asm {
-  __asm mov al, val
-  __asm mov cl, s
-  __asm shl al, cl
-  __asm pushf
-  __asm mov v, al
-  __asm pop ax
-  __asm mov fl, ax
-  }
-  res->flags = fl;
-  res->val = v;
-}
+#define ref_shift_b(NAME, OP)                                                           \
+  void NAME(uint8_t val, uint8_t s, struct res_b_t *res) {                              \
+    uint16_t fl = 0;                                                                    \
+    uint8_t  v  = 0;                                                                    \
+    __asm {                                                                             \
+    __asm mov al, val                                                                   \
+    __asm mov cl, s                                                                     \
+    __asm OP al, cl                                                                     \
+    __asm pushf                                                                         \
+    __asm mov v, al                                                                     \
+    __asm pop ax                                                                        \
+    __asm mov fl, ax                                                                    \
+    }                                                                                   \
+    res->flags = fl;                                                                    \
+    res->val = v;                                                                       \
+  }                                                                                     \
 
-void ref_shl_w(uint16_t val, uint8_t s, struct res_w_t *res) {
-  uint16_t fl = 0;
-  uint16_t  v  = 0;
-  __asm {
-  __asm mov ax, val
-  __asm mov cl, s
-  __asm shl ax, cl
-  __asm pushf
-  __asm mov v, ax
-  __asm pop ax
-  __asm mov fl, ax
-  }
-  res->flags = fl;
-  res->val = v;
-}
-
-bool _check_shl_b(void) {
-  cpu_reset();
-
-  const uint8_t al = _rand8();
-  const uint8_t cl = _rand8() & 0x1f;
-  cpu_regs.al = al;
-  cpu_regs.cl = cl;
-
-  const uint8_t code[] = { 0xD2, 0xE0 }; // shl al, cl
-  _cpu_exec(code, sizeof(code));
-
-  struct res_b_t res;
-  ref_shl_b(al, cl, &res);
-  const uint16_t emu = cpu_get_flags();
-
-  if (!_compare_val(al, cl, cpu_regs.al, res.val)) {
-    return false;
+#define ref_shift_w(NAME, OP)                                                           \
+  void NAME(uint16_t val, uint8_t s, struct res_w_t *res) {                             \
+    uint16_t fl = 0;                                                                    \
+    uint16_t  v  = 0;                                                                   \
+    __asm {                                                                             \
+    __asm mov ax, val                                                                   \
+    __asm mov cl, s                                                                     \
+    __asm OP ax, cl                                                                     \
+    __asm pushf                                                                         \
+    __asm mov v, ax                                                                     \
+    __asm pop ax                                                                        \
+    __asm mov fl, ax                                                                    \
+    }                                                                                   \
+    res->flags = fl;                                                                    \
+    res->val = v;                                                                       \
   }
 
-  uint16_t mask =  SF | ZF | PF;
-  if (cl == 0) { mask |= AF; }
-  if (cl == 1) { mask |= OF; }
-  if (cl < 8)  { mask |= CF; }
-  return _compare_flags(emu, res.flags, mask);
-}
-
-#if 1
-bool _check_shl_w(void) {
-  cpu_reset();
-
-  const uint8_t ax = _rand8();
-  const uint8_t cl = _rand8() & 0x1f;
-  cpu_regs.ax = ax;
-  cpu_regs.cl = cl;
-
-  const uint8_t code[] = { 0xD3, 0xE0 }; // shl al, cl
-  _cpu_exec(code, sizeof(code));
-
-  struct res_w_t res;
-  ref_shl_w(ax, cl, &res);
-  const uint16_t emu = cpu_get_flags();
-
-  if (!_compare_val(ax, cl, cpu_regs.ax, res.val)) {
-    return false;
+#define _check_shift_b(NAME, REF, MASK, ...)                                            \
+  static bool NAME(void) {                                                              \
+    cpu_reset();                                                                        \
+                                                                                        \
+    const uint8_t al = _rand8();                                                        \
+    const uint8_t cl = _rand8() & 0x1f;                                                 \
+    cpu_regs.al = al;                                                                   \
+    cpu_regs.cl = cl;                                                                   \
+                                                                                        \
+    const uint8_t code[] = { __VA_ARGS__ };                                             \
+    _cpu_exec(code, sizeof(code));                                                      \
+                                                                                        \
+    struct res_b_t res;                                                                 \
+    REF(al, cl, &res);                                                                  \
+    const uint16_t emu = cpu_get_flags();                                               \
+                                                                                        \
+    if (!_compare_val(al, cl, cpu_regs.al, res.val)) {                                  \
+      return false;                                                                     \
+    }                                                                                   \
+                                                                                        \
+    uint16_t mask = SF | ZF | PF;                                                       \
+    if (cl == 0) { mask |= AF; }                                                        \
+    if (cl == 1) { mask |= OF; }                                                        \
+    if (cl < 8)  { mask |= CF; }                                                        \
+    return _compare_flags(emu, res.flags, mask & MASK);                                 \
   }
 
-  uint16_t mask =  SF | ZF | PF;
-  if (cl == 0) { mask |= AF; }
-  if (cl == 1) { mask |= OF; }
-  if (cl < 8)  { mask |= CF; }
-  return _compare_flags(emu, res.flags, mask);
-}
-#endif
+#define _check_shift_w(NAME, OP, MASK, ...)                                             \
+  bool NAME(void) {                                                                     \
+    cpu_reset();                                                                        \
+                                                                                        \
+    const uint16_t ax = _rand8();                                                       \
+    const uint8_t cl = _rand8() & 0x1f;                                                 \
+    cpu_regs.ax = ax;                                                                   \
+    cpu_regs.cl = cl;                                                                   \
+                                                                                        \
+    const uint8_t code[] = { __VA_ARGS__ };                                             \
+    _cpu_exec(code, sizeof(code));                                                      \
+                                                                                        \
+    struct res_w_t res;                                                                 \
+    OP(ax, cl, &res);                                                                   \
+    const uint16_t emu = cpu_get_flags();                                               \
+                                                                                        \
+    if (!_compare_val(ax, cl, cpu_regs.ax, res.val)) {                                  \
+      return false;                                                                     \
+    }                                                                                   \
+                                                                                        \
+    uint16_t mask =  SF | ZF | PF;                                                      \
+    if (cl == 0) { mask |= AF; }                                                        \
+    if (cl == 1) { mask |= OF; }                                                        \
+    if (cl < 8)  { mask |= CF; }                                                        \
+    return _compare_flags(emu, res.flags, mask & MASK);                                 \
+  }
+
+ref_shift_b(ref_shl_b, shl)
+ref_shift_w(ref_shl_w, shl)
+
+_check_shift_b(_check_shl_b, ref_shl_b, -1, 0xD2, 0xE0)
+_check_shift_w(_check_shl_w, ref_shl_w, -1, 0xD3, 0xE0)
+
+ref_shift_b(ref_shr_b, shr)
+ref_shift_w(ref_shr_w, shr)
+
+_check_shift_b(_check_shr_b, ref_shr_b, -1, 0xD2, 0xE8)
+_check_shift_w(_check_shr_w, ref_shr_w, -1, 0xD3, 0xE8)
+
+ref_shift_b(ref_sar_b, sar)
+ref_shift_w(ref_sar_w, sar)
+
+_check_shift_b(_check_sar_b, ref_sar_b, -1, 0xD2, 0xF8)
+_check_shift_w(_check_sar_w, ref_sar_w, -1, 0xD3, 0xF8)
+
+ref_shift_b(ref_rol_b, rol)
+ref_shift_w(ref_rol_w, rol)
+
+_check_shift_b(_check_rol_b, ref_rol_b, CF | OF, 0xD2, 0xC0)
+_check_shift_w(_check_rol_w, ref_rol_w, CF | OF, 0xD3, 0xC0)
+
+ref_shift_b(ref_ror_b, ror)
+ref_shift_w(ref_ror_w, ror)
+
+_check_shift_b(_check_ror_b, ref_ror_b, CF | OF, 0xD2, 0xC8)
+_check_shift_w(_check_ror_w, ref_ror_w, CF | OF, 0xD3, 0xC8)
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -818,6 +850,14 @@ static struct test_info_t test[] = {
   {_check_or_w,   "XOR word"},
   {_check_shl_b,  "SHL byte"},
   {_check_shl_w,  "SHL word"},
+  {_check_shr_b,  "SHR byte"},
+  {_check_shr_w,  "SHR word"},
+  {_check_sar_b,  "SAR byte"},
+  {_check_sar_w,  "SAR word"},
+  {_check_rol_b,  "ROL byte"},
+  {_check_rol_w,  "ROL word"},
+  {_check_ror_b,  "ROR byte"},
+  {_check_ror_w,  "ROR word"},
 
   {_check_mul_b,  "MUL byte"},
   {_check_mul_w,  "MUL word"},

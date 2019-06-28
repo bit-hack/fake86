@@ -264,10 +264,10 @@ static void flag_szp8(uint8_t value) {
 }
 
 static void flag_szp16(uint16_t value) {
-  if (!value) {
-    cpu_flags.zf = 1;
+  if (value) {
+    cpu_flags.zf = 0;
   } else {
-    cpu_flags.zf = 0; /* set or clear zero flag */
+    cpu_flags.zf = 1; /* set or clear zero flag */
   }
 
   if (value & 0x8000) {
@@ -694,8 +694,6 @@ static uint8_t op_grp2_8(uint8_t cnt) {
 
   uint16_t s = oper1b;
 
-  cnt = (cnt & 0x1f);
-  
   switch (reg) {
   case 0: /* ROL r/m8 */
     for (int i = 1; i <= cnt; i++) {
@@ -748,8 +746,8 @@ static uint8_t op_grp2_8(uint8_t cnt) {
       if (cnt == 1) {
         cpu_flags.of = (cpu_flags.cf != ((s & 0x80) ? 1 : 0));
       }
-      flag_szp8((uint8_t)s);
     }
+    flag_szp8((uint8_t)s);
     return s & 0xff;
 
   case 5: /* SHR r/m8 */
@@ -759,8 +757,8 @@ static uint8_t op_grp2_8(uint8_t cnt) {
         cpu_flags.cf = s & 1;
         s = s >> 1;
       }
-      flag_szp8((uint8_t)s);
     }
+    flag_szp8((uint8_t)s);
     return s & 0xff;
 
   case 6:
@@ -785,10 +783,8 @@ static uint16_t op_grp2_16(uint8_t cnt) {
 
   uint32_t s = oper1;
 
-  cnt = (cnt & 0x1f) % 17;
-
   switch (reg) {
-  case 0: /* ROL r/m8 */
+  case 0: /* ROL */
     for (int i = 1; i <= cnt; i++) {
       cpu_flags.cf = (s & 0x8000) ? 1 : 0;
       s = (s << 1) | (cpu_flags.cf);
@@ -798,7 +794,7 @@ static uint16_t op_grp2_16(uint8_t cnt) {
     }
     return s & 0xffff;
 
-  case 1: /* ROR r/m8 */
+  case 1: /* ROR */
     for (int i = 1; i <= cnt; i++) {
       cpu_flags.cf = s & 1;
       s = (s >> 1) | ((s & 1) ? 0x8000 : 0);
@@ -808,7 +804,7 @@ static uint16_t op_grp2_16(uint8_t cnt) {
     }
     return s & 0xffff;
 
-  case 2: /* RCL r/m8 */
+  case 2: /* RCL */
     for (int i = 1; i <= cnt; i++) {
       const uint16_t c = cpu_flags.cf;
       cpu_flags.cf = (s & 0x8000) ? 1 : 0;
@@ -819,7 +815,7 @@ static uint16_t op_grp2_16(uint8_t cnt) {
     }
     return s & 0xffff;
 
-  case 3: /* RCR r/m8 */
+  case 3: /* RCR */
     for (int i = 1; i <= cnt; i++) {
       const uint16_t c = cpu_flags.cf;
       cpu_flags.cf = s & 1;
@@ -830,7 +826,7 @@ static uint16_t op_grp2_16(uint8_t cnt) {
     }
     return s & 0xffff;
 
-  case 4: /* SHL r/m8 */
+  case 4: /* SHL */
     if (cnt != 0) {
       for (int i = 1; i <= cnt; i++) {
         cpu_flags.cf = (s & 0x8000) ? 1 : 0;
@@ -839,8 +835,8 @@ static uint16_t op_grp2_16(uint8_t cnt) {
       if (cnt == 1) {
         cpu_flags.of = (cpu_flags.cf != ((s & 0x8000) ? 1 : 0));
       }
-      flag_szp16((uint16_t)s);
     }
+    flag_szp16((uint16_t)s);
     return s & 0xffff;
 
   case 5: /* SHR r/m8 */
@@ -850,8 +846,8 @@ static uint16_t op_grp2_16(uint8_t cnt) {
         cpu_flags.cf = s & 1;
         s = s >> 1;
       }
-      flag_szp16((uint16_t)s);
     }
+    flag_szp16((uint16_t)s);
     return s & 0xffff;
 
   case 6:
