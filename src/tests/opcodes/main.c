@@ -45,7 +45,7 @@ struct res_w_t {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-static _rng_seed = _root_seed;
+static uint32_t _rng_seed = _root_seed;
 
 static _rand16(void) {
   uint32_t x = _rng_seed;
@@ -87,12 +87,14 @@ enum {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-bool _compare_flags(uint16_t emu, uint16_t ref, uint16_t mask) {
+bool _compare_flags(uint16_t lhs, uint16_t rhs, uint16_t emu, uint16_t ref, uint16_t mask) {
 
   const uint16_t diff = (emu ^ ref) & mask;
   if (diff == 0) {
     return true;
   }
+
+  printf("lhs:%04x rhs:%04x  ", lhs, rhs);
 
   printf("%c%c%c%c %c%c%c. .%c.%c",
     ((diff & OF) ? 'O' : '.'),
@@ -178,7 +180,7 @@ bool _compare_val(const uint16_t lhs,
       return false;                                                           \
     }                                                                         \
                                                                               \
-    return _compare_flags(emu_flags, res.flags, MASK);                        \
+    return _compare_flags(o1, o2, emu_flags, res.flags, MASK);                \
   }
 
 #define check_op_w(NAME, REF, MASK, ...)                                      \
@@ -200,7 +202,7 @@ bool _compare_val(const uint16_t lhs,
       return false;                                                           \
     }                                                                         \
                                                                               \
-    return _compare_flags(emu_flags, res.flags, MASK);                        \
+    return _compare_flags(o1, o2, emu_flags, res.flags, MASK);                \
   }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -290,7 +292,7 @@ static bool _check_adc_b(void) {
   const uint16_t emu_flags = cpu_get_flags();
   const uint16_t ref_flags = ref_adc_b(o1, o2, c);
 
-  return _compare_flags(emu_flags, ref_flags, ADC_MASK);
+  return _compare_flags(o1, o2, emu_flags, ref_flags, ADC_MASK);
 }
 
 static bool _check_adc_w(void) {
@@ -308,7 +310,7 @@ static bool _check_adc_w(void) {
   const uint16_t emu_flags = cpu_get_flags();
   const uint16_t ref_flags = ref_adc_w(o1, o2, c);
 
-  return _compare_flags(emu_flags, ref_flags, ADC_MASK);
+  return _compare_flags(o1, o2, emu_flags, ref_flags, ADC_MASK);
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -378,7 +380,7 @@ static bool _check_sbb_b(void) {
   const uint16_t emu_flags = cpu_get_flags();
   const uint16_t ref_flags = ref_sbb_b(o1, o2, c);
 
-  return _compare_flags(emu_flags, ref_flags, SBB_MASK);
+  return _compare_flags(o1, o2, emu_flags, ref_flags, SBB_MASK);
 }
 
 static bool _check_sbb_w(void) {
@@ -396,7 +398,7 @@ static bool _check_sbb_w(void) {
   const uint16_t emu_flags = cpu_get_flags();
   const uint16_t ref_flags = ref_sbb_w(o1, o2, c);
 
-  return _compare_flags(emu_flags, ref_flags, SBB_MASK);
+  return _compare_flags(o1, o2, emu_flags, ref_flags, SBB_MASK);
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -436,6 +438,9 @@ check_op_w(_check_xor_w, ref_xor_w, XOR_MASK, 0x31, 0xD8);
     uint16_t fl = 0;                                                                    \
     uint8_t  v  = 0;                                                                    \
     __asm {                                                                             \
+    __asm xor eax, eax                                                                  \
+    __asm push ax                                                                       \
+    __asm popf                                                                          \
     __asm mov al, val                                                                   \
     __asm mov cl, s                                                                     \
     __asm OP al, cl                                                                     \
@@ -453,6 +458,9 @@ check_op_w(_check_xor_w, ref_xor_w, XOR_MASK, 0x31, 0xD8);
     uint16_t fl = 0;                                                                    \
     uint16_t  v  = 0;                                                                   \
     __asm {                                                                             \
+    __asm xor eax, eax                                                                  \
+    __asm push ax                                                                       \
+    __asm popf                                                                          \
     __asm mov ax, val                                                                   \
     __asm mov cl, s                                                                     \
     __asm OP ax, cl                                                                     \
@@ -489,7 +497,7 @@ check_op_w(_check_xor_w, ref_xor_w, XOR_MASK, 0x31, 0xD8);
     if (cl == 0) { mask |= AF; }                                                        \
     if (cl == 1) { mask |= OF; }                                                        \
     if (cl < 8)  { mask |= CF; }                                                        \
-    return _compare_flags(emu, res.flags, mask & MASK);                                 \
+    return _compare_flags(al, cl, emu, res.flags, mask & MASK);                         \
   }
 
 #define _check_shift_w(NAME, OP, MASK, ...)                                             \
@@ -516,7 +524,7 @@ check_op_w(_check_xor_w, ref_xor_w, XOR_MASK, 0x31, 0xD8);
     if (cl == 0) { mask |= AF; }                                                        \
     if (cl == 1) { mask |= OF; }                                                        \
     if (cl < 8)  { mask |= CF; }                                                        \
-    return _compare_flags(emu, res.flags, mask & MASK);                                 \
+    return _compare_flags(ax, cl, emu, res.flags, mask & MASK);                         \
   }
 
 ref_shift_b(ref_shl_b, shl)
@@ -591,7 +599,7 @@ static bool _check_mul_b(void) {
   _cpu_exec(code, sizeof(code));
   const uint16_t emu = cpu_get_flags();
   const uint16_t ref = ref_mul_b(al, bl);
-  return _compare_flags(emu, ref, MUL_MASK);
+  return _compare_flags(al, bl, emu, ref, MUL_MASK);
 }
 
 static bool _check_mul_w(void) {
@@ -604,7 +612,7 @@ static bool _check_mul_w(void) {
   _cpu_exec(code, sizeof(code));
   const uint16_t emu = cpu_get_flags();
   const uint16_t ref = ref_mul_w(ax, bx);
-  return _compare_flags(emu, ref, MUL_MASK);
+  return _compare_flags(ax, bx, emu, ref, MUL_MASK);
 }
 
 static const uint32_t IMUL_MASK = CF | OF;
@@ -643,7 +651,7 @@ static bool _check_imul_b(void) {
   _cpu_exec(code, sizeof(code));
   const uint16_t emu = cpu_get_flags();
   const uint16_t ref = ref_imul_b(al, bl);
-  return _compare_flags(emu, ref, IMUL_MASK);
+  return _compare_flags(al, bl, emu, ref, IMUL_MASK);
 }
 
 static bool _check_imul_w(void) {
@@ -656,7 +664,7 @@ static bool _check_imul_w(void) {
   _cpu_exec(code, sizeof(code));
   const uint16_t emu = cpu_get_flags();
   const uint16_t ref = ref_imul_w(ax, bx);
-  return _compare_flags(emu, ref, IMUL_MASK);
+  return _compare_flags(ax, bx, emu, ref, IMUL_MASK);
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -686,7 +694,7 @@ static bool _check_div_b(void) {
   _cpu_exec(code, sizeof(code));
   const uint16_t emu = cpu_get_flags();
   const uint16_t ref = ref_div_b(al, bl);
-  return _compare_flags(emu, ref, DIV_MASK);
+  return _compare_flags(al, bl, emu, ref, DIV_MASK);
 }
 
 static uint16_t ref_div_w(const uint16_t lhs, const uint16_t rhs) {
@@ -712,7 +720,7 @@ static bool _check_div_w(void) {
   _cpu_exec(code, sizeof(code));
   const uint16_t emu = cpu_get_flags();
   const uint16_t ref = ref_div_w(ax, bx);
-  return _compare_flags(emu, ref, DIV_MASK);
+  return _compare_flags(ax, bx, emu, ref, DIV_MASK);
 }
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
@@ -935,7 +943,7 @@ int main(int argc, char **args) {
   }
 
   printf("\n");
-  printf("%d of %d passed\n", num_tests, num_passed);
+  printf("%d of %d passed\n", num_passed, num_tests);
 
   getchar();
 

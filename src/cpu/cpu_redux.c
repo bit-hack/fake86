@@ -32,11 +32,9 @@
 static bool _did_run_temp = true;
 static uint8_t _seg_ovr;
 
-
 // forward declare opcode table
 typedef void (*opcode_t)(const uint8_t *code);
 static const opcode_t _op_table[256];
-
 
 // shift register used to delay STI until next instruction
 static uint8_t _sti_sr = 0;
@@ -98,62 +96,13 @@ static inline void _step_ip(const int16_t rel) {
   cpu_regs.ip += rel;
 }
 
-#define USE_POPCNT
-#if !defined(USE_POPCNT) && !defined(USE_KERNIGHAN)
-static const uint8_t parity[0x100] = {
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    1, 0, 0, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 1, 0, 0, 1
-};
-#endif // use USE_POPCNT
-
 // set parity flag
 static inline void _set_pf(uint16_t val) {
   val &= 0xff;
-#if defined(USE_POPCNT)
 #ifdef _MSC_VER
   cpu_flags.pf = ((~__popcnt16(val)) & 1);
 #else
   cpu_flags.pf = __builtin_parity(val);
-#endif
-#elif defined(USE_KERNIGHAN))
-  unsigned int ret;
-  unsigned int x = val;
-  for(ret = 0; x; x &= (x - 1)) {
-    ++ret;
-  }
-  return ret & 1;
-#else
-  cpu_flags.pf = parity[val];
 #endif
 }
 
@@ -199,6 +148,12 @@ void cpu_set_flags(const uint16_t f) {
   cpu_flags.of  = (f & 0x0800) ? 1 : 0;
 }
 
+void cpu_mod_flags(uint16_t in, uint16_t mask) {
+  const uint16_t cur = cpu_get_flags();
+  const uint16_t res = (in & mask) | (cur & ~mask);
+  cpu_set_flags(res);
+}
+
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 #define ADD_FLAGS_B(lhs, rhs, res)                                            \
@@ -206,8 +161,8 @@ void cpu_set_flags(const uint16_t f) {
     _set_zf_sf_b(res);                                                        \
     _set_pf(res);                                                             \
     cpu_flags.cf = ((lhs + rhs) > 0xff) ? 1 : 0;                              \
-    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
-    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x80) == 0x80) ? 1 : 0;      \
+    cpu_flags.af = ((res ^ lhs ^ rhs)         & 0x10) ? 1 : 0;                \
+    cpu_flags.of = ((res ^ lhs) & (res ^ rhs) & 0x80) ? 1 : 0;                \
   }
 
 #define ADD_FLAGS_W(lhs, rhs, res)                                            \
@@ -215,8 +170,8 @@ void cpu_set_flags(const uint16_t f) {
     _set_zf_sf_w(res);                                                        \
     _set_pf(res);                                                             \
     cpu_flags.cf = ((lhs + rhs) > 0xffff) ? 1 : 0;                            \
-    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
-    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x8000) == 0x8000) ? 1 : 0;  \
+    cpu_flags.af = ((res ^ lhs ^ rhs)         & 0x10)   ? 1 : 0;              \
+    cpu_flags.of = ((res ^ lhs) & (res ^ rhs) & 0x8000) ? 1 : 0;              \
   }
 
 // ADD m/r, reg  (byte)
@@ -402,18 +357,18 @@ OPCODE(_0E) {
 
 #define ADC_FLAGS_B(lhs, rhs, res)                                            \
   {                                                                           \
-    _set_zf_sf_b(res);                                                        \
-    _set_pf(res);                                                             \
-    cpu_flags.cf = ((lhs + rhs) > 0xff) ? 1 : 0;                              \
+    _set_zf_sf_b(res & 0xff);                                                 \
+    _set_pf(res & 0xff);                                                      \
+    cpu_flags.cf = (res > 0xff) ? 1 : 0;                                      \
     cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
     cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x80) == 0x80) ? 1 : 0;      \
   }
 
 #define ADC_FLAGS_W(lhs, rhs, res)                                            \
   {                                                                           \
-    _set_zf_sf_w(res);                                                        \
-    _set_pf(res);                                                             \
-    cpu_flags.cf = ((lhs + rhs) > 0xffff) ? 1 : 0;                            \
+    _set_zf_sf_w(res & 0xffff);                                               \
+    _set_pf(res & 0xffff);                                                    \
+    cpu_flags.cf = (res > 0xffff) ? 1 : 0;                                    \
     cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
     cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x8000) == 0x8000) ? 1 : 0;  \
   }
@@ -424,9 +379,9 @@ OPCODE(_10) {
   _decode_mod_rm(code, &m);
   const uint8_t lhs = _read_rm_b(&m);
   const uint8_t rhs = _get_reg_b(m.reg);
-  const uint8_t tmp = lhs + rhs + cpu_flags.cf;
+  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
   ADC_FLAGS_B(lhs, rhs, tmp);
-  _write_rm_b(&m, tmp);
+  _write_rm_b(&m, (uint8_t)tmp);
   _step_ip(1 + m.num_bytes);
 }
 
@@ -436,9 +391,9 @@ OPCODE(_11) {
   _decode_mod_rm(code, &m);
   const uint16_t lhs = _read_rm_w(&m);
   const uint16_t rhs = _get_reg_w(m.reg);
-  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
+  const uint32_t tmp = lhs + rhs + cpu_flags.cf;
   ADC_FLAGS_W(lhs, rhs, tmp);
-  _write_rm_w(&m, tmp);
+  _write_rm_w(&m, (uint16_t)tmp);
   _step_ip(1 + m.num_bytes);
 }
 
@@ -448,9 +403,9 @@ OPCODE(_12) {
   _decode_mod_rm(code, &m);
   const uint8_t lhs = _get_reg_b(m.reg);
   const uint8_t rhs = _read_rm_b(&m);
-  const uint8_t tmp = lhs + rhs + cpu_flags.cf;
+  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
   ADC_FLAGS_B(lhs, rhs, tmp);
-  _set_reg_b(m.reg, tmp);
+  _set_reg_b(m.reg, (uint8_t)tmp);
   _step_ip(1 + m.num_bytes);
 }
 
@@ -460,9 +415,9 @@ OPCODE(_13) {
   _decode_mod_rm(code, &m);
   const uint16_t lhs = _get_reg_w(m.reg);
   const uint16_t rhs = _read_rm_w(&m);
-  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
+  const uint32_t tmp = lhs + rhs + cpu_flags.cf;
   ADC_FLAGS_W(lhs, rhs, tmp);
-  _set_reg_w(m.reg, tmp);
+  _set_reg_w(m.reg, (uint16_t)tmp);
   _step_ip(1 + m.num_bytes);
 }
 
@@ -470,9 +425,9 @@ OPCODE(_13) {
 OPCODE(_14) {
   const uint8_t lhs = cpu_regs.al;
   const uint8_t rhs = GET_CODE(uint8_t, 1);
-  const uint8_t tmp = lhs + rhs + cpu_flags.cf;
+  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
   ADC_FLAGS_B(lhs, rhs, tmp);
-  cpu_regs.al = tmp;
+  cpu_regs.al = (uint8_t)tmp;
   _step_ip(2);
 }
 
@@ -480,9 +435,9 @@ OPCODE(_14) {
 OPCODE(_15) {
   const uint16_t lhs = cpu_regs.ax;
   const uint16_t rhs = GET_CODE(uint16_t, 1);
-  const uint16_t tmp = lhs + rhs + cpu_flags.cf;
+  const uint32_t tmp = lhs + rhs + cpu_flags.cf;
   ADC_FLAGS_W(lhs, rhs, tmp);
-  cpu_regs.ax = tmp;
+  cpu_regs.ax = (uint16_t)tmp;
   _step_ip(3);
 }
 
@@ -505,23 +460,70 @@ OPCODE(_17) {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-#define SBB_FLAGS_B(lhs, rhs, res)                                            \
-  {                                                                           \
-    _set_zf_sf_b(res);                                                        \
-    _set_pf(res);                                                             \
-    cpu_flags.cf = ((lhs + rhs) > 0xff) ? 1 : 0;                              \
-    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
-    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x80) == 0x80) ? 1 : 0;      \
-  }
+static inline uint8_t _do_sbb_b(const uint8_t lhs, const uint8_t rhs, const uint8_t c) {
+#if 1
+  uint8_t tmp = 0;
+  uint16_t f = 0;
+  __asm {
+  __asm mov al, c
+  __asm test al, al
+  __asm clc
+  __asm jz do_sbb
+  __asm stc
+  __asm do_sbb:
+  __asm mov al, lhs
+  __asm mov bl, rhs
+  __asm sbb al, bl
+  __asm pushf
+  __asm mov tmp, al
+  __asm pop ax
+  __asm mov f, ax
+  };
+  cpu_mod_flags(f, CF | OF | SF | ZF | AF | PF);
+#else
+  //XXX: rhs += cpu_flags.cf
+  const uint8_t tmp = lhs - (rhs + cpu_flags.cf);
+  _set_zf_sf_b(tmp);
+  _set_pf(tmp);
+  cpu_flags.cf = (lhs < (rhs + cpu_flags.cf)) ? 1 : 0;
+  cpu_flags.af = ((tmp ^ lhs ^ rhs) & 0x10) ? 1 : 0;
+  const uint16_t X = (uint16_t)((int16_t)lhs - (int16_t)rhs);
+  cpu_flags.of = ((tmp ^ lhs) & (lhs ^ rhs) & 0x80) ? 1 : 0;
+#endif
+  return tmp;
+}
 
-#define SBB_FLAGS_W(lhs, rhs, res)                                            \
-  {                                                                           \
-    _set_zf_sf_w(res);                                                        \
-    _set_pf(res);                                                             \
-    cpu_flags.cf = ((lhs + rhs) > 0xffff) ? 1 : 0;                            \
-    cpu_flags.af = (((res ^ lhs ^ rhs)         & 0x10) == 0x10) ? 1 : 0;      \
-    cpu_flags.of = (((res ^ lhs) & (res ^ rhs) & 0x8000) == 0x8000) ? 1 : 0;  \
-  }
+static inline uint16_t _do_sbb_w(const uint16_t lhs, const uint16_t rhs, const uint8_t c) {
+#if 1
+  uint16_t tmp = 0;
+  uint16_t f = 0;
+  __asm {
+  __asm mov al, c
+  __asm test al, al
+  __asm clc
+  __asm jz do_sbb
+  __asm stc
+  __asm do_sbb:
+  __asm mov ax, lhs
+  __asm mov bx, rhs
+  __asm sbb ax, bx
+  __asm pushf
+  __asm mov tmp, ax
+  __asm pop ax
+  __asm mov f, ax
+  };
+  cpu_mod_flags(f, CF | OF | SF | ZF | AF | PF);
+#else
+  //XXX: rhs += cpu_flags.cf
+  const uint16_t tmp = lhs - (rhs + cpu_flags.cf);
+  _set_zf_sf_w(tmp);
+  _set_pf(tmp);
+  cpu_flags.cf = (lhs < (rhs  + cpu_flags.cf)) ? 1 : 0;
+  cpu_flags.af = ((tmp ^ lhs ^ rhs) & 0x10) ? 1 : 0;
+  cpu_flags.of = ((tmp ^ lhs) & (lhs ^ rhs) & 0x8000) ? 1 : 0;
+#endif
+  return tmp;
+}
 
 // SBB m/r, reg  (byte)
 OPCODE(_18) {
@@ -529,8 +531,7 @@ OPCODE(_18) {
   _decode_mod_rm(code, &m);
   const uint8_t lhs = _read_rm_b(&m);
   const uint8_t rhs = _get_reg_b(m.reg);
-  const uint8_t tmp = lhs - (rhs + cpu_flags.cf);
-  SBB_FLAGS_B(lhs, rhs, tmp);
+  const uint8_t tmp = _do_sbb_b(lhs, rhs, cpu_flags.cf);
   _write_rm_b(&m, tmp);
   _step_ip(1 + m.num_bytes);
 }
@@ -541,8 +542,7 @@ OPCODE(_19) {
   _decode_mod_rm(code, &m);
   const uint16_t lhs = _read_rm_w(&m);
   const uint16_t rhs = _get_reg_w(m.reg);
-  const uint16_t tmp = lhs - (rhs + cpu_flags.cf);
-  SBB_FLAGS_W(lhs, rhs, tmp);
+  const uint16_t tmp = _do_sbb_w(lhs, rhs, cpu_flags.cf);
   _write_rm_w(&m, tmp);
   _step_ip(1 + m.num_bytes);
 }
@@ -553,8 +553,7 @@ OPCODE(_1A) {
   _decode_mod_rm(code, &m);
   const uint8_t lhs = _get_reg_b(m.reg);
   const uint8_t rhs = _read_rm_b(&m);
-  const uint8_t tmp = lhs - (rhs + cpu_flags.cf);
-  SBB_FLAGS_B(lhs, rhs, tmp);
+  const uint8_t tmp = _do_sbb_b(lhs, rhs, cpu_flags.cf);
   _set_reg_b(m.reg, tmp);
   _step_ip(1 + m.num_bytes);
 }
@@ -565,8 +564,7 @@ OPCODE(_1B) {
   _decode_mod_rm(code, &m);
   const uint16_t lhs = _get_reg_w(m.reg);
   const uint16_t rhs = _read_rm_w(&m);
-  const uint16_t tmp = lhs - (rhs + cpu_flags.cf);
-  SBB_FLAGS_W(lhs, rhs, tmp);
+  const uint16_t tmp = _do_sbb_w(lhs, rhs, cpu_flags.cf);
   _set_reg_w(m.reg, tmp);
   _step_ip(1 + m.num_bytes);
 }
@@ -574,20 +572,16 @@ OPCODE(_1B) {
 // SBB al, imm8
 OPCODE(_1C) {
   const uint8_t lhs = cpu_regs.al;
-  const uint8_t rhs = GET_CODE(uint8_t, 1);
-  const uint8_t tmp = lhs - (rhs + cpu_flags.cf);
-  SBB_FLAGS_B(lhs, rhs, tmp);
-  cpu_regs.al = tmp;
+  const uint8_t rhs = GET_CODE(uint8_t, 1) + cpu_flags.cf;
+  cpu_regs.al = _do_sbb_b(lhs, rhs, cpu_flags.cf);
   _step_ip(2);
 }
 
 // SBB ax, imm16
 OPCODE(_1D) {
   const uint16_t lhs = cpu_regs.ax;
-  const uint16_t rhs = GET_CODE(uint16_t, 1);
-  const uint16_t tmp = lhs - (rhs + cpu_flags.cf);
-  SBB_FLAGS_W(lhs, rhs, tmp);
-  cpu_regs.ax = tmp;
+  const uint16_t rhs = GET_CODE(uint16_t, 1) + cpu_flags.cf;
+  cpu_regs.ax = _do_sbb_w(lhs, rhs, cpu_flags.cf);
   _step_ip(3);
 }
 
@@ -610,7 +604,92 @@ OPCODE(_1F) {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-// AND 0x20 -> 0x25
+#define AND_FLAGS_B(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_b(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = 0;                                                         \
+    cpu_flags.of = 0;                                                         \
+  }
+
+#define AND_FLAGS_W(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_w(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = 0;                                                         \
+    cpu_flags.of = 0;                                                         \
+  }
+
+// AND m/r, reg  (byte)
+OPCODE(_20) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs & rhs;
+  AND_FLAGS_B(lhs, rhs, tmp);
+  _write_rm_b(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// AND m/r, reg  (word)
+OPCODE(_21) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs & rhs;
+  AND_FLAGS_W(lhs, rhs, tmp);
+  _write_rm_w(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// AND reg, m/r  (byte)
+OPCODE(_22) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs & rhs;
+  AND_FLAGS_B(lhs, rhs, tmp);
+  _set_reg_b(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// AND reg, m/r  (word)
+OPCODE(_23) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs & rhs;
+  AND_FLAGS_W(lhs, rhs, tmp);
+  _set_reg_w(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// AND al, imm8
+OPCODE(_24) {
+  const uint8_t lhs = cpu_regs.al;
+  const uint8_t rhs = GET_CODE(uint8_t, 1);
+  const uint8_t tmp = lhs & rhs;
+  AND_FLAGS_B(lhs, rhs, tmp);
+  cpu_regs.al = tmp;
+  _step_ip(2);
+}
+
+// AND ax, imm16
+OPCODE(_25) {
+  const uint16_t lhs = cpu_regs.ax;
+  const uint16_t rhs = GET_CODE(uint16_t, 1);
+  const uint16_t tmp = lhs & rhs;
+  AND_FLAGS_W(lhs, rhs, tmp);
+  cpu_regs.ax = tmp;
+  _step_ip(3);
+}
+
+#undef AND_FLAGS_B
+#undef AND_FLAGS_W
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -637,7 +716,91 @@ OPCODE(_26) {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-// SUB 0x28 -> 0x2D
+#define SUB_FLAGS_B(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_b(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs < rhs)) ? 1 : 0;                                     \
+    cpu_flags.af = ((res ^ lhs ^ rhs)         & 0x10) ? 1 : 0;                \
+    cpu_flags.of = ((res ^ lhs) & (lhs ^ rhs) & 0x80) ? 1 : 0;                \
+  }
+
+#define SUB_FLAGS_W(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_w(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs < rhs)) ? 1 : 0;                                     \
+    cpu_flags.af = ((res ^ lhs ^ rhs)         & 0x10)   ? 1 : 0;              \
+    cpu_flags.of = ((res ^ lhs) & (lhs ^ rhs) & 0x8000) ? 1 : 0;              \
+  }
+
+// SUB m/r, reg  (byte)
+OPCODE(_28) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs - rhs;
+  SUB_FLAGS_B(lhs, rhs, tmp);
+  _write_rm_b(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// SUB m/r, reg  (word)
+OPCODE(_29) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs - rhs;
+  SUB_FLAGS_W(lhs, rhs, tmp);
+  _write_rm_w(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// SUB reg, m/r  (byte)
+OPCODE(_2A) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs - rhs;
+  SUB_FLAGS_B(lhs, rhs, tmp);
+  _set_reg_b(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// SUB reg, m/r  (word)
+OPCODE(_2B) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs - rhs;
+  SUB_FLAGS_W(lhs, rhs, tmp);
+  _set_reg_w(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// SUB al, imm8
+OPCODE(_2C) {
+  const uint8_t lhs = cpu_regs.al;
+  const uint8_t rhs = GET_CODE(uint8_t, 1);
+  const uint8_t tmp = lhs - rhs;
+  SUB_FLAGS_B(lhs, rhs, tmp);
+  cpu_regs.al = tmp;
+  _step_ip(2);
+}
+
+// SUB ax, imm16
+OPCODE(_2D) {
+  const uint16_t lhs = cpu_regs.ax;
+  const uint16_t rhs = GET_CODE(uint16_t, 1);
+  const uint16_t tmp = lhs - rhs;
+  SUB_FLAGS_W(lhs, rhs, tmp);
+  cpu_regs.ax = tmp;
+  _step_ip(3);
+}
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -648,7 +811,92 @@ OPCODE(_2E) {
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
-// XOR 0x30 -> 0x35
+#define XOR_FLAGS_B(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_b(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = 0;                                                         \
+    cpu_flags.of = 0;                                                         \
+  }
+
+#define XOR_FLAGS_W(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_w(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = 0;                                                         \
+    cpu_flags.of = 0;                                                         \
+  }
+
+// XOR m/r, reg  (byte)
+OPCODE(_30) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs ^ rhs;
+  XOR_FLAGS_B(lhs, rhs, tmp);
+  _write_rm_b(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// XOR m/r, reg  (word)
+OPCODE(_31) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs ^ rhs;
+  XOR_FLAGS_W(lhs, rhs, tmp);
+  _write_rm_w(&m, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// XOR reg, m/r  (byte)
+OPCODE(_32) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs ^ rhs;
+  XOR_FLAGS_B(lhs, rhs, tmp);
+  _set_reg_b(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// XOR reg, m/r  (word)
+OPCODE(_33) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs ^ rhs;
+  XOR_FLAGS_W(lhs, rhs, tmp);
+  _set_reg_w(m.reg, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// XOR al, imm8
+OPCODE(_34) {
+  const uint8_t lhs = cpu_regs.al;
+  const uint8_t rhs = GET_CODE(uint8_t, 1);
+  const uint8_t tmp = lhs ^ rhs;
+  XOR_FLAGS_B(lhs, rhs, tmp);
+  cpu_regs.al = tmp;
+  _step_ip(2);
+}
+
+// XOR ax, imm16
+OPCODE(_35) {
+  const uint16_t lhs = cpu_regs.ax;
+  const uint16_t rhs = GET_CODE(uint16_t, 1);
+  const uint16_t tmp = lhs ^ rhs;
+  XOR_FLAGS_W(lhs, rhs, tmp);
+  cpu_regs.ax = tmp;
+  _step_ip(3);
+}
+
+#undef XOR_FLAGS_B
+#undef XOR_FLAGS_W
 
 // ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
@@ -656,6 +904,92 @@ OPCODE(_2E) {
 OPCODE(_36) {
   SEGOVR(0x36);
 }
+
+// 0x37 = AAA
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+
+#define CMP_FLAGS_B(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_b(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs < rhs)) ? 1 : 0;                                     \
+    cpu_flags.af = ((res ^ lhs ^ rhs)         & 0x10) ? 1 : 0;                \
+    cpu_flags.of = ((res ^ lhs) & (lhs ^ rhs) & 0x80) ? 1 : 0;                \
+  }
+
+#define CMP_FLAGS_W(lhs, rhs, res)                                            \
+  {                                                                           \
+    _set_zf_sf_w(res);                                                        \
+    _set_pf(res);                                                             \
+    cpu_flags.cf = ((lhs < rhs)) ? 1 : 0;                                     \
+    cpu_flags.af = ((res ^ lhs ^ rhs)         & 0x10)   ? 1 : 0;              \
+    cpu_flags.of = ((res ^ lhs) & (lhs ^ rhs) & 0x8000) ? 1 : 0;              \
+  }
+
+// CMP m/r, reg  (byte)
+OPCODE(_38) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _read_rm_b(&m);
+  const uint8_t rhs = _get_reg_b(m.reg);
+  const uint8_t tmp = lhs - rhs;
+  CMP_FLAGS_B(lhs, rhs, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// CMP m/r, reg  (word)
+OPCODE(_39) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _read_rm_w(&m);
+  const uint16_t rhs = _get_reg_w(m.reg);
+  const uint16_t tmp = lhs - rhs;
+  CMP_FLAGS_W(lhs, rhs, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// CMP reg, m/r  (byte)
+OPCODE(_3A) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint8_t lhs = _get_reg_b(m.reg);
+  const uint8_t rhs = _read_rm_b(&m);
+  const uint8_t tmp = lhs - rhs;
+  CMP_FLAGS_B(lhs, rhs, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// CMP reg, m/r  (word)
+OPCODE(_3B) {
+  struct cpu_mod_rm_t m;
+  _decode_mod_rm(code, &m);
+  const uint16_t lhs = _get_reg_w(m.reg);
+  const uint16_t rhs = _read_rm_w(&m);
+  const uint16_t tmp = lhs - rhs;
+  CMP_FLAGS_W(lhs, rhs, tmp);
+  _step_ip(1 + m.num_bytes);
+}
+
+// CMP al, imm8
+OPCODE(_3C) {
+  const uint8_t lhs = cpu_regs.al;
+  const uint8_t rhs = GET_CODE(uint8_t, 1);
+  const uint8_t tmp = lhs - rhs;
+  CMP_FLAGS_B(lhs, rhs, tmp);
+  _step_ip(2);
+}
+
+// CMP ax, imm16
+OPCODE(_3D) {
+  const uint16_t lhs = cpu_regs.ax;
+  const uint16_t rhs = GET_CODE(uint16_t, 1);
+  const uint16_t tmp = lhs - rhs;
+  CMP_FLAGS_W(lhs, rhs, tmp);
+  _step_ip(3);
+}
+
+// ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
 
 // Prefix - Segment Override DS
 OPCODE(_3E) {
@@ -1325,6 +1659,86 @@ OPCODE(_CB) {
   cpu_regs.cs = _pop_w();
 }
 
+//
+static inline void _shift_8(struct cpu_mod_rm_t *mod, uint16_t count) {
+  uint8_t opr = _read_rm_b(mod);
+  switch (mod->reg) {
+  case 0x0:  // ROL
+    break;
+  case 0x1:  // ROR
+    break;
+  case 0x2:  // RCL
+    break;
+  case 0x3:  // RCR
+    break;
+  case 0x4:  // SHL/SAL
+    break;
+  case 0x5:  // SHR
+    break;
+  case 0x7:  // SAR
+    break;
+  default:
+    UNREACHABLE();
+  }
+  _write_rm_b(mod, opr);
+}
+
+//
+static inline void _shift_16(struct cpu_mod_rm_t *mod, uint16_t count) {
+  uint16_t opr = _read_rm_w(mod);
+  switch (mod->reg) {
+  case 0x0:  // ROL
+    break;
+  case 0x1:  // ROR
+    break;
+  case 0x2:  // RCL
+    break;
+  case 0x3:  // RCR
+    break;
+  case 0x4:  // SHL/SAL
+    break;
+  case 0x5:  // SHR
+    break;
+  case 0x7:  // SAR
+    break;
+  default:
+    UNREACHABLE();
+  }
+  _write_rm_w(mod, opr);
+}
+
+// SHIFT r/m8  - 1 time
+OPCODE(_D0) {
+  struct cpu_mod_rm_t mod;
+  _decode_mod_rm(code, &mod);
+  _shift_8(&mod, 1);
+  _step_ip(1 + mod.num_bytes);
+}
+
+// SHIFT r/m16  - 1 time
+OPCODE(_D1) {
+  struct cpu_mod_rm_t mod;
+  _decode_mod_rm(code, &mod);
+  _shift_16(&mod, 1);
+  _step_ip(1 + mod.num_bytes);
+}
+
+// SHIFT r/m8  - CL times
+OPCODE(_D2) {
+  struct cpu_mod_rm_t mod;
+  _decode_mod_rm(code, &mod);
+  _shift_8(&mod, cpu_regs.cl);
+  _step_ip(1 + mod.num_bytes);
+}
+
+// SHIFT r/m16  - CL times
+OPCODE(_D3) {
+  struct cpu_mod_rm_t mod;
+  _decode_mod_rm(code, &mod);
+  _shift_16(&mod, cpu_regs.cl);
+  _step_ip(1 + mod.num_bytes);
+}
+
 // LOOPNZ
 OPCODE(_E0) {
   _step_ip(2);
@@ -1491,11 +1905,6 @@ OPCODE(_FD) {
   _step_ip(1);
 }
 
-// [00, 05] add   [08, 0D] or
-// [10, 15] adc   [18, 1D] sbb
-// [20, 25] and   [28, 2D] sub
-// [30, 35] xor   [38, 3D] cmp
-
 // [27] daa
 // [37] aaa
 
@@ -1509,10 +1918,10 @@ OPCODE(_FD) {
 #define XXX 0
 static const opcode_t _op_table[256] = {
 // 00   01   02   03   04   05   06   07   08   09   0A   0B   0C   0D   0E   0F
-  _00, _01, _02, _03, _04, _05, _06, _07, ___, ___, ___, ___, ___, ___, _0E, XXX, // 00
-  ___, ___, ___, ___, ___, ___, _16, _17, ___, ___, ___, ___, ___, ___, _1E, _1F, // 10
-  ___, ___, ___, ___, ___, ___, _26, ___, ___, ___, ___, ___, ___, ___, _2E, ___, // 20
-  ___, ___, ___, ___, ___, ___, _36, ___, ___, ___, ___, ___, ___, ___, _3E, ___, // 30
+  _00, _01, _02, _03, _04, _05, _06, _07, _08, _09, _0A, _0B, _0C, _0D, _0E, XXX, // 00
+  _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _1A, _1B, _1C, _1D, _1E, _1F, // 10
+  _20, _21, _22, _23, _24, _25, _26, ___, _28, _29, _2A, _2B, _2C, _2D, _2E, ___, // 20
+  _30, _31, _32, _33, _34, _35, _36, ___, _38, _39, _3A, _3B, _3C, _3D, _3E, ___, // 30
   _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, _4A, _4B, _4C, _4D, _4E, _4F, // 40
   _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _5A, _5B, _5C, _5D, _5E, _5F, // 50
   XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, XXX, // 60
@@ -1549,7 +1958,7 @@ bool cpu_redux_exec(void) {
   op(code);
 
   // this is a little hack for the segment override prefix so we can bail out
-  // if the next opcode wasnt implemented for us yet
+  // if the next opcode wasnt implemented yet
   if (_did_run_temp == false) {  // XXX: remove
     return false;
   }

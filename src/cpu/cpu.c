@@ -689,6 +689,8 @@ static void writerm8(uint8_t rmval, uint8_t value) {
   }
 }
 
+#define USE_INLINE_ASM 1
+
 // 8 bit shifts
 static uint8_t op_grp2_8(uint8_t cnt) {
 
@@ -738,6 +740,31 @@ static uint8_t op_grp2_8(uint8_t cnt) {
     return s & 0xff;
 
   case 4: /* SHL r/m8 */
+#if USE_INLINE_ASM
+  {
+    uint16_t flags = 0;
+    uint8_t lhs = oper1b;
+    uint8_t res = 0;
+    __asm {
+      // clear flags
+      xor eax, eax
+      push ax
+      popf
+      // do shift
+      mov cl, cnt
+      mov al, lhs
+      shl al, cl
+      // save result
+      mov res, al
+      // save flags
+      pushf
+      pop ax
+      mov flags, ax
+    };
+    cpu_mod_flags(flags, CF | OF | ZF | SF | AF | PF);
+    return res;
+  }
+#else
     if (cnt != 0) {
       for (int i = 1; i <= cnt; i++) {
         cpu_flags.cf = (s & 0x80) ? 1 : 0;
@@ -746,32 +773,87 @@ static uint8_t op_grp2_8(uint8_t cnt) {
       if (cnt == 1) {
         cpu_flags.of = (cpu_flags.cf != ((s & 0x80) ? 1 : 0));
       }
+      flag_szp8((uint8_t)s);
     }
-    flag_szp8((uint8_t)s);
+#endif
     return s & 0xff;
 
   case 5: /* SHR r/m8 */
+#if USE_INLINE_ASM
+  {
+    uint16_t flags = 0;
+    uint8_t lhs = oper1b;
+    uint8_t res = 0;
+    __asm {
+      // clear flags
+      xor eax, eax
+      push ax
+      popf
+      // do shift
+      mov cl, cnt
+      mov al, lhs
+      shr al, cl
+      // save result
+      mov res, al
+      // save flags
+      pushf
+      pop ax
+      mov flags, ax
+    };
+    cpu_mod_flags(flags, CF | OF | ZF | SF | AF | PF);
+    return res;
+  }
+#else
     if (cnt != 0) {
       cpu_flags.of = ((cnt == 1) && (s & 0x80)) ? 1 : 0;
       for (int i = 1; i <= cnt; i++) {
         cpu_flags.cf = s & 1;
         s = s >> 1;
       }
+      flag_szp8((uint8_t)s);
     }
-    flag_szp8((uint8_t)s);
     return s & 0xff;
+#endif
 
   case 6:
     UNREACHABLE();
 
   case 7: /* SAR r/m8 */
-    for (int i = 1; i <= cnt; i++) {
-      cpu_flags.cf = s & 1;
-      s = (s >> 1) | (s & 0x80);
+#if USE_INLINE_ASM
+  {
+    uint16_t flags = 0;
+    uint8_t lhs = oper1b;
+    uint8_t res = 0;
+    __asm {
+      // clear flags
+      xor eax, eax
+      push ax
+      popf
+      // do shift
+      mov cl, cnt
+      mov al, lhs
+      sar al, cl
+      // save result
+      mov res, al
+      // save flags
+      pushf
+      pop ax
+      mov flags, ax
+    };
+    cpu_mod_flags(flags, CF | OF | ZF | SF | AF | PF);
+    return res;
+  }
+#else
+    if (cnt != 0) {
+      for (int i = 1; i <= cnt; i++) {
+        cpu_flags.cf = s & 1;
+        s = (s >> 1) | (s & 0x80);
+      }
+      cpu_flags.of = 0;
+      flag_szp8((uint8_t)s);
     }
-    cpu_flags.of = 0;
-    flag_szp8((uint8_t)s);
     return s & 0xff;
+#endif
 
   default:
     UNREACHABLE();
@@ -827,6 +909,31 @@ static uint16_t op_grp2_16(uint8_t cnt) {
     return s & 0xffff;
 
   case 4: /* SHL */
+#if USE_INLINE_ASM
+  {
+    uint16_t flags = 0;
+    uint16_t lhs = oper1;
+    uint16_t res = 0;
+    __asm {
+      // clear flags
+      xor eax, eax
+      push ax
+      popf
+      // do shift
+      mov cl, cnt
+      mov ax, lhs
+      shl ax, cl
+      // save result
+      mov res, ax
+      // save flags
+      pushf
+      pop ax
+      mov flags, ax
+    };
+    cpu_mod_flags(flags, CF | OF | ZF | SF | AF | PF);
+    return res;
+  }
+#else
     if (cnt != 0) {
       for (int i = 1; i <= cnt; i++) {
         cpu_flags.cf = (s & 0x8000) ? 1 : 0;
@@ -838,8 +945,34 @@ static uint16_t op_grp2_16(uint8_t cnt) {
     }
     flag_szp16((uint16_t)s);
     return s & 0xffff;
+#endif
 
-  case 5: /* SHR r/m8 */
+  case 5: /* SHR */
+#if USE_INLINE_ASM
+  {
+    uint16_t flags = 0;
+    uint16_t lhs = oper1;
+    uint16_t res = 0;
+    __asm {
+      // clear flags
+      xor eax, eax
+      push ax
+      popf
+      // do shift
+      mov cl, cnt
+      mov ax, lhs
+      shr ax, cl
+      // save result
+      mov res, ax
+      // save flags
+      pushf
+      pop ax
+      mov flags, ax
+    };
+    cpu_mod_flags(flags, CF | OF | ZF | SF | AF | PF);
+    return res;
+  }
+#else
     if (cnt != 0) {
       cpu_flags.of = ((cnt == 1) && (s & 0x8000)) ? 1 : 0;
       for (int i = 1; i <= cnt; i++) {
@@ -849,11 +982,37 @@ static uint16_t op_grp2_16(uint8_t cnt) {
     }
     flag_szp16((uint16_t)s);
     return s & 0xffff;
+#endif
 
   case 6:
     UNREACHABLE();
 
-  case 7: /* SAR r/m8 */
+  case 7: /* SAR */
+#if USE_INLINE_ASM
+  {
+    uint16_t flags = 0;
+    uint16_t lhs = oper1;
+    uint16_t res = 0;
+    __asm {
+      // clear flags
+      xor eax, eax
+      push ax
+      popf
+      // do shift
+      mov cl, cnt
+      mov ax, lhs
+      sar ax, cl
+      // save result
+      mov res, ax
+      // save flags
+      pushf
+      pop ax
+      mov flags, ax
+    };
+    cpu_mod_flags(flags, CF | OF | ZF | SF | AF | PF);
+    return res;
+  }
+#else
     for (int i = 1; i <= cnt; i++) {
       cpu_flags.cf = s & 1;
       s = (s >> 1) | (s & 0x8000);
@@ -861,6 +1020,7 @@ static uint16_t op_grp2_16(uint8_t cnt) {
     cpu_flags.of = 0;
     flag_szp16((uint16_t)s);
     return s & 0xffff;
+#endif
 
   default:
     UNREACHABLE();

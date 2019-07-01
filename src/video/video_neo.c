@@ -37,7 +37,7 @@
 //  text mode page is either 2k bytes (40x25x2) or 4k bytes (80x25x2)
 #define MAX_PAGES 16
 
-static const bool NEO_VERBOSE = true;
+static const bool NEO_VERBOSE = false;
 
 enum system_t {
   video_mda,
