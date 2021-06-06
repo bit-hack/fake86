@@ -6,7 +6,7 @@ Currently it is very much a work in progress and is changing rapidly.
 Official Code repository: [https://github.com/8BitPimp/fake86](https://github.com/8BitPimp/fake86)
 
 Authors:
-- 2019 Aidan Dodds aka [8bitpimp](https://github.com/8bitpimp)
+- 2019 Aidan Dodds aka [8bitpimp](https://github.com/bit-hack/fake86)
 - 2010-2013 Mike Chambers (`miker00lz at gmail dot com`)
 
 
